@@ -41,18 +41,24 @@ all_players = [
     "清水 智広", "小野拓朗", "渡邊 誠也", "荒木豊", "中尾建太"
 ]
 
-st.title("⚾ スコアブック (KAGURA 5-5 SQUAD)")
+st.title("⚾ スコアブック ⚾")
 
 # --- 5. メインレイアウト（2カラム） ---
 left_col, right_col = st.columns([1.8, 2]) 
 
+# --- 修正後のコード（left_colの中身） ---
+
 with left_col:
     st.subheader("📋 今日のオーダーと成績")
     
-    positions = ["8", "4", "6", "5", "2", "9", "7", "5", "DH", "3"]
+    # 守備位置の選択肢を定義
+    all_positions = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+    
+    # 初期の並び順（10人分）
+    default_positions = ["8", "4", "6", "5", "2", "9", "7", "5", "DH", "3"]
     
     # ヘッダー行
-    h_cols = st.columns([1, 1, 3, 5])
+    h_cols = st.columns([1, 1.5, 3, 5]) # 幅を少し調整
     h_cols[0].write("**打順**")
     h_cols[1].write("**位置**")
     h_cols[2].write("**選手名**")
@@ -62,10 +68,19 @@ with left_col:
     
     # 10人分の行を作成
     for i in range(10):
-        c1, c2, c3, c4 = st.columns([1, 1, 3, 5])
+        c1, c2, c3, c4 = st.columns([1, 1.5, 3, 5])
         c1.write(f"{i+1}")
-        # 位置と名前の入力
-        pos = c2.text_input(f"p_{i}", positions[i], key=f"pos_{i}", label_visibility="collapsed")
+        
+        # 【修正箇所】text_input から selectbox に変更
+        # default_positions[i] が all_positions の中の何番目にあるかを探して初期値に設定
+        try:
+            pos_index = all_positions.index(default_positions[i])
+        except ValueError:
+            pos_index = 0
+            
+        pos = c2.selectbox(f"p_{i}", all_positions, index=pos_index, key=f"pos_{i}", label_visibility="collapsed")
+        
+        # 選手選択
         name = c3.selectbox(f"n_{i}", all_players, index=i, key=f"name_{i}", label_visibility="collapsed")
         
         # 成績の表示
