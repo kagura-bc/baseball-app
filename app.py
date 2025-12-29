@@ -40,19 +40,43 @@ if page == "打撃成績入力":
     left_col, right_col = st.columns([1.8, 2])
 
     with left_col:
-        st.subheader("📋 今日のオーダー")
-        all_positions = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-        default_positions = ["8", "4", "6", "5", "2", "9", "7", "5", "DH", "3"]
+    st.subheader("📋 今日のオーダー")
+    
+    # 選択肢を少し見やすく（数字の前にスペースを入れるなど）
+    all_positions = [" 1 ", " 2 ", " 3 ", " 4 ", " 5 ", " 6 ", " 7 ", " 8 ", " 9 ", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+    default_positions = ["8", "4", "6", "5", "2", "9", "7", "5", "DH", "3"]
+    
+    # 【重要】列の幅を [1, 2, 3, 4] に変更。2番目の「位置」を広げました
+    h_cols = st.columns([1, 2, 3, 4]) 
+    h_cols[0].write("**打順**")
+    h_cols[1].write("**位置**") # ここが広くなる
+    h_cols[2].write("**選手名**")
+    h_cols[3].write("**直近5打席**")
+
+    current_lineup_names = []
+    for i in range(10):
+        # ここもヘッダーと同じ比率 [1, 2, 3, 4] に合わせる
+        c1, c2, c3, c4 = st.columns([1, 2, 3, 4])
         
-        current_lineup_names = []
-        for i in range(10):
-            c1, c2, c3, c4 = st.columns([1, 1.5, 3, 5])
-            c1.write(f"{i+1}")
-            pos = c2.selectbox(f"p_{i}", all_positions, index=all_positions.index(default_positions[i]) if default_positions[i] in all_positions else 0, key=f"pos_{i}", label_visibility="collapsed")
-            name = c3.selectbox(f"n_{i}", all_players, index=i, key=f"name_{i}", label_visibility="collapsed")
-            res_text = get_player_results(name, df_batting)
-            c4.info(res_text)
-            current_lineup_names.append(name)
+        c1.write(f"**{i+1}**") # 打順を太字に
+        
+        # 守備位置の選択
+        pos_val = default_positions[i]
+        # 前後にスペースがある選択肢でも選べるように調整
+        try:
+            pos_index = [p.strip() for p in all_positions].index(pos_val)
+        except:
+            pos_index = 0
+            
+        pos = c2.selectbox(f"p_{i}", all_positions, index=pos_index, key=f"pos_{i}", label_visibility="collapsed")
+        
+        # 選手選択
+        name = c3.selectbox(f"n_{i}", all_players, index=i, key=f"name_{i}", label_visibility="collapsed")
+        
+        res_text = get_player_results(name, df_batting)
+        # 成績を少し目立たせる
+        c4.markdown(f"**{res_text}**") 
+        current_lineup_names.append(name)
 
     with right_col:
         st.subheader("📝 打撃結果入力")
