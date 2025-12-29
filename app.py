@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 
 # --- 1. ページ設定と基本情報 ---
-st.set_page_config(page_title="伝統的スコアブック", layout="wide")
+st.set_page_config(page_title="スコアブック", layout="wide")
 
 # スプレッドシートのURL
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Dt74KFYNrdjTlQsMwjM0XsvepBnWHG3iBHQjOaE_t5E/edit?usp=sharing"
@@ -37,11 +37,11 @@ def get_player_results(name, current_df):
 
 # --- 4. 選手マスター（最新オーダー順） ---
 all_players = [
-    "名執雅", "名執雅楽", "古屋 翔", "助っ人", "濱瑠晟", 
+    "名執雅叶", "名執雅楽", "古屋 翔", "助っ人", "濱瑠晟", 
     "清水 智広", "小野拓朗", "渡邊 誠也", "荒木豊", "中尾建太"
 ]
 
-st.title("⚾ 伝統的スコアブック (KAGURA 5-5 SQUAD)")
+st.title("⚾ スコアブック (KAGURA 5-5 SQUAD)")
 
 # --- 5. メインレイアウト（2カラム） ---
 left_col, right_col = st.columns([1.8, 2]) 
