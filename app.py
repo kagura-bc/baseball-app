@@ -30,23 +30,35 @@ def load_batting_data():
 
 df_batting = load_batting_data()
 
+# （中略：読み込み部分までは同じ）
+
 # ==========================================
 # 自動集計ロジック（イニング別）
 # ==========================================
 today_str = datetime.date.today().strftime('%Y-%m-%d')
 today_df = df_batting[df_batting["日付"] == today_str]
 
-# 1回〜9回までの得点をリスト化
-k_inning_runs = []
+# 1回〜9回までの表示用リスト
+k_inning_display = []
+total_runs = 0
+
 for i in range(1, 10):
-    # そのイニングの「得点」列を合計
-    run = today_df[today_df["イニング"] == f"{i}回"]["得点"].fillna(0).astype(int).sum()
-    k_inning_runs.append(run)
+    inning_name = f"{i}回"
+    # そのイニングにデータが存在するかチェック
+    inning_data = today_df[today_df["イニング"] == inning_name]
+    
+    if inning_data.empty:
+        # データがなければ空欄（または "-"）にする
+        k_inning_display.append("") 
+    else:
+        # データがあれば合計を計算
+        run = inning_data["得点"].fillna(0).astype(int).sum()
+        k_inning_display.append(run)
+        total_runs += run
 
 # 安打数（H）の自動計算
 hits_list = ["単打", "二塁打", "三塁打", "本塁打"]
 total_hits = today_df[today_df["結果"].isin(hits_list)].shape[0]
-total_runs = sum(k_inning_runs)
 
 # ==========================================
 # 共通：完全自動スコアボード
@@ -55,24 +67,22 @@ st.title("⚾ リアルタイム試合速報")
 
 score_data = {
     "チーム": ["KAGURA", "相手チーム"],
-    "1": [k_inning_runs[0], 0],
-    "2": [k_inning_runs[1], 0],
-    "3": [k_inning_runs[2], 0],
-    "4": [k_inning_runs[3], 0],
-    "5": [k_inning_runs[4], 0],
-    "6": [k_inning_runs[5], 0],
-    "7": [k_inning_runs[6], 0],
-    "8": [k_inning_runs[7], 0],
-    "9": [k_inning_runs[8], 0],
-    "R": [total_runs, 0],
-    "H": [total_hits, 0],
-    "E": [0, 0]
+    "1": [k_inning_display[0], ""],
+    "2": [k_inning_display[1], ""],
+    "3": [k_inning_display[2], ""],
+    "4": [k_inning_display[3], ""],
+    "5": [k_inning_display[4], ""],
+    "6": [k_inning_display[5], ""],
+    "7": [k_inning_display[6], ""],
+    "8": [k_inning_display[7], ""],
+    "9": [k_inning_display[8], ""],
+    "R": [total_runs, ""],
+    "H": [total_hits, ""],
+    "E": ["", ""]
 }
 st.table(pd.DataFrame(score_data))
 
-st.divider()
-
-page = st.sidebar.radio("ページ切替", ["打撃成績入力", "投手成績入力"])
+# （以下、打撃成績入力フォームなどはそのまま継続）
 
 # ==========================================
 # 打撃成績入力（イニング選択を追加）
