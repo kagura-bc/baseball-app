@@ -3,6 +3,15 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
 
+# ▼▼▼ 追加：イニング文字列を数値に変換する関数（ソート用） ▼▼▼
+def inning_sort_key(inn_str):
+    try:
+        # "1回" -> 1 に変換。"延長10回"などは考慮が必要ですが、まずは単純な数値変換
+        return int(str(inn_str).replace("回", ""))
+    except:
+        return 99 # 数値にできない場合は最後に回す
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
 # ▼▼▼ delete_match_logic（完全上書きモード） ▼▼▼
 
 def delete_match_logic(date, opponent):
@@ -187,12 +196,14 @@ PLAYER_NUMBERS = {
     "石田貴大": "24",
     "相原一博": "25",
     "田中伸延": "26",
+    "坂本昂士": "27",
     "渡辺羽": "28",
     "石原圭佑": "29",
     "荒木豊": "31",
     "永井雄太": "33",
     "小野慎也": "38",
     "清水智広": "43",
+    "名執雅叶": "51",
     "山縣諒介": "60",
     "照屋航": "63",
     "望月駿": "66",
@@ -204,7 +215,13 @@ PLAYER_NUMBERS = {
 all_players = list(PLAYER_NUMBERS.keys())
 my_team_fixed = "KAGURA"
 all_positions = ["", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-ground_list = ["小瀬スポーツ公園", "緑が丘スポーツ公園", "釜無川スポーツ公園", "飯田球場", "北麓公園", "その他"]
+# グラウンドリスト（追加分を反映）
+ground_list = [
+    "小瀬スポーツ公園", "緑が丘スポーツ公園", "飯田球場", "北麓公園",
+    "中巨摩第二公園", "スコレーセンター", "花鳥の里スポーツ広場", "春日居スポーツ広場",
+    "山梨大学", "双葉スポーツ公園", "釜無川スポーツ公園", "八田野球場",
+    "その他"
+]
 
 # --- データ読み込み（API制限対策: キャッシュ有効化） ---
 def load_batting_data():
@@ -260,12 +277,28 @@ df_pitching = load_pitching_data()
 # サイドバー設定
 # ==========================================
 st.sidebar.header("⚙️ 試合設定")
-match_type = st.sidebar.radio("試合種別", ["公式戦", "練習試合", "その他"], horizontal=True)
+
+# 1. まず大枠をボタン（radio）で選択
+match_category = st.sidebar.radio("試合区分", ["公式戦", "練習試合", "その他"], horizontal=True)
+
+# 2. 公式戦の場合だけ、具体的な大会名をプルダウンで選択
+if match_category == "公式戦":
+    # 公式戦の大会リスト
+    official_tournaments = ["高松宮賜杯", "天皇杯", "ミズノ杯", "東日本", "会長杯", "市長杯"]
+    match_type = st.sidebar.selectbox("大会名を選択", official_tournaments)
+else:
+    # 練習試合やその他の場合は、その区分名自体を登録データとする
+    match_type = match_category
+
+# 確認用（開発時のみ表示、不要なら削除可）
+# st.sidebar.write(f"登録される種別: {match_type}")
+
 game_date = st.sidebar.date_input("試合日", datetime.date.today())
 selected_date_str = game_date.strftime('%Y-%m-%d')
 selected_ground_base = st.sidebar.selectbox("グラウンド", ground_list)
 ground_name = st.sidebar.text_input("グラウンド名入力", value="グラウンド") if selected_ground_base == "その他" else selected_ground_base
-opponents_list = ["ミッピーズ", "WISH", "NATSUME", "92ears", "球遊会", "プリティーボーイズ", "DREAM", "リベリオン", "KING STAR", "甲府市役所", "SQUAD", "その他"]
+opponents_list = ["ミッピーズ", "WISH", "NATSUME", "92ears", "球遊会", "プリティーボーイズ", "DREAM", "リベリオン", "KING STAR", "甲府市役所", "SQUAD", "CRAZY",
+    "桜華", "甲府ドラゴンズ", "南アルプス市役所", "風間自工", "凪" ,"その他"]
 selected_opp = st.sidebar.selectbox("相手チーム", opponents_list)
 opp_team = st.sidebar.text_input("相手名", value="相手チーム") if selected_opp == "その他" else selected_opp
 kagura_order = st.sidebar.radio(f"攻守", ["先攻 (表)", "後攻 (裏)"], horizontal=True)
@@ -562,13 +595,13 @@ elif page == "🔥 投手成績入力":
     st.divider()
     
     # --- 登録処理用コールバック関数 ---
-    # --- 登録処理用コールバック関数 ---
     def submit_pitching():
         # Session State から値を取得
         p_name = st.session_state.get("pit_name")
         p_inning = st.session_state.get("pit_inn")
         p_res = st.session_state.get("pit_res")
-        p_count = st.session_state.get("pit_count")
+        p_count = 0 
+        
         pruns = st.session_state.get("pit_runs")
         per = st.session_state.get("pit_er")
         
@@ -583,11 +616,11 @@ elif page == "🔥 投手成績入力":
         # 画面で選ばれた「鈴木 (遊)」のような文字列を取得
         p_fielder_raw = st.session_state.get("pit_fielder", "")
         
-        # ▼▼▼ 修正箇所：ここを変えました ▼▼▼
-        # 以前はここで split してポジションを削除していましたが、
-        # 今回は「ポジション付きのまま」保存するようにします。
-        p_fielder_name = p_fielder_raw 
-        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+        # 記録なしの場合は空文字にする
+        if "記録なし" in p_fielder_raw:
+            p_fielder_name = "" 
+        else:
+            p_fielder_name = p_fielder_raw 
 
         if p_name:
             # アウトカウントが増えるイベント
@@ -604,7 +637,7 @@ elif page == "🔥 投手成績入力":
                 "日付": selected_date_str, "グラウンド": ground_name, 
                 "対戦相手": opp_team, "試合種別": match_type, 
                 "イニング": p_inning, "投手名": p_name, 
-                "結果": p_res, "処理野手": p_fielder_name, # ここに (遊) などが入るようになります
+                "結果": p_res, "処理野手": p_fielder_name, 
                 "球数": int(p_count), "アウト数": out_inc, 
                 "失点": int(pruns), "自責点": int(per),
                 "勝敗": p_dec_val
@@ -713,8 +746,13 @@ elif page == "🔥 投手成績入力":
         
         seen = set()
         current_fielders = [x for x in current_fielders if not (x in seen or seen.add(x))]
+        
         if not current_fielders:
-             current_fielders = ["(打撃画面でスタメン登録してください)"] + ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+             current_fielders = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+             
+        # ▼▼▼ 修正箇所：一番下に追加 ▼▼▼
+        current_fielders.append("記録なし (アウトのみ)")
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         if p_res == "失策":
             st.info("👇 誰がエラーしましたか？")
@@ -722,14 +760,13 @@ elif page == "🔥 投手成績入力":
             st.info("👇 誰が処理しましたか？")
         st.selectbox("対象選手", current_fielders, key="pit_fielder")
 
-    # 6. その他の入力（球数・失点・自責・勝敗）
+    # 6. 数値入力・勝敗判定
     st.write("▼ 数値入力・勝敗判定")
-    cp, cr, ce, cw = st.columns([1, 1, 1, 2])
-    p_count = cp.number_input("球数", 1, 15, 4, key="pit_count")
+    cr, ce, cw = st.columns([1, 1, 2])
+    
     pruns = cr.selectbox("失点", [0,1,2,3,4], key="pit_runs")
     per = ce.selectbox("自責", [0,1,2,3,4], key="pit_er")
     
-    # ▼▼▼ 勝敗選択ボックス ▼▼▼
     cw.selectbox(
         "勝敗判定 (今回確定する場合)", 
         ["-", "勝利投手", "敗戦投手", "セーブ", "ホールド"], 
@@ -896,18 +933,31 @@ elif page == "🏆 チーム戦績":
                 
                 tab_d_bat, tab_d_pit = st.tabs(["📝 打撃成績 (スコアブック)", "🔥 投手成績 (登板内容)"])
                 
-                # ▼▼▼ 打撃成績：オーダー表形式 ▼▼▼
+                # ▼▼▼ 修正箇所：「打撃成績 (スコアブック)」の表示ロジック ▼▼▼
                 with tab_d_bat:
                     if not detail_b.empty:
-                        players_ordered = detail_b["選手名"].unique()
+                        # まず、この試合のデータを「イニング順」に並べ替える
+                        # これにより、後から修正してもイニングが早い順に「第1打席」となります
+                        detail_b["_inn_sort"] = detail_b["イニング"].apply(inning_sort_key)
+                        detail_b_sorted = detail_b.sort_values(by=["_inn_sort"])  # 並べ替え実行
+
+                        # 登場した順に選手リストを作成（重複なし）
+                        players_ordered = detail_b_sorted["選手名"].unique()
+                        
                         batting_rows = []
                         max_at_bats = 0 
                         display_targets = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退", "失策"]
 
                         for i, p_name in enumerate(players_ordered):
-                            p_rows = detail_b[detail_b["選手名"] == p_name]
+                            # 並べ替えたデータから、その選手の行だけを抽出
+                            p_rows = detail_b_sorted[detail_b_sorted["選手名"] == p_name]
+                            
+                            # 最終的な守備位置を取得
                             pos = p_rows.iloc[-1]["位置"] if "位置" in p_rows.columns else "-"
+                            
+                            # 結果のリストを取得（イニング順になっているので、ここが正しく第1、第2...となる）
                             results = p_rows[p_rows["結果"].isin(display_targets)]["結果"].tolist()
+                            
                             if len(results) > max_at_bats: max_at_bats = len(results)
                             
                             rbi = pd.to_numeric(p_rows["打点"], errors='coerce').sum()
@@ -922,6 +972,7 @@ elif page == "🏆 チーム戦績":
                         
                         df_bat_formatted = pd.DataFrame(batting_rows)
                         final_max_cols = max(5, max_at_bats)
+                        
                         for j in range(final_max_cols):
                             col_name = f"第{j+1}打席"
                             df_bat_formatted[col_name] = df_bat_formatted["results"].apply(lambda x: x[j] if j < len(x) else "")
@@ -1302,6 +1353,7 @@ elif page == "🔧 データ修正":
     # 共通の選択肢定義
     default_innings = [f"{i}回" for i in range(1, 10)]
     
+    # 既存データから対戦相手・グラウンドを抽出してマージ
     existing_opps_b = list(df_batting["対戦相手"].unique()) if "対戦相手" in df_batting.columns else []
     existing_opps_p = list(df_pitching["対戦相手"].unique()) if "対戦相手" in df_pitching.columns else []
     raw_opps_list = opponents_list + existing_opps_b + existing_opps_p
@@ -1316,7 +1368,10 @@ elif page == "🔧 データ修正":
 
     batting_results = ["---", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "犠打", "凡退", "失策", "盗塁", "得点", "走塁死", "盗塁死"]
     pitching_results = ["凡退", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "失策", "犠打", "走塁死", "盗塁死", "牽制死"]
-    match_types = ["公式戦", "練習試合", "その他"]
+    
+    # ▼▼▼ 修正箇所：変数名を match_types に統一して定義 ▼▼▼
+    match_types = ["高松宮賜杯", "天皇杯", "ミズノ杯", "東日本", "会長杯", "市長杯", "練習試合", "その他", "公式戦"]
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     with t1:
         st.write("▼ 打撃データの編集")
@@ -1326,6 +1381,7 @@ elif page == "🔧 データ修正":
                 "日付": st.column_config.DateColumn("日付", format="YYYY-MM-DD", required=True),
                 "グラウンド": st.column_config.SelectboxColumn("グラウンド", options=merged_grounds, required=True),
                 "対戦相手": st.column_config.SelectboxColumn("対戦相手", options=merged_opps, required=True),
+                # ▼▼▼ ここで match_types を使用
                 "試合種別": st.column_config.SelectboxColumn("試合種別", options=match_types, required=True),
                 "イニング": st.column_config.SelectboxColumn("イニング", options=default_innings, required=True),
                 "選手名": st.column_config.SelectboxColumn("選手名", options=all_players, required=True),
@@ -1355,11 +1411,11 @@ elif page == "🔧 データ修正":
                 "日付": st.column_config.DateColumn("日付", format="YYYY-MM-DD", required=True),
                 "グラウンド": st.column_config.SelectboxColumn("グラウンド", options=merged_grounds, required=True),
                 "対戦相手": st.column_config.SelectboxColumn("対戦相手", options=merged_opps, required=True),
+                # ▼▼▼ ここでも match_types を使用（エラー箇所の修正）
                 "試合種別": st.column_config.SelectboxColumn("試合種別", options=match_types, required=True),
                 "イニング": st.column_config.SelectboxColumn("イニング", options=default_innings, required=True),
                 "投手名": st.column_config.SelectboxColumn("投手名", options=all_players, required=True),
                 "結果": st.column_config.SelectboxColumn("結果", options=pitching_results, required=True),
-                # 処理野手の編集を追加
                 "処理野手": st.column_config.SelectboxColumn("処理野手", options=["", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]),
                 "球数": st.column_config.NumberColumn("球数", min_value=0, step=1),
                 "アウト数": st.column_config.NumberColumn("アウト数", min_value=0, max_value=1, step=1, help="1=アウト取得, 0=なし"),
