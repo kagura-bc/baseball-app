@@ -3,6 +3,103 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
 
+# ▼▼▼ delete_match_logic（完全上書きモード） ▼▼▼
+
+def delete_match_logic(date, opponent):
+    try:
+        # ===========================================================
+        # ⚠️ ここにスプレッドシートのURLを貼ってください（必須）
+        SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Dt74KFYNrdjTlQsMwjM0XsvepBnWHG3iBHQjOaE_t5E/edit?usp=sharing"
+        
+        SHEET_NAME_BATTING = "打撃成績"
+        SHEET_NAME_PITCHING = "投手成績"
+        # ===========================================================
+
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        
+        # クリーニング関数
+        def clean_text(text):
+            return str(text).replace(" ", "").replace("　", "").strip()
+
+        target_date_str = pd.to_datetime(date).strftime('%Y-%m-%d')
+        target_opp_clean = clean_text(opponent)
+        
+        deleted_something = False
+
+        # -----------------------------------------------------
+        # 1. 打撃データの処理
+        # -----------------------------------------------------
+        try:
+            # 最新データを取得
+            df_b = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=SHEET_NAME_BATTING, ttl=0)
+        except:
+            df_b = pd.DataFrame()
+
+        if df_b is not None and not df_b.empty:
+            original_len = len(df_b)
+            
+            # 比較用データ作成
+            df_b["_calc_date"] = pd.to_datetime(df_b["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+            df_b["_calc_opp"] = df_b["対戦相手"].apply(clean_text)
+            
+            # 削除対象を探す
+            mask_delete = (df_b["_calc_date"] == target_date_str) & (df_b["_calc_opp"] == target_opp_clean)
+            
+            if mask_delete.sum() > 0:
+                # 削除対象以外を残す
+                new_df_b = df_b[~mask_delete].copy()
+                
+                # 余計な列を消す
+                save_df_b = new_df_b.drop(columns=["_calc_date", "_calc_opp"])
+                
+                # 【重要】updateではなく、clearしてからwriteする（確実に行を減らすため）
+                conn.clear(spreadsheet=SPREADSHEET_URL, worksheet=SHEET_NAME_BATTING)
+                conn.update(spreadsheet=SPREADSHEET_URL, worksheet=SHEET_NAME_BATTING, data=save_df_b)
+                
+                st.session_state["df_batting"] = save_df_b
+                deleted_something = True
+                st.write("打撃データを更新しました。")
+
+        # -----------------------------------------------------
+        # 2. 投手データの処理
+        # -----------------------------------------------------
+        try:
+            df_p = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=SHEET_NAME_PITCHING, ttl=0)
+        except:
+            df_p = pd.DataFrame()
+
+        if df_p is not None and not df_p.empty:
+            df_p["_calc_date"] = pd.to_datetime(df_p["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+            df_p["_calc_opp"] = df_p["対戦相手"].apply(clean_text)
+
+            mask_delete_p = (df_p["_calc_date"] == target_date_str) & (df_p["_calc_opp"] == target_opp_clean)
+            
+            if mask_delete_p.sum() > 0:
+                new_df_p = df_p[~mask_delete_p].copy()
+                save_df_p = new_df_p.drop(columns=["_calc_date", "_calc_opp"])
+                
+                # 【重要】clearしてからwrite
+                conn.clear(spreadsheet=SPREADSHEET_URL, worksheet=SHEET_NAME_PITCHING)
+                conn.update(spreadsheet=SPREADSHEET_URL, worksheet=SHEET_NAME_PITCHING, data=save_df_p)
+                
+                st.session_state["df_pitching"] = save_df_p
+                deleted_something = True
+                st.write("投手データを更新しました。")
+
+        # -----------------------------------------------------
+        # 完了処理
+        # -----------------------------------------------------
+        if deleted_something:
+            st.cache_data.clear() # キャッシュも消す
+            return True
+        else:
+            st.warning("削除対象が見つかりませんでした（すでに削除されている可能性があります）。")
+            return False
+
+    except Exception as e:
+        st.error(f"システムエラー: {e}")
+        return False
+
 # --- ページ設定 ---
 st.set_page_config(page_title="KAGURA スコア管理システム", layout="wide")
 
@@ -846,7 +943,68 @@ elif page == "🏆 チーム戦績":
                             balls = p_data["球数"].sum()
                             runs = p_data["失点"].sum()
                             er = p_data["自責点"].sum()
-                            hits = p
+                            hits = p_data["被安打"].sum()
+
+    # ▼▼▼ チーム戦績ページの一番最後（ここを書き換えてください） ▼▼▼
+    
+    st.markdown("---")
+    st.subheader("⚠️ 試合データの削除")
+
+    # 確実にデータがあるか確認してからリストを作る
+    df_for_list = None
+    if "df_batting" in st.session_state:
+        df_for_list = st.session_state["df_batting"]
+    
+    if df_for_list is not None and not df_for_list.empty:
+        # リスト作成：日付を確実に YYYY-MM-DD 文字列にして結合する
+        # これで関数側と同じ形式になるので「不一致」がなくなります
+        def make_label(row):
+            d_str = pd.to_datetime(row["日付"]).strftime('%Y-%m-%d')
+            opp = str(row["対戦相手"])
+            return f"{d_str}___{opp}" # 区切り文字をアンダーバー3つにする（ミス防止）
+
+        match_labels = df_for_list.apply(make_label, axis=1).unique()
+        match_labels = sorted(match_labels, reverse=True)
+        
+        # 表示用のきれいなラベルへの変換マップを作る
+        label_map = {}
+        display_options = []
+        for label in match_labels:
+            d, o = label.split("___")
+            disp = f"{d} vs {o}"
+            label_map[disp] = (d, o) # 表示名 -> (日付, 相手) の辞書
+            display_options.append(disp)
+
+        # UI表示
+        c_del1, c_del2 = st.columns([3, 1])
+        with c_del1:
+            selected_disp = st.selectbox("削除する試合を選択", display_options, key="del_select_box")
+        
+        with c_del2:
+            st.write("")
+            st.write("")
+            check_del = st.checkbox("削除確認", key="del_check_box")
+            
+        if st.button("試合データを削除（復元不可）", type="primary", key="del_btn_exec"):
+            if check_del and selected_disp:
+                # 辞書から正確な「日付」と「相手」を取り出す
+                target_date, target_opp = label_map[selected_disp]
+                
+                st.write(f"処理を開始します... {target_date} / {target_opp}")
+                
+                # 実行！
+                if delete_match_logic(target_date, target_opp):
+                    st.success(f"「{selected_disp}」を削除しました！")
+                    st.cache_data.clear() # キャッシュクリア
+                    import time
+                    time.sleep(2) # メッセージを読めるように少し待つ
+                    st.rerun()    # 画面リロード
+                else:
+                    st.error("削除処理を行いましたが、対象が見つかりませんでした（診断メッセージを確認してください）")
+            else:
+                st.warning("確認チェックを入れてください。")
+    else:
+        st.info("削除できるデータがありません（データ読み込み待ち、またはデータなし）")  
 
 elif page == "📊 個人成績":
     st.title("📊 個人通算成績")
@@ -1034,35 +1192,35 @@ elif page == "📊 個人成績":
             fld_data = df_p_target[df_p_target["処理野手"] != ""]
             
             if not fld_data.empty:
-                # 1. クロス集計（行：処理野手そのまま、列：結果）
+                # 1. クロス集計
                 stats = pd.crosstab(fld_data["処理野手"], fld_data["結果"])
                 
-                # 2. 列の整理（0埋め）
+                # 2. 列の整理
                 target_cols = ["凡退", "犠打", "失策", "走塁死", "牽制死", "盗塁死"]
                 for col in target_cols:
                     if col not in stats.columns:
                         stats[col] = 0
                 
                 # 3. 指標計算
-                # アウトに関与したもの（失策以外）を合算
                 out_cols = [c for c in target_cols if c != "失策"]
-                
                 stats["刺殺・補殺"] = stats[out_cols].sum(axis=1)
                 stats["守備機会"] = stats["刺殺・補殺"] + stats["失策"]
                 
-                # 守備率 = (守備機会 - 失策) / 守備機会
+                # 守備率
                 stats["守備率"] = stats.apply(lambda row: (row["守備機会"] - row["失策"]) / row["守備機会"] if row["守備機会"] > 0 else 0.000, axis=1)
                 
-                # 4. 表示用データフレーム作成（名前とポジションを分離）
-                stats = stats.reset_index() # "処理野手" を列に戻す
+                stats = stats.reset_index()
                 
-                display_rows = []
+                # -------------------------------------------------------
+                # 【重要】ここが消えていた可能性があります（リスト作成＆ループ）
+                # -------------------------------------------------------
+                display_rows = []  # ← ここでリストを初期化
                 pos_order_list = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
                 
                 for _, row in stats.iterrows():
                     raw_name = row["処理野手"]
                     
-                    # "名前 (位置)" から分解
+                    # 名前分解
                     if "(" in raw_name and ")" in raw_name:
                         parts = raw_name.split(" (")
                         p_name = parts[0]
@@ -1071,14 +1229,18 @@ elif page == "📊 個人成績":
                         p_name = raw_name
                         p_pos = "-"
 
-                    # ソート用の数値
+                    # ソート用キー作成
                     try:
                         sort_key = pos_order_list.index(p_pos)
                     except ValueError:
                         sort_key = 99
                     
-                    # 背番号取得
-                    p_num = PLAYER_NUMBERS.get(p_name, "-")
+                    # 背番号
+                    # PLAYER_NUMBERS が定義されていない場合のエラー回避
+                    if "PLAYER_NUMBERS" in globals():
+                        p_num = PLAYER_NUMBERS.get(p_name, "-")
+                    else:
+                        p_num = "-"
 
                     display_rows.append({
                         "SortKey": sort_key,
@@ -1090,29 +1252,34 @@ elif page == "📊 個人成績":
                         "失策": row["失策"],
                         "守備率": row["守備率"]
                     })
+                # -------------------------------------------------------
+
+                # 4. 表示用データフレーム作成（エラー対策済み）
+                if len(display_rows) > 0:
+                    df_disp = pd.DataFrame(display_rows)
+                else:
+                    # 空の場合はカラム定義のみ行う
+                    df_disp = pd.DataFrame(columns=["SortKey", "位置", "No.", "氏名", "守備機会", "刺殺・補殺", "失策", "守備率"])
                 
-                df_disp = pd.DataFrame(display_rows)
+                # 表示処理
+                if not df_disp.empty:
+                    df_disp = df_disp.sort_values(["SortKey", "守備機会"], ascending=[True, False])
+                    df_disp["守備率"] = df_disp["守備率"].map(lambda x: f"{x:.3f}")
                 
-                # ポジション順 > 守備機会順 にソート
-                df_disp = df_disp.sort_values(["SortKey", "守備機会"], ascending=[True, False])
-                
-                # 守備率のフォーマット
-                df_disp["守備率"] = df_disp["守備率"].map(lambda x: f"{x:.3f}")
-                
-                # 表示カラムの選定
                 final_cols = ["位置", "No.", "氏名", "守備機会", "刺殺・補殺", "失策", "守備率"]
-                
                 st.dataframe(df_disp[final_cols], use_container_width=True, hide_index=True)
                 
-                # グラフ（失策の多い順）
+                # グラフ
                 st.caption("▼ ポジション別エラー数")
-                err_chart_df = df_disp[df_disp["失策"] > 0].sort_values("失策", ascending=False)
-                if not err_chart_df.empty:
-                    # グラフ用に名前とポジションを結合
-                    err_chart_df["Label"] = err_chart_df["氏名"] + " (" + err_chart_df["位置"] + ")"
-                    st.bar_chart(err_chart_df.set_index("Label")["失策"])
+                if not df_disp.empty:
+                    err_chart_df = df_disp[df_disp["失策"] > 0].sort_values("失策", ascending=False)
+                    if not err_chart_df.empty:
+                        err_chart_df["Label"] = err_chart_df["氏名"] + " (" + err_chart_df["位置"] + ")"
+                        st.bar_chart(err_chart_df.set_index("Label")["失策"])
+                    else:
+                        st.write("失策の記録はありません。")
                 else:
-                    st.write("失策の記録はありません。")
+                    st.write("データがありません。")
 
             else:
                 st.info("守備記録データがまだありません。")
