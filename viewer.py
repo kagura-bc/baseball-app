@@ -158,6 +158,95 @@ if menu == "🏠 最新試合結果":
             render_scoreboard(day_b, day_p, latest_str, m_type, ground, opp, is_top_first=True)
             
             st.success(f"最新更新: {latest_str} vs {opp}")
+            
+            # ▼▼▼ 追加：ここから詳細（スタメン・成績）を表示するコード ▼▼▼
+            st.divider()
+            st.subheader("📝 試合詳細データ")
+            
+            tab_d_bat, tab_d_pit = st.tabs(["打撃成績 (スタメン)", "投手成績"])
+            
+            # --- 打撃詳細 ---
+            with tab_d_bat:
+                if not day_b.empty:
+                    # イニング順に並べ替え（打順を再現するため）
+                    day_b["_inn_sort"] = day_b["イニング"].apply(inning_sort_key)
+                    day_b_sorted = day_b.sort_values(by=["_inn_sort"])
+                    
+                    players_ordered = day_b_sorted["選手名"].unique()
+                    batting_rows = []
+                    max_at_bats = 0 
+                    display_targets = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退", "失策", "打撃妨害"]
+
+                    for i, p_name in enumerate(players_ordered):
+                        p_rows = day_b_sorted[day_b_sorted["選手名"] == p_name]
+                        pos = p_rows.iloc[-1]["位置"] if "位置" in p_rows.columns else "-"
+                        
+                        # その選手の結果リストを作成
+                        results = p_rows[p_rows["結果"].isin(display_targets)]["結果"].tolist()
+                        if len(results) > max_at_bats: max_at_bats = len(results)
+                        
+                        rbi = pd.to_numeric(p_rows["打点"], errors='coerce').sum()
+                        run = pd.to_numeric(p_rows["得点"], errors='coerce').sum()
+                        sb = pd.to_numeric(p_rows["盗塁"], errors='coerce').sum()
+                        hits = p_rows[p_rows["結果"].isin(["単打", "二塁打", "三塁打", "本塁打"])].shape[0]
+                        
+                        batting_rows.append({
+                            "打順": i + 1, "守備": pos, "選手名": p_name,
+                            "打点": rbi, "得点": run, "安打": hits, "盗塁": sb, "results": results
+                        })
+                    
+                    if batting_rows:
+                        df_bat_formatted = pd.DataFrame(batting_rows)
+                        final_max_cols = max(5, max_at_bats)
+                        
+                        # 第X打席のカラムを作る
+                        for j in range(final_max_cols):
+                            col_name = f"第{j+1}打席"
+                            df_bat_formatted[col_name] = df_bat_formatted["results"].apply(lambda x: x[j] if j < len(x) else "")
+                        
+                        cols_order = ["打順", "守備", "選手名"] + [f"第{j+1}打席" for j in range(final_max_cols)] + ["安打", "打点", "得点", "盗塁"]
+                        # データフレーム表示
+                        st.dataframe(df_bat_formatted.drop(columns=["results"])[cols_order], use_container_width=True, hide_index=True)
+                    else:
+                        st.write("データなし")
+                else:
+                    st.info("打撃データがありません")
+
+            # --- 投手詳細 ---
+            with tab_d_pit:
+                if not day_p.empty:
+                    pitchers = day_p["投手名"].unique()
+                    p_stats_list = []
+                    for p_name in pitchers:
+                        p_data = day_p[day_p["投手名"] == p_name]
+                        outs = pd.to_numeric(p_data["アウト数"], errors='coerce').sum()
+                        balls = pd.to_numeric(p_data["球数"], errors='coerce').sum()
+                        runs = pd.to_numeric(p_data["失点"], errors='coerce').sum()
+                        er = pd.to_numeric(p_data["自責点"], errors='coerce').sum()
+                        so = p_data[p_data["結果"] == "三振"].shape[0]
+                        bb = p_data[p_data["結果"].isin(["四球", "死球"])].shape[0]
+                        
+                        # 勝敗
+                        dec = ""
+                        if "勝敗" in p_data.columns:
+                            dec_val = p_data["勝敗"].replace("", pd.NA).dropna().unique()
+                            if len(dec_val) > 0: dec = dec_val[0]
+
+                        p_stats_list.append({
+                            "名前": p_name,
+                            "回": f"{int(outs//3)}回 {int(outs%3)}/3",
+                            "球数": int(balls),
+                            "失点": int(runs),
+                            "自責": int(er),
+                            "三振": so,
+                            "四死": bb,
+                            "勝敗": dec
+                        })
+                    st.dataframe(pd.DataFrame(p_stats_list), use_container_width=True, hide_index=True)
+                else:
+                    st.info("投手データがありません")
+            # ▲▲▲ ここまで追加 ▲▲▲
+
         else:
             st.info("表示できる試合データがありません。")
             
@@ -651,7 +740,7 @@ elif menu == "📊 個人成績":
                 st.info("守備記録データがまだありません。")
         else:
             st.info("データがありません。")
-            
+
 # --- 👑 歴代記録 ---
 elif menu == "👑 歴代記録":
     st.title("👑 チーム歴代記録")
