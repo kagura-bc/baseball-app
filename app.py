@@ -239,7 +239,7 @@ def load_pitching_data():
         expected_cols = ["日付", "アウト数", "球数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "処理野手", "イニング", "投手名", "結果", "勝敗"]
 
         # 足りないカラムがあれば強制的に追加
-        for col in expected_cols:
+        for col in expected_cols: 
             if col not in data.columns: 
                 if col in ["グラウンド", "対戦相手", "試合種別", "処理野手", "投手名", "結果", "イニング", "勝敗"]:
                     data[col] = ""
