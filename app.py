@@ -1522,79 +1522,136 @@ elif page == "🏆 チーム戦績":
     st.title("🏆 チーム戦績ダッシュボード")
 
     # --------------------------------------------------
-    # 1. データ準備 & スマート集計ロジック
-    # --------------------------------------------------
+# 1. データ準備 & スマート集計ロジック（修正版）
+# --------------------------------------------------
     if df_batting.empty and df_pitching.empty:
         st.info("データがまだありません。")
     else:
-        # 日付・対戦相手・試合種別でユニークな試合リストを作成
-        # ※グラウンドは表記揺れがあるため、識別キーからは外して後で取得します
-        # キー: (日付, 対戦相手, 試合種別)
         games_map = {}
 
-        # --- A. 打撃データから試合と得点を抽出 ---
-        # 日付型を文字列に統一して処理
+   # --- A. 打撃データから集計 ---
         df_b_work = df_batting.copy()
         df_b_work["DateStr"] = pd.to_datetime(df_b_work["日付"]).dt.strftime('%Y-%m-%d')
         
-        # グルーピング
         for (d_str, opp, m_type), group in df_b_work.groupby(["DateStr", "対戦相手", "試合種別"]):
-            # 【重要】重複防止ロジック
-            # 「選手名」が「チーム記録」となっている行があるか探す
+            # 1. 得点の計算（チーム記録があればそれを優先）
             team_rec_rows = group[group["選手名"] == "チーム記録"]
-            
             if not team_rec_rows.empty:
-                # チーム記録（スコアのみ登録）があるなら、その得点だけを採用
-                score = pd.to_numeric(team_rec_rows["得点"], errors='coerce').fillna(0).sum()
+                runs = pd.to_numeric(team_rec_rows["得点"], errors='coerce').fillna(0).sum()
                 is_team_record = True
             else:
-                # なければ個人成績の積み上げ
-                score = pd.to_numeric(group["得点"], errors='coerce').fillna(0).sum()
+                runs = pd.to_numeric(group["得点"], errors='coerce').fillna(0).sum()
                 is_team_record = False
-            
-            # グラウンド情報を取得（代表値）
-            gr = group["グラウンド"].iloc[0] if not group.empty else ""
 
+            # 2. スタッツの計算（個人成績の積み上げ）
+            individuals = group[group["選手名"] != "チーム記録"]
+            
+            # 初期値
+            total_hits = 0
+            total_ab = 0
+            total_hr = 0
+            total_sb = 0
+
+            if not individuals.empty:
+                # (a) 安打数・本塁打の計算
+                # 「結果」列に含まれる文字列の個数（行数）をカウントします
+                # ※まとめ入力機能でも、入力された数だけ行が複製されているため、この単純カウントで合致します
+                s1 = len(individuals[individuals["結果"] == "単打"])
+                s2 = len(individuals[individuals["結果"] == "二塁打"])
+                s3 = len(individuals[individuals["結果"] == "三塁打"])
+                hr = len(individuals[individuals["結果"] == "本塁打"])
+                
+                total_hits = s1 + s2 + s3 + hr
+                total_hr = hr
+                
+                # (b) 盗塁の計算
+                # 「盗塁」カラムの数値を合計（詳細入力・まとめ入力ともに数値が入る仕様のため）
+                total_sb = pd.to_numeric(individuals["盗塁"], errors='coerce').fillna(0).sum()
+
+                # (c) 打数(AB)の計算
+                # 打数としてカウントすべき結果リスト（四死球・犠打・打撃妨害などを除く）
+                ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退", "失策", "併殺打", "野選", "振り逃げ"]
+                
+                # 該当する行数をカウントして打数とする
+                total_ab = len(individuals[individuals["結果"].isin(ab_results)])
+
+            # グラウンド情報
+            gr = group["グラウンド"].iloc[0] if not group.empty else ""
             key = (d_str, opp, m_type)
+
             if key not in games_map:
                 games_map[key] = {
                     "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
-                    "得点": 0, "失点": 0, "has_team_record": False
+                    "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
+                    "自責点": 0, "投球回": 0.0,
+                    "has_team_record": False
                 }
             
-            games_map[key]["得点"] = int(score)
+            # 計算結果を格納
+            games_map[key]["得点"] = runs
+            games_map[key]["打数"] = total_ab
+            games_map[key]["安打"] = total_hits
+            games_map[key]["本塁打"] = total_hr
+            games_map[key]["盗塁"] = total_sb
+            
             if is_team_record:
                 games_map[key]["has_team_record"] = True
 
-        # --- B. 投手データから失点を抽出 ---
+        # --- B. 投手データから集計 ---
         df_p_work = df_pitching.copy()
         df_p_work["DateStr"] = pd.to_datetime(df_p_work["日付"]).dt.strftime('%Y-%m-%d')
 
         for (d_str, opp, m_type), group in df_p_work.groupby(["DateStr", "対戦相手", "試合種別"]):
-            # 重複防止ロジック（投手側）
+            # 1. 失点の計算（チーム記録優先）
             team_rec_rows = group[group["選手名"] == "チーム記録"]
-            
             if not team_rec_rows.empty:
-                lost = pd.to_numeric(team_rec_rows["失点"], errors='coerce').fillna(0).sum()
+                runs_allowed = pd.to_numeric(team_rec_rows["失点"], errors='coerce').fillna(0).sum()
             else:
-                lost = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
+                runs_allowed = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
+
+            # 2. 自責点・投球回の計算（個人成績の積み上げ）
+            # 投手名または選手名でフィルタリング（チーム記録行を除外）
+            if "投手名" in group.columns:
+                individuals_p = group[group["投手名"] != "チーム記録"]
+            else:
+                individuals_p = group[group["選手名"] != "チーム記録"]
+
+            er = 0
+            outs = 0.0
+
+            if not individuals_p.empty:
+                # 自責点
+                if "自責点" in individuals_p.columns:
+                    er = pd.to_numeric(individuals_p["自責点"], errors='coerce').fillna(0).sum()
+                
+                # 投球回（アウト数 ÷ 3）
+                if "アウト数" in individuals_p.columns:
+                    total_outs = pd.to_numeric(individuals_p["アウト数"], errors='coerce').fillna(0).sum()
+                    outs = total_outs / 3
+                elif "投球回" in individuals_p.columns:
+                    outs = pd.to_numeric(individuals_p["投球回"], errors='coerce').fillna(0).sum()
 
             key = (d_str, opp, m_type)
-            # 打撃データがなく投手データしかない試合も考慮して登録
             if key not in games_map:
                 gr = group["グラウンド"].iloc[0] if not group.empty else ""
                 games_map[key] = {
                     "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
-                    "得点": 0, "失点": 0, "has_team_record": False
+                    "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
+                    "自責点": 0, "投球回": 0.0,
+                    "has_team_record": False
                 }
             
-            games_map[key]["失点"] = int(lost)
+            # 計算結果を保存
+            # 失点はチーム全体の値をセット
+            games_map[key]["失点"] = runs_allowed
+            # 自責点と投球回は、個人の積み上げを加算
+            games_map[key]["自責点"] += er
+            games_map[key]["投球回"] += outs
 
-        # リスト化してDataFrameへ
+        # DataFrame化
         match_results = list(games_map.values())
         df_team_stats = pd.DataFrame(match_results)
 
-        # 日付ソート
         if not df_team_stats.empty:
             df_team_stats["日付"] = pd.to_datetime(df_team_stats["日付"])
             df_team_stats = df_team_stats.sort_values("日付", ascending=False)
@@ -1626,47 +1683,77 @@ elif page == "🏆 チーム戦績":
 
         st.divider()
 
-        # --------------------------------------------------
+# --------------------------------------------------
         # 3. 集計 & メトリクス表示
         # --------------------------------------------------
         wins = 0
         losses = 0
         draws = 0
+        
+        # 合計用変数
         total_score = 0
         total_lost = 0
-        
-        # 詳細ビューワー選択用リスト
+        total_ab_sum = 0  # 打数合計
+        total_hits = 0    # 安打
+        total_hr = 0      # 本塁打
+        total_sb = 0      # 盗塁
+        total_er = 0      # 自責点
+        total_ip = 0.0    # 投球回
+
         viewer_options = []
 
         if not df_display.empty:
             for index, row in df_display.iterrows():
+                # 勝敗・得点・失点
                 s = row["得点"]
                 l = row["失点"]
                 total_score += s
                 total_lost += l
                 
+                # 新しい指標の加算
+                # 【修正箇所】ここで "打席" ではなく "打数" を取得します
+                total_ab_sum += row.get("打数", 0) 
+                
+                total_hits += row.get("安打", 0)
+                total_hr += row.get("本塁打", 0)
+                total_sb += row.get("盗塁", 0)
+                total_er += row.get("自責点", 0)
+                total_ip += row.get("投球回", 0)
+
                 res_txt = "-"
                 if s > l:
-                    wins += 1; res_txt = "⚪勝"
+                    wins += 1; res_txt = " ⚪ 勝"
                 elif s < l:
-                    losses += 1; res_txt = "⚫敗"
+                    losses += 1; res_txt = " ⚫ 敗"
                 else:
                     draws += 1; res_txt = "△分"
                 
-                # 勝敗をDFにも記録（表示用）
                 df_display.at[index, "勝敗"] = res_txt
                 
-                # ビューワー用ラベル
                 d_str = row["日付"].strftime('%Y-%m-%d')
                 label = f"{d_str} vs {row['対戦相手']} ({res_txt}) - {row['試合種別']}"
                 viewer_options.append(label)
 
         total_games = wins + losses + draws
-        win_pct = 0.0
-        if (wins + losses) > 0:
-            win_pct = wins / (wins + losses)
+        
+        # --- 率系の計算 ---
+        # 勝率
+        win_pct = wins / (wins + losses) if (wins + losses) > 0 else 0.0
+        
+        # チーム打率 (安打 / 打数)
+        team_avg = total_hits / total_ab_sum if total_ab_sum > 0 else 0.0
+        
+        # チーム防御率 (自責点 * 7 / 投球回)
+        # ※投球回が0の場合は0.0とする
+        team_era = (total_er * 7) / total_ip if total_ip > 0 else 0.0
+        
+        # 得点率・失点率 (1試合平均)
+        runs_per_game = total_score / total_games if total_games > 0 else 0.0
+        runs_allowed_per_game = total_lost / total_games if total_games > 0 else 0.0
 
-        # メトリクス表示
+        # --- 表示 ---
+        
+        # 1段目：勝敗情報
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("試合数", f"{total_games}")
         m2.metric("勝利", f"{wins}", delta="WIN")
@@ -1675,11 +1762,22 @@ elif page == "🏆 チーム戦績":
         m5.metric("勝率", f"{win_pct:.3f}")
 
         st.markdown("---")
-        s1, s2, s3 = st.columns(3)
-        diff = total_score - total_lost
-        s1.metric("総得点", f"{total_score}", delta="Score")
-        s2.metric("総失点", f"{total_lost}", delta="-Lost", delta_color="inverse")
-        s3.metric("得失点差", f"{diff:+d}")
+        
+        # 2段目：攻撃指標
+        st.markdown("#####  ⚔️  攻撃スタッツ")
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("チーム打率", f"{team_avg:.3f}", help=f"{int(total_hits)}安打 / {int(total_ab_sum)}打数")
+        a2.metric("平均得点", f"{runs_per_game:.2f}", delta=f"総: {int(total_score)}")
+        a3.metric("本塁打数", f"{int(total_hr)} 本")
+        a4.metric("盗塁数", f"{int(total_sb)} 個")
+
+        # 3段目：守備指標
+        st.markdown("#####   🛡️   守備スタッツ")
+        d1, d2, d3 = st.columns(3)
+        d1.metric("チーム防御率", f"{team_era:.2f}", help="自責点×7 ÷ 投球回")
+        # 得点・失点も念のため int() で整数化して表示
+        d2.metric("平均失点", f"{runs_allowed_per_game:.2f}", delta=f"総: {int(total_lost)}", delta_color="inverse")
+        d3.metric("得失点差", f"{int(total_score - total_lost):+d}")
 
         # --------------------------------------------------
         # 4. 試合履歴リスト
