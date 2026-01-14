@@ -2296,11 +2296,11 @@ elif page == "📊 個人成績":
             st.info("データがありません。")
 
 # ==========================================
-# ページ分岐: 歴代記録 (チーム記録除外版)
+# ページ分岐: 歴代記録 (チーム記録除外 & トップ5表示)
 # ==========================================
 elif page == "👑 歴代記録":
     st.title("👑 チーム歴代記録")
-    st.write("過去の全データから、シーズン記録（年度別）と通算記録のランキングを表示します。")
+    st.write("過去の全データから、シーズン記録（年度別）と通算記録のランキング（TOP5）を表示します。")
 
     # データ準備
     if df_batting.empty or df_pitching.empty:
@@ -2309,12 +2309,11 @@ elif page == "👑 歴代記録":
         # 年度カラムを確実に作成
         df_batting["Year"] = pd.to_datetime(df_batting["日付"]).dt.year.astype(str)
         df_pitching["Year"] = pd.to_datetime(df_pitching["日付"]).dt.year.astype(str)
-        
+
         # --------------------------------------------------
         # 集計ロジック関数
         # --------------------------------------------------
         def get_ranking_df(df, group_keys, agg_dict):
-            # グルーピング集計
             grouped = df.groupby(group_keys).agg(agg_dict).reset_index()
             return grouped
 
@@ -2323,20 +2322,18 @@ elif page == "👑 歴代記録":
         # --------------------------------------------------
         hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
         ab_cols = hit_cols + ["凡退", "失策", "走塁死", "盗塁死", "牽制死", "三振"]
-        
+
         df_b_calc = df_batting.copy()
-        
-        # ▼▼▼ 修正: ランキングから「チーム記録」を除外 ▼▼▼
+        # ▼ チーム記録を除外
         df_b_calc = df_b_calc[df_b_calc["選手名"] != "チーム記録"]
-        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-        
+
         df_b_calc["is_hit"] = df_b_calc["結果"].isin(hit_cols).astype(int)
         df_b_calc["is_ab"] = df_b_calc["結果"].isin(ab_cols).astype(int)
         df_b_calc["is_hr"] = (df_b_calc["結果"] == "本塁打").astype(int)
-        
+
         for col in ["打点", "盗塁", "得点"]:
             df_b_calc[col] = pd.to_numeric(df_b_calc[col], errors='coerce').fillna(0)
-            
+
         agg_rules_b = {
             "is_hit": "sum", "is_ab": "sum", "is_hr": "sum",
             "打点": "sum", "盗塁": "sum", "得点": "sum"
@@ -2347,48 +2344,64 @@ elif page == "👑 歴代記録":
         # --------------------------------------------------
         df_p_calc = df_pitching.copy()
         
-        # ▼▼▼ 修正: ランキングから「チーム記録」を除外 ▼▼▼
-        # 投手名カラムがあればそちらで判定
+        # ▼ チーム記録を除外
         if "投手名" in df_p_calc.columns:
             df_p_calc = df_p_calc[df_p_calc["投手名"] != "チーム記録"]
-        # 念のため選手名カラムもチェック
         if "選手名" in df_p_calc.columns:
             df_p_calc = df_p_calc[df_p_calc["選手名"] != "チーム記録"]
-        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         df_p_calc["is_so"] = (df_p_calc["結果"] == "三振").astype(int)
         df_p_calc["is_win"] = df_p_calc["勝敗"].astype(str).str.contains("勝").astype(int)
-        
+
         agg_rules_p = {
             "アウト数": "sum", "自責点": "sum",
             "is_so": "sum", "is_win": "sum"
         }
-        
         for col in ["自責点", "失点"]:
             df_p_calc[col] = pd.to_numeric(df_p_calc[col], errors='coerce').fillna(0)
 
         # ==================================================
-        # 表示用関数（ランキング生成）
+        # 表示用関数（ランキング生成・TOP5絞り込み）
         # ==================================================
         def show_top5(title, df, sort_col, label_col, value_col, ascending=False, suffix="", format_float=False):
             st.markdown(f"##### {title}")
-            sorted_df = df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
-            top5 = sorted_df.head(5)
-            for i, row in top5.iterrows():
-                rank = i + 1
-                icon = " 🥇 " if rank == 1 else " 🥈 " if rank == 2 else " 🥉 " if rank == 3 else f"{rank}."
-                val = row[value_col]
-                val_str = f"{val:.3f}" if format_float else f"{int(val)}"
-                st.write(f"{icon} **{row[label_col]}** : {val_str}{suffix}")
+            
+            # 1. 0除外ロジック
+            if ascending:
+                # 防御率などは0.00も含める
+                target_df = df.copy()
+            else:
+                # 本塁打などは0以下を除外
+                target_df = df[df[value_col] > 0].copy()
+
+            # 2. ソートしてTOP5を取得
+            sorted_df = target_df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
+            top5 = sorted_df.head(5) # ← ここで5人に絞っています
+            
             if top5.empty:
-                st.write("データなし")
+                st.caption("データなし")
+            else:
+                for i, row in top5.iterrows():
+                    rank = i + 1
+                    icon = " 🥇 " if rank == 1 else " 🥈 " if rank == 2 else " 🥉 " if rank == 3 else f"{rank}."
+                    
+                    val = row[value_col]
+                    if format_float:
+                        val_str = f"{val:.3f}"
+                    else:
+                        if ascending:
+                             val_str = f"{val:.2f}"
+                        else:
+                             val_str = f"{int(val)}"
+
+                    st.write(f"{icon} **{row[label_col]}** : {val_str}{suffix}")
 
         # ==================================================
-        # タブ切り替え
+        # タブ切り替え & 表示実行
         # ==================================================
         tab_season, tab_career = st.tabs([" 📅  シーズン記録 (年度別)", " 🏅  通算記録 (歴代)"])
 
-        # --- 1. シーズン記録 (年度×選手) ---
+        # --- 1. シーズン記録 ---
         with tab_season:
             c_fil1, c_fil2 = st.columns(2)
             min_ab = c_fil1.number_input("打率ランキングの最低打数", value=10, min_value=1)
@@ -2435,7 +2448,7 @@ elif page == "👑 歴代記録":
             with p3:
                 show_top5("奪三振", season_pit, "is_so", "Display", "is_so", suffix=" 個")
 
-        # --- 2. 通算記録 (選手ごと) ---
+        # --- 2. 通算記録 ---
         with tab_career:
             st.caption("※チーム在籍中の全期間の合計成績です")
             
@@ -2480,7 +2493,7 @@ elif page == "👑 歴代記録":
                 show_top5("通算奪三振", career_pit, "is_so", "Display", "is_so", suffix=" 個")
 
 elif page == "🔧 データ修正":
-    st.title("🔧 データ修正")
+    st.title("🔧 データ修正")  
     st.info(
         """
         **【データの削除・修正方法】**
