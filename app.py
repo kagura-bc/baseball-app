@@ -1785,11 +1785,11 @@ elif page == "🏆 チーム戦績":
 
                 res_txt = "-"
                 if s > l:
-                    wins += 1; res_txt = " ⚪ 勝"
+                    wins += 1; res_txt = " 🔴 勝ち"
                 elif s < l:
-                    losses += 1; res_txt = " ⚫ 敗"
+                    losses += 1; res_txt = " 🔵 敗け"
                 else:
-                    draws += 1; res_txt = "△分"
+                    draws += 1; res_txt = " △ 引き分け"
                 
                 df_display.at[index, "勝敗"] = res_txt
                 
