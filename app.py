@@ -1261,7 +1261,7 @@ elif page == "🔥 投手成績入力":
                     key="p_det_res"
                 )
             with c_run:
-                st.markdown("##### 👟 失点 (発生時のみ)")
+                st.markdown("##### 👟 失点")
                 c_r, c_er = st.columns(2)
                 p_runs = c_r.number_input("失点", min_value=0, step=1, key="p_det_r")
                 p_er   = c_er.number_input("自責", min_value=0, step=1, key="p_det_er")
@@ -2585,8 +2585,8 @@ elif page == "👑 歴代記録":
             career_pit["Innings"] = career_pit["アウト数"] / 3
             career_pit["ERA"] = career_pit.apply(lambda x: (x["自責点"] * 9) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
             
-            career_bat["Display"] = career_bat["選手名"].astype(str)
-            career_pit["Display"] = career_pit["投手名"].astype(str)
+            career_bat["Display"] = career_bat["選手名"].astype(str) + " (" + season_bat["Year"].astype(str) + ")"
+            career_pit["Display"] = career_pit["投手名"].astype(str) + " (" + season_pit["Year"].astype(str) + ")"
             
             st.markdown("####  ⚔️  打撃部門 (通算)")
             tc1, tc2, tc3 = st.columns(3)
