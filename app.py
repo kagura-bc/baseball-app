@@ -393,7 +393,7 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         total_k += k_runs
         total_opp += opp_runs
 
-    hit_list = ["単打", "二塁打", "三塁打", "本塁打"]
+    hit_list = ["単打", "二塁打", "三塁打", "本塁打", "安打"]
     k_h = b_df[b_df["結果"].isin(hit_list)].shape[0]
     k_e = p_df[p_df["結果"] == "失策"].shape[0]
     opp_h = p_df[p_df["結果"].isin(hit_list)].shape[0]
@@ -1169,7 +1169,7 @@ elif page == "🔥 投手成績入力":
     st.markdown("### 📝 入力モード")
     input_mode_p = st.radio(
         "モードを選択してください", 
-        ["詳細入力 (1球ごと)", "選手別まとめ入力 (詳細不明・過去データ用)"], 
+        ["詳細入力 (1打席ごと)", "選手別まとめ入力 (詳細不明・過去データ用)"], 
         horizontal=True,
         key="pitching_mode_radio"
     )
@@ -1319,6 +1319,7 @@ elif page == "🔥 投手成績入力":
                                 "自責点": p_er,
                                 "勝敗": dec_val,
                                 "球数": 0,
+                                "被安打": add_hits,      # ← ★これを追加！
                                 "アウト数": add_outs,    # ▼ アウト数を保存
                                 "種別": f"詳細:{current_situation_label} / {current_idx}番打者"
                             }
