@@ -2887,6 +2887,13 @@ elif page == "🔧 データ修正":
         # --- Tab 2: 投手成績 ---
         with t2:
             st.write("▼ 投手データの編集")
+            
+            # ▼▼▼ 修正: データ型エラー回避のため、編集用コピーを作って文字列化する ▼▼▼
+            df_p_edit = df_pitching.copy()
+            if "処理野手" in df_p_edit.columns:
+                df_p_edit["処理野手"] = df_p_edit["処理野手"].fillna("").astype(str)
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
             # 投手成績で見たいカラム順序
             p_column_order = [
                 "日付", "対戦相手", "イニング", "投手名", "結果", 
@@ -2895,12 +2902,12 @@ elif page == "🔧 データ修正":
             ]
             
             # データフレームに存在しないカラムは除外してorderを作成
-            valid_p_cols = [c for c in p_column_order if c in df_pitching.columns]
+            valid_p_cols = [c for c in p_column_order if c in df_p_edit.columns]
             # 残りのカラムも後ろに追加
-            other_p_cols = [c for c in df_pitching.columns if c not in valid_p_cols]
+            other_p_cols = [c for c in df_p_edit.columns if c not in valid_p_cols]
             
             ed_p = st.data_editor(
-                df_pitching,
+                df_p_edit,
                 column_order=valid_p_cols + other_p_cols,
                 column_config={
                     "日付": st.column_config.DateColumn("日付", format="YYYY-MM-DD", required=True),
