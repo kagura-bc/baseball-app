@@ -1537,7 +1537,7 @@ elif page == "🔥 投手成績入力":
         if not today_pitching_df.empty:
             matrix_data = []
             max_at_bats = 0 
-
+            
             for i in range(1, st.session_state["opp_batter_count"] + 1):
                 target_str = f"{i}番打者"
                 batter_df = today_pitching_df[today_pitching_df["種別"].astype(str).str.contains(target_str, na=False)]
