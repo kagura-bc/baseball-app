@@ -307,6 +307,11 @@ ground_list = [
     "その他"
 ]
 
+# ▼▼▼ 追加: 公式戦として扱う大会名のリスト ▼▼▼
+# ここに含まれる種別が「公式戦 (トータル)」で合算されます
+OFFICIAL_GAME_TYPES = ["高松宮賜杯", "天皇杯", "ミズノ杯", "東日本", "会長杯", "市長杯", "公式戦"]
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
 # --- データ読み込み（API制限対策: キャッシュ有効化） ---
 def load_batting_data():
     try:
@@ -1989,25 +1994,46 @@ elif page == " 🏆 チーム成績":
             
             c_filter1, c_filter2 = st.columns(2)
             with c_filter1:
-                target_year = st.selectbox("年度", ["通算"] + all_years, key="team_stats_year")
+                # デフォルトを最新年に設定
+                default_idx = 1 if all_years else 0
+                target_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx, key="team_stats_year")
+            
             with c_filter2:
-                # nanを除外
+                # ▼▼▼ 修正: 並び順を「全種別 → 練習試合 → 公式戦まとめ → その他」に変更 ▼▼▼
+                # 1. データに含まれる全種別を取得
                 types_list = [x for x in df_team_stats["試合種別"].unique() if str(x) != 'nan']
-                all_types = ["全種別"] + list(types_list)
+                
+                # 2. "練習試合" をリストから除外（先頭に固定するため）
+                others = [t for t in types_list if t != "練習試合"]
+                
+                # 3. 選択肢を作成
+                all_types = ["全種別", "練習試合", "公式戦 (トータル)"] + sorted(others)
+                
                 target_type = st.selectbox("試合種別", all_types, key="team_stats_type")
-
+                # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                
             # フィルタ適用
             df_display = df_team_stats.copy()
+            
             if target_year != "通算":
                 df_display = df_display[df_display["Year"] == target_year]
-            if target_type != "全種別":
+
+            # ▼▼▼ 修正: 種別フィルタリングの分岐処理 ▼▼▼
+            if target_type == "全種別":
+                pass # 何もしない
+            elif target_type == "公式戦 (トータル)":
+                # リストに含まれる種別のみを抽出
+                df_display = df_display[df_display["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+            else:
+                # 個別の種別（大会名や練習試合など）で完全一致検索
                 df_display = df_display[df_display["試合種別"] == target_type]
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
         else:
             df_display = pd.DataFrame()
 
         st.divider()
 
-# --------------------------------------------------
+        # --------------------------------------------------
         # 3. 集計 & メトリクス表示
         # --------------------------------------------------
         wins = 0
@@ -2528,14 +2554,24 @@ elif page == " 📊 個人成績":
             all_years_p = []
             
         c_p_year, c_p_type = st.columns(2)
-        # ▼▼▼ 修正: データがある場合は最新年(index=1)をデフォルトにする ▼▼▼
+        
         default_idx = 1 if all_years_p else 0
         p_target_year = c_p_year.selectbox("年度 (Season)", ["通算"] + all_years_p, index=default_idx, key="p_stats_year_sel")
-        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-        p_avail_types = ["全種別"] + [x for x in list(df_batting["試合種別"].unique()) if str(x) != "nan" and x != ""]
-        p_target_type = c_p_type.selectbox("試合種別", p_avail_types, key="p_stats_type_sel")
         
-        p_use_ground = st.checkbox(" 🏟️  グラウンドで絞り込む", key="p_stats_ground_check")
+        # ▼▼▼ 修正: 並び順を「全種別 → 練習試合 → 公式戦まとめ → その他」に変更 ▼▼▼
+        # 1. データに含まれる全種別を取得
+        existing_types = [x for x in list(df_batting["試合種別"].unique()) if str(x) != "nan" and x != ""]
+        
+        # 2. "練習試合" をリストから除外
+        others_p = [t for t in existing_types if t != "練習試合"]
+        
+        # 3. 選択肢を作成
+        p_avail_types = ["全種別", "練習試合", "公式戦 (トータル)"] + sorted(others_p)
+        
+        p_target_type = c_p_type.selectbox("試合種別", p_avail_types, key="p_stats_type_sel")
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        p_use_ground = st.checkbox("  🏟️   グラウンドで絞り込む", key="p_stats_ground_check")
         p_target_ground = None
         if p_use_ground:
             p_avail_grounds = [x for x in list(df_batting["グラウンド"].unique()) if str(x) != "nan" and x != ""]
@@ -2548,12 +2584,17 @@ elif page == " 📊 個人成績":
         if p_target_year != "通算":
             df_b_target = df_b_target[df_b_target["Year"] == p_target_year]
             df_p_target = df_p_target[df_p_target["Year"] == p_target_year]
-        if p_target_type != "全種別":
+
+        # ▼▼▼ 修正: 種別フィルタリングの分岐処理 ▼▼▼
+        if p_target_type == "全種別":
+            pass
+        elif p_target_type == "公式戦 (トータル)":
+            df_b_target = df_b_target[df_b_target["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+            df_p_target = df_p_target[df_p_target["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+        else:
             df_b_target = df_b_target[df_b_target["試合種別"] == p_target_type]
             df_p_target = df_p_target[df_p_target["試合種別"] == p_target_type]
-        if p_use_ground and p_target_ground:
-            df_b_target = df_b_target[df_b_target["グラウンド"] == p_target_ground]
-            df_p_target = df_p_target[df_p_target["グラウンド"] == p_target_ground]
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         # サブタブ (打撃/投手/守備)
         st_bat, st_pit, st_fld = st.tabs(["打撃部門", "投手部門", "守備部門"])
