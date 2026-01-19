@@ -271,13 +271,13 @@ PLAYER_NUMBERS = {
     "渡邉誠也": "7", "岡﨑英一": "8", "中尾建太": "10", "内藤洋輔": "11", "大高翼": "13",
     "小野拓朗": "15", "古屋翔": "17", "伊東太建": "18", "渡邉竣太": "19", "山田大貴": "21",
     "志村裕三": "23", "石田貴大": "24", "相原一博": "25", "田中伸延": "26", "坂本昂士": "27",
-    "渡辺羽": "28", "石原圭佑": "29", "荒木豊": "31", "永井雄太": "33", "小野慎也": "38",
+    "渡辺羽": "28", "石原圭佑": "29", "名執栄一": "30","荒木豊": "31", "永井雄太": "33", "小野慎也": "38",
     "清水智広": "43", "名執雅叶": "51", "山縣諒介": "60", "照屋航": "63", "望月駿": "66",
     "鈴木翔大": "73",
     # 新規・背番号なし
-    "名執雅楽": "", "杉山颯": "", "助っ人1": "", "助っ人2": "", "助っ人3": "", 
-    "助っ人4": "", "助っ人5": "", "塚田 晴琉": "", "名執 冬雅": "", "野澤 貫太": "", 
-    "山中 啓至": "", "前田 琳太郎": ""
+    "名執雅楽": "", "名執冬雅": "", "杉山颯": "", "助っ人1": "", "助っ人2": "", "助っ人3": "", 
+    "助っ人4": "", "助っ人5": "", "塚田晴琉": "", "野澤貫太": "", 
+    "山中啓至": "", "前田琳太郎": ""
 }
 
 # 選手リストの生成（エラーが出ていた箇所のための準備）
@@ -1986,48 +1986,56 @@ elif page == " 🏆 チーム成績":
             df_team_stats = df_team_stats.sort_values("日付", ascending=False)
 
         # --------------------------------------------------
-        # 2. フィルタリング (年度・試合種別)
+        # 2. フィルタリング (年度・試合種別・対戦相手)
         # --------------------------------------------------
         if not df_team_stats.empty:
             df_team_stats["Year"] = df_team_stats["日付"].dt.year.astype(str)
             all_years = sorted(list(df_team_stats["Year"].unique()), reverse=True)
+
+            # ▼▼▼ 修正: レイアウトを3列に変更 ▼▼▼
+            c_filter1, c_filter2, c_filter3 = st.columns(3)
             
-            c_filter1, c_filter2 = st.columns(2)
             with c_filter1:
-                # デフォルトを最新年に設定
+                # 1. 年度選択
                 default_idx = 1 if all_years else 0
                 target_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx, key="team_stats_year")
-            
+
             with c_filter2:
-                # ▼▼▼ 修正: 並び順を「全種別 → 練習試合 → 公式戦まとめ → その他」に変更 ▼▼▼
-                # 1. データに含まれる全種別を取得
+                # 2. 試合種別選択 (全種別 -> 練習試合 -> 公式戦まとめ -> その他)
                 types_list = [x for x in df_team_stats["試合種別"].unique() if str(x) != 'nan']
-                
-                # 2. "練習試合" をリストから除外（先頭に固定するため）
                 others = [t for t in types_list if t != "練習試合"]
-                
-                # 3. 選択肢を作成
                 all_types = ["全種別", "練習試合", "公式戦 (トータル)"] + sorted(others)
                 
                 target_type = st.selectbox("試合種別", all_types, key="team_stats_type")
-                # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+            with c_filter3:
+                # 3. ▼▼▼ 追加: 対戦相手選択 ▼▼▼
+                # データにある対戦相手リストを取得してソート
+                opps_list = sorted([x for x in df_team_stats["対戦相手"].unique() if str(x) != 'nan' and x != ""])
+                all_opps = ["全対戦相手"] + opps_list
                 
-            # フィルタ適用
+                target_opp_filter = st.selectbox("対戦相手", all_opps, key="team_stats_opp")
+                # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+            # --- フィルタ適用 ---
             df_display = df_team_stats.copy()
             
+            # (1) 年度フィルタ
             if target_year != "通算":
                 df_display = df_display[df_display["Year"] == target_year]
 
-            # ▼▼▼ 修正: 種別フィルタリングの分岐処理 ▼▼▼
+            # (2) 種別フィルタ
             if target_type == "全種別":
-                pass # 何もしない
+                pass
             elif target_type == "公式戦 (トータル)":
-                # リストに含まれる種別のみを抽出
                 df_display = df_display[df_display["試合種別"].isin(OFFICIAL_GAME_TYPES)]
             else:
-                # 個別の種別（大会名や練習試合など）で完全一致検索
                 df_display = df_display[df_display["試合種別"] == target_type]
-            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+            # (3) ▼▼▼ 追加: 対戦相手フィルタ ▼▼▼
+            if target_opp_filter != "全対戦相手":
+                df_display = df_display[df_display["対戦相手"] == target_opp_filter]
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
         else:
             df_display = pd.DataFrame()
 
