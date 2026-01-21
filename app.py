@@ -2815,14 +2815,20 @@ elif page == " 📊 個人成績":
     # Tab 3: 期間別ランキング (Season/Monthly/Last3)
     # ----------------------------------------------------
     with t_rank:
-        st.markdown("####  🏆  期間別ランキング")
+        st.markdown("####   🏆   期間別ランキング")
         period_mode = st.radio("集計期間を選択", ["年度別 (Season)", "月間 (Monthly)", "直近3試合 (Last 3 Games)"], horizontal=True)
-        
+
         df_b_src = df_b_calc.copy()
         df_p_src = df_p_calc.copy()
         df_b_src["Date"] = pd.to_datetime(df_b_src["日付"])
         df_p_src["Date"] = pd.to_datetime(df_p_src["日付"])
         target_label_suffix = ""
+
+        # ▼▼▼ 初期化 ▼▼▼
+        def_ab = 1
+        def_inn = 1
+        games_count = 1 
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         if period_mode == "年度別 (Season)":
             years = sorted(df_b_src["Date"].dt.year.unique().tolist(), reverse=True)
@@ -2831,23 +2837,39 @@ elif page == " 📊 個人成績":
             target_label_suffix = f" ({sel_year}年)"
             df_b_filtered = df_b_src[df_b_src["Date"].dt.year == sel_year]
             df_p_filtered = df_p_src[df_p_src["Date"].dt.year == sel_year]
-            def_ab = 10; def_inn = 5
-        
+            
+            # ▼▼▼ 年度別のデフォルト設定 (試合数×2.0 のまま維持) ▼▼▼
+            if not df_b_filtered.empty:
+                games_count = df_b_filtered["日付"].nunique()
+            
+            def_ab = int(games_count * 2.0)
+            def_inn = int(games_count)
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
         elif period_mode == "月間 (Monthly)":
             df_b_src["MonthStr"] = df_b_src["Date"].dt.strftime('%Y-%m')
             months = sorted(df_b_src["MonthStr"].unique().tolist(), reverse=True)
             if not months: sel_month = None
             else: sel_month = st.selectbox("月", months, key="rank_month_merged")
-            
+
             if sel_month:
                 target_label_suffix = f" ({sel_month})"
                 df_b_filtered = df_b_src[df_b_src["MonthStr"] == sel_month]
                 df_p_src["MonthStr"] = df_p_src["Date"].dt.strftime('%Y-%m')
                 df_p_filtered = df_p_src[df_p_src["MonthStr"] == sel_month]
+                
+                # ▼▼▼ 月間は「試合数」をそのままデフォルト値にする ▼▼▼
+                if not df_b_filtered.empty:
+                    games_count = df_b_filtered["日付"].nunique()
+                
+                def_ab = int(games_count) # 試合数と同じ
+                def_inn = int(games_count)
+                # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
             else:
                 df_b_filtered = pd.DataFrame(); df_p_filtered = pd.DataFrame()
-            def_ab = 3; def_inn = 1
-            
+                def_ab = 1; def_inn = 1
+
         else: # 直近3試合
             all_dates = sorted(df_b_src["Date"].dt.date.unique().tolist(), reverse=True)
             target_dates = all_dates[:3] if all_dates else []
@@ -2856,7 +2878,11 @@ elif page == " 📊 個人成績":
             st.caption(f"対象日: {dates_str}")
             df_b_filtered = df_b_src[df_b_src["Date"].dt.date.isin(target_dates)]
             df_p_filtered = df_p_src[df_p_src["Date"].dt.date.isin(target_dates)]
-            def_ab = 1; def_inn = 1
+            
+            # ▼▼▼ 直近3試合は「3」をデフォルト値にする ▼▼▼
+            def_ab = 3
+            def_inn = 3
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         # 集計実行
         if not df_b_filtered.empty:
@@ -2864,7 +2890,7 @@ elif page == " 📊 個人成績":
             df_bat_target = calc_advanced_stats(df_bat_target)
             df_bat_target["Display"] = df_bat_target["選手名"]
         else: df_bat_target = pd.DataFrame()
-
+        
         if not df_p_filtered.empty:
             df_pit_target = get_ranking_df(df_p_filtered, ["投手名"], agg_rules_p)
             df_pit_target["Innings"] = df_pit_target["アウト数"] / 3
@@ -2875,10 +2901,20 @@ elif page == " 📊 個人成績":
 
         # 表示
         c_fil1, c_fil2 = st.columns(2)
-        min_ab = c_fil1.number_input("規定打席", value=def_ab, min_value=1, key="rank_min_ab_m")
-        min_inn = c_fil2.number_input("規定投球回", value=def_inn, min_value=1, key="rank_min_inn_m")
+        
+        safe_ab = max(1, def_ab)
+        safe_inn = max(1, def_inn)
+        
+        # ▼▼▼ 修正: keyに period_mode を含めることで、モード変更時にウィジェットをリセットさせる ▼▼▼
+        # これにより、新しいデフォルト値(safe_ab/safe_inn)が確実に反映されます。
+        mode_suffix = str(period_mode)
+        
+        min_ab = c_fil1.number_input("規定打席", value=safe_ab, min_value=1, key=f"rank_min_ab_{mode_suffix}")
+        min_inn = c_fil2.number_input("規定投球回", value=safe_inn, min_value=1, key=f"rank_min_inn_{mode_suffix}")
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
         st.divider()
-        st.markdown(f"#####  ⚔️  打撃ランキング{target_label_suffix}")
+        st.markdown(f"#####   ⚔️   打撃ランキング{target_label_suffix}")
         if not df_bat_target.empty:
             c1, c2, c3 = st.columns(3)
             with c1: show_top5("打率", df_bat_target[df_bat_target["is_ab"] >= min_ab], "AVG", "Display", "AVG", suffix="", format_float=True)
@@ -2890,8 +2926,9 @@ elif page == " 📊 個人成績":
             with c5: show_top5("安打", df_bat_target, "is_hit", "Display", "is_hit", suffix=" 本")
             with c6: show_top5("盗塁", df_bat_target, "盗塁", "Display", "盗塁", suffix=" 個")
         else: st.info("データなし")
+
         st.divider()
-        st.markdown(f"#####  🛡️  投手ランキング{target_label_suffix}")
+        st.markdown(f"#####   🛡️   投手ランキング{target_label_suffix}")
         if not df_pit_target.empty:
             p1, p2, p3, p4 = st.columns(4)
             with p1: show_top5("防御率", df_pit_target[df_pit_target["Innings"] >= min_inn], "ERA", "Display", "ERA", ascending=True, suffix="", format_float=True)
@@ -2929,7 +2966,10 @@ elif page == " 📊 個人成績":
             # 生涯通算用のWHIP計算
             df_pit_target["WHIP"] = df_pit_target.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
             df_pit_target["Display"] = df_pit_target["投手名"]
-            min_ab_r = 30; min_inn_r = 15
+            # ユーザーが画面で変更できるように入力欄を作成
+            c_r1, c_r2 = st.columns(2)
+            min_ab_r = c_r1.number_input("通算規定打席", value=20, min_value=1, key="career_min_ab")
+            min_inn_r = c_r2.number_input("通算規定投球回", value=10, min_value=1, key="career_min_inn")
 
         st.divider()
         st.markdown(f"#####  ⚔️  歴代打撃トップ5")
