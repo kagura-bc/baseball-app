@@ -4,149 +4,304 @@ import pandas as pd
 import datetime
 
 # ==========================================
-# 1. ページ・CSS設定
+# 1. セッション状態の初期化（ベンチメンバー保持用）
 # ==========================================
-st.set_page_config(page_title="KAGURA Official Stats (閲覧用)", layout="wide", page_icon="⚾")
+if "persistent_bench" not in st.session_state:
+    st.session_state["persistent_bench"] = []
+
+# ページ冒頭の初期化部分に追加
+if "opp_batter_index" not in st.session_state:
+    st.session_state["opp_batter_index"] = 1  # 今何番打者か
+if "opp_batter_count" not in st.session_state:
+    st.session_state["opp_batter_count"] = 9  # 打順が何人までか（初期値9）
+
+def update_bench_state():
+    """マルチセレクトが変更されたら、即座に記憶領域に保存する関数"""
+    st.session_state["persistent_bench"] = st.session_state["bench_selection_widget"]
+
+# ▼▼▼ 追加：イニング文字列を数値に変換する関数（ソート用） ▼▼▼
+def inning_sort_key(inn_str):
+    try:
+        return int(str(inn_str).replace("回", ""))
+    except:
+        return 99
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+# ▼▼▼ 新規追加する関数 ▼▼▼
+def save_lineup_item(i, item_type):
+    """
+    入力内容が変更された瞬間に、データを永続保存領域(saved_lineup)に記録する
+    i: 打順 (0-14)
+    item_type: 'pos', 'name', 'res', 'rbi'
+    """
+    if "saved_lineup" not in st.session_state:
+        st.session_state["saved_lineup"] = {}
+        
+    # キーのマッピング (sp0, sn0, sr0, si0 に対応)
+    prefix_map = {"pos": "sp", "name": "sn", "res": "sr", "rbi": "si"}
+    widget_key = f"{prefix_map[item_type]}{i}"
+    
+    # 現在の入力値を保存
+    if widget_key in st.session_state:
+        val = st.session_state[widget_key]
+        st.session_state["saved_lineup"][f"{item_type}_{i}"] = val
+
+# 関数定義：特大サイズのアウトカウント表示
+def render_out_indicator_3(count):
+    color_on = "#ff2b2b"   # 点灯色（赤）
+    color_off = "#e0e0e0"  # 消灯色（グレー）
+    
+    html = """
+    <div style='font-family:sans-serif; font-weight:bold; display:flex; align-items:center;'>
+        <span style='font-size:30px; margin-right:15px;'>OUT</span>
+    """
+    for i in range(3):
+        color = color_on if i < count else color_off
+        html += f"<span style='color:{color}; font-size:50px; line-height:1; margin-right:5px;'>●</span>"
+    
+    html += "</div>"
+    return html
+
+# ▼▼▼ 追加: HOMERUNアニメーション表示関数 ▼▼▼
+def show_homerun_effect():
+    st.markdown("""
+    <style>
+    @keyframes rainbow-text {
+        0% { color: #ff0000; transform: scale(1); }
+        14% { color: #ff7f00; }
+        28% { color: #ffff00; transform: scale(1.2); }
+        42% { color: #00ff00; }
+        57% { color: #0000ff; transform: scale(1.2); }
+        71% { color: #4b0082; }
+        85% { color: #9400d3; transform: scale(1); }
+        100% { color: #ff0000; }
+    }
+    .homerun-container {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 9999;
+        text-align: center;
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 20px 50px;
+        border-radius: 15px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    .homerun-text {
+        font-family: 'Arial Black', sans-serif;
+        font-size: 80px;
+        font-weight: 900;
+        animation: rainbow-text 1.5s infinite;
+        text-shadow: 3px 3px 0px #000;
+    }
+    </style>
+    <div class="homerun-container">
+        <div class="homerun-text">HOMERUN!!</div>
+        <div style="font-size: 30px; font-weight: bold;">NICE BATTING!</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.balloons() # 風船も飛ばす
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+# --- ページ設定 ---
+st.set_page_config(page_title="KAGURA スコア管理システム", layout="wide")
+
+# スタイル設定
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
-    h1, h2, h3 { color: #1e3a8a; }
-    [data-testid="stMetricValue"] { font-size: 24px !important; color: #d90429 !important; }
-    [data-testid="stTable"] th { background-color: #e0e0e0 !important; border-bottom: 2px solid #000 !important; }
+    /* --- 1. 入力欄（セレクトボックス）の設定 --- */
+    .stSelectbox div[data-baseweb="select"] {
+        font-size: 18px !important;
+        min-height: 40px !important;
+    }
+    .stButton button {
+        width: 100%;
+        padding: 0.2rem 0.2rem !important;
+        font-size: 20px !important;
+    }
+    [data-testid="column"] {
+        padding-left: 1px !important;
+        padding-right: 1px !important;
+    }
+    .main { background-color: #f8f9fa; }
+
+    /* --- 2. スコアボード（表）の設定 --- */
+    [data-testid="stTable"] table {
+        border-collapse: collapse !important;
+        border: 2px solid #000000 !important;
+    }
+    [data-testid="stTable"] th, [data-testid="stTable"] td {
+        border: 1px solid #444444 !important;
+        font-size: 20px !important;
+        padding: 10px !important;
+        text-align: center !important;
+        color: #000000 !important;
+        font-weight: bold !important;
+    }
+    [data-testid="stTable"] th {
+        background-color: #e0e0e0 !important;
+        border-bottom: 2px solid #000000 !important;
+    }
+    
+    /* --- 3. 指標（メトリクス）の装飾 --- */
+    [data-testid="stMetricValue"] {
+        font-size: 30px !important;
+        font-weight: bold !important;
+        color: #1e3a8a !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
+# スプレッドシート設定
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Dt74KFYNrdjTlQsMwjM0XsvepBnWHG3iBHQjOaE_t5E/edit?usp=sharing"
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+all_players = [
+    "相原一博", "荒木豊", "伊東太建", "石岡佳樹", "石原佳祐", "石田貴大", "内藤洋輔",
+    "大高翼", "岡﨑英一", "開田凌空", "河野潤樹", "久保田剛志", "小野慎也", "小野拓朗",
+    "佐藤蓮太", "清水智広", "杉山颯", "鈴木翔大", "塚田晴琉", "照屋航", "中尾建太",
+    "永井雄太", "名執雅叶", "名執雅楽", "名執栄一", "名執冬雅", "野澤貫太", "日野拓実",
+    "古屋翔", "望月駿", "山田大貴", "山中啓至", "山縣諒介", "渡辺羽", "渡邉竣太",
+    "渡邉誠也", "水谷真智"
+]
 # ==========================================
-# 2. 定数・辞書定義 (メインアプリと同期)
+# 0. 選手データと表示用関数の定義
 # ==========================================
+
+# 変数名を PLAYER_NUMBERS (大文字) に統一します
 PLAYER_NUMBERS = {
     "佐藤蓮太": "1", "久保田剛志": "2", "開田凌空": "3", "水谷真智": "4", "河野潤樹": "5",
     "渡邉誠也": "7", "岡﨑英一": "8", "中尾建太": "10", "内藤洋輔": "11", "大高翼": "13",
     "小野拓朗": "15", "古屋翔": "17", "伊東太建": "18", "渡邉竣太": "19", "山田大貴": "21",
     "志村裕三": "23", "石田貴大": "24", "相原一博": "25", "田中伸延": "26", "坂本昂士": "27",
-    "渡辺羽": "28", "石原圭佑": "29", "名執栄一": "30", "荒木豊": "31", "永井雄太": "33",
-    "小野慎也": "38", "清水智広": "43", "名執雅叶": "51", "山縣諒介": "60", "照屋航": "63",
-    "望月駿": "66", "鈴木翔大": "73",
-    "名執雅楽": "", "名執冬雅": "", "杉山颯": "", "助っ人1": "", "助っ人2": "", "助っ人3": "",
-    "助っ人4": "", "助っ人5": "", "塚田晴琉": "", "野澤貫太": "", "山中啓至": "", "前田琳太郎": ""
+    "渡辺羽": "28", "石原圭佑": "29", "名執栄一": "30","荒木豊": "31", "永井雄太": "33", "小野慎也": "38",
+    "清水智広": "43", "名執雅叶": "51", "山縣諒介": "60", "照屋航": "63", "望月駿": "66",
+    "鈴木翔大": "73",
+    # 新規・背番号なし
+    "名執雅楽": "", "名執冬雅": "", "杉山颯": "", "助っ人1": "", "助っ人2": "", "助っ人3": "", 
+    "助っ人4": "", "助っ人5": "", "塚田晴琉": "", "野澤貫太": "", 
+    "山中啓至": "", "前田琳太郎": ""
 }
+
+# 選手リストの生成（エラーが出ていた箇所のための準備）
 all_players = list(PLAYER_NUMBERS.keys())
+
+def fmt_player_name(name):
+    """選手名を受け取り、'名前 (背番号)' の形式で返す関数"""
+    if not name:
+        return ""
+    
+    # PLAYER_NUMBERS (大文字) から取得
+    num = PLAYER_NUMBERS.get(name, "")
+    
+    if num:
+        return f"{name} ({num})"
+    else:
+        return name  # 背番号がない場合は名前のみ
+    
 my_team_fixed = "KAGURA"
+all_players = list(PLAYER_NUMBERS.keys())
+all_positions = ["", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+# グラウンドリスト（追加分を反映）
+ground_list = [
+    "小瀬スポーツ公園", "緑が丘スポーツ公園", "飯田球場", "ふじでん球場",
+    "中巨摩第二公園", "スコレーセンター", "花鳥の里スポーツ広場", "春日居スポーツ広場",
+    "山梨大学", "双葉スポーツ公園", "釜無川スポーツ公園", "八田野球場", "北麓公園",
+    "その他"
+]
 
-# 公式戦として扱う大会名のリスト
+# ▼▼▼ 追加: 公式戦として扱う大会名のリスト ▼▼▼
+# ここに含まれる種別が「公式戦 (トータル)」で合算されます
 OFFICIAL_GAME_TYPES = ["高松宮賜杯", "天皇杯", "ミズノ杯", "東日本", "会長杯", "市長杯", "公式戦"]
+# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-# ==========================================
-# 3. データ読み込み & 共通関数
-# ==========================================
-# ⚠️ ここにスプレッドシートのURLを設定してください
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Dt74KFYNrdjTlQsMwjM0XsvepBnWHG3iBHQjOaE_t5E/edit?usp=sharing"
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-@st.cache_data(ttl=60)
-def load_data():
+# --- データ読み込み（API制限対策: キャッシュ有効化） ---
+def load_batting_data():
     try:
-        df_b = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="打撃成績")
-        df_p = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="投手成績")
+        data = conn.read(spreadsheet=SPREADSHEET_URL, ttl="10m")
+        # もしデータが空なら、空のDataFrameを返す（カラム定義付き）
+        if data.empty:
+             return pd.DataFrame(columns=["日付", "イニング", "選手名", "位置", "結果", "打点", "得点", "盗塁", "種別", "グラウンド", "対戦相手", "試合種別"])
+
+        # 必須カラムの定義（日付を含めることが重要）
+        expected_cols = ["日付", "打点", "盗塁", "得点", "位置", "グラウンド", "対戦相手", "試合種別", "イニング", "選手名", "結果", "種別"]
         
-        # カラム補正
-        if df_b.empty:
-            df_b = pd.DataFrame(columns=["日付", "イニング", "選手名", "位置", "結果", "打点", "得点", "盗塁", "種別", "グラウンド", "対戦相手", "試合種別"])
-        if df_p.empty:
-            df_p = pd.DataFrame(columns=["日付", "イニング", "投手名", "結果", "処理野手", "球数", "アウト数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "勝敗"])
+        # 足りないカラムがあれば強制的に追加
+        for col in expected_cols:
+            if col not in data.columns:
+                data[col] = 0 if col in ["打点", "盗塁", "得点"] else ""
+
+        # 日付型の変換
+        data["日付"] = pd.to_datetime(data["日付"], errors='coerce').dt.date
             
-        # 日付変換
-        df_b["日付"] = pd.to_datetime(df_b["日付"], errors='coerce')
-        df_p["日付"] = pd.to_datetime(df_p["日付"], errors='coerce')
+        return data.dropna(how="all")
+    except:
+        return pd.DataFrame(columns=["日付", "イニング", "選手名", "位置", "結果", "打点", "得点", "盗塁", "種別", "グラウンド", "対戦相手", "試合種別"])
+
+def load_pitching_data():
+    try:
+        # ▼▼▼ 修正: ttl=0 だと毎回通信してしまうため、"10m" (10分) に変更 ▼▼▼
+        # 更新処理の直後には st.cache_data.clear() をしているため、
+        # ここを 10m にしても最新データの反映には影響しません。
+        data = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", ttl="10m") 
         
-        # 文字列型の日付カラムも作っておく（集計用）
-        df_b["DateStr"] = df_b["日付"].dt.strftime('%Y-%m-%d')
-        df_p["DateStr"] = df_p["日付"].dt.strftime('%Y-%m-%d')
+        if data.empty:
+            return pd.DataFrame(columns=["日付", "イニング", "投手名", "結果", "処理野手", "球数", "アウト数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "勝敗"])
+
+        # 必須カラムの定義（ここに「勝敗」を追加）
+        expected_cols = ["日付", "アウト数", "球数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "処理野手", "イニング", "投手名", "結果", "勝敗"]
+
+        # 足りないカラムがあれば強制的に追加
+        for col in expected_cols: 
+            if col not in data.columns: 
+                if col in ["グラウンド", "対戦相手", "試合種別", "処理野手", "投手名", "結果", "イニング", "勝敗"]:
+                    data[col] = ""
+                else:
+                    data[col] = 0
         
-        return df_b, df_p
-    except Exception as e:
-        st.error(f"データ読み込みエラー: {e}")
-        return pd.DataFrame(), pd.DataFrame()
+        # 日付型の変換
+        data["日付"] = pd.to_datetime(data["日付"], errors='coerce').dt.date
+            
+        return data.dropna(how="all")
+    except:
+        return pd.DataFrame(columns=["日付", "イニング", "投手名", "結果", "処理野手", "球数", "アウト数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "勝敗"])
 
-df_batting, df_pitching = load_data()
+df_batting = load_batting_data()
+df_pitching = load_pitching_data()
 
-# --- 共通計算関数 ---
-def get_ranking_df(df, group_keys, agg_dict):
-    if df.empty: return pd.DataFrame()
-    grouped = df.groupby(group_keys).agg(agg_dict).reset_index()
-    return grouped
-
-def calc_advanced_stats(df):
-    # 打率
-    df["AVG"] = df.apply(lambda x: x["is_hit"] / x["is_ab"] if x["is_ab"] > 0 else 0, axis=1)
-    # 出塁率 (OBP)
-    df["OBP"] = df.apply(lambda x: (x["is_hit"] + x["is_bb"]) / (x["is_ab"] + x["is_bb"]) if (x["is_ab"] + x["is_bb"]) > 0 else 0, axis=1)
-    # 長打率 (SLG)
-    if "is_1b" in df.columns:
-        df["TotalBases"] = df["is_1b"] + (df["is_2b"] * 2) + (df["is_3b"] * 3) + (df["is_hr"] * 4)
-        df["SLG"] = df.apply(lambda x: x["TotalBases"] / x["is_ab"] if x["is_ab"] > 0 else 0, axis=1)
-        # OPS
-        df["OPS"] = df["OBP"] + df["SLG"]
-    else:
-        df["OPS"] = 0
-    return df
-
-def show_top5(title, df, sort_col, label_col, value_col, ascending=False, suffix="", format_float=False):
-    st.markdown(f"##### {title}")
-    if ascending:
-        target_df = df.copy() 
-    else:
-        target_df = df[df[value_col] > 0].copy()
-
-    sorted_df = target_df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
-    top5 = sorted_df.head(5)
-    if top5.empty:
-        st.caption("データなし")
-    else:
-        for i, row in top5.iterrows():
-            rank = i + 1
-            icon = " 🥇 " if rank == 1 else " 🥈 " if rank == 2 else " 🥉 " if rank == 3 else f"{rank}."
-            val = row[value_col]
-            val_str = f"{val:.3f}" if format_float else (f"{val:.2f}" if ascending else f"{int(val)}")
-            st.write(f"{icon} **{row[label_col]}** : {val_str}{suffix}")
-
+# ==========================================
+# スコアボード表示ロジック（共通関数化）
+# ==========================================
 def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_first=True):
-    st.markdown(f"###   📅   {date_txt} ({m_type}) &nbsp;&nbsp;   🏟️   {g_name}")
+    """
+    任意のデータフレームを受け取ってスコアボードを描画する関数
+    is_top_first: TrueならKAGURAが先攻(表)、Falseなら後攻(裏)
+    """
+    st.markdown(f"### 📅 {date_txt} ({m_type}) &nbsp;&nbsp; 🏟️ {g_name}")
     st.subheader(f"⚾ {my_team_fixed} vs {opp_name}")
-
-    # ▼▼▼ 追加: チーム記録優先ロジック (重複防止) ▼▼▼
-    # 「チーム記録」の行がある場合はそれだけを使う（個人成績との二重計上を防ぐ）
-    if "選手名" in b_df.columns and (b_df["選手名"] == "チーム記録").any():
-        b_df_calc = b_df[b_df["選手名"] == "チーム記録"]
-    else:
-        b_df_calc = b_df
-
-    if "選手名" in p_df.columns and (p_df["選手名"] == "チーム記録").any():
-        p_df_calc = p_df[p_df["選手名"] == "チーム記録"]
-    elif "投手名" in p_df.columns and (p_df["投手名"] == "チーム記録").any():
-        p_df_calc = p_df[p_df["投手名"] == "チーム記録"]
-    else:
-        p_df_calc = p_df
-    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-
+    
     k_inning, opp_inning = [], []
     total_k, total_opp = 0, 0
-
+    
+    # 9回まで計算
     for i in range(1, 10):
         inn = f"{i}回"
-        # ▼ 修正: フィルタ済みの b_df_calc, p_df_calc を使用する
-        inn_bat_data = b_df_calc[b_df_calc["イニング"] == inn]
-        k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum())
-
-        opp_data_inn = p_df_calc[p_df_calc["イニング"] == inn]
-        opp_runs = int(pd.to_numeric(opp_data_inn["失点"], errors='coerce').sum())
         
-        # k_exists, opp_exists の判定も計算用DFで行う
-        k_exists = not inn_bat_data.empty
-        opp_exists = not opp_data_inn.empty
+        # KAGURAの得点
+        inn_bat_data = b_df[b_df["イニング"] == inn]
+        k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum())
+        
+        # 相手の得点（投手の失点から計算）
+        opp_runs = int(p_df[p_df["イニング"] == inn]["失点"].sum())
+        
+        # データが存在するイニングだけ数字を表示、なければ空文字
+        k_exists = not b_df[b_df["イニング"] == inn].empty
+        opp_exists = not p_df[p_df["イニング"] == inn].empty
+        
         k_inning.append(str(k_runs) if k_exists else "")
         opp_inning.append(str(opp_runs) if opp_exists else "")
-
+        
         total_k += k_runs
         total_opp += opp_runs
 
@@ -156,6 +311,7 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     opp_h = p_df[p_df["結果"].isin(hit_list)].shape[0]
     opp_e = b_df[b_df["結果"] == "失策"].shape[0]
 
+    # KAGURAが先攻か後攻かで表示順を入れ替え
     if is_top_first:
         names = [my_team_fixed, opp_name]
         scores = [k_inning, opp_inning]
@@ -172,594 +328,1307 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     score_dict = {"チーム": names}
     for i in range(9):
         score_dict[str(i+1)] = [scores[0][i], scores[1][i]]
-
+    
     score_dict.update({"R": R, "H": H, "E": E})
     st.table(pd.DataFrame(score_dict).set_index("チーム"))
 
-# ----------------------------------------------------------------------
-# ▼▼▼ 挿入箇所: render_scoreboard関数の定義が終わった直後に入れてください ▼▼▼
-# ----------------------------------------------------------------------
+# ==========================================
+# サイドバー設定 (閲覧用シンプル版)
+# ==========================================
+st.sidebar.title("⚾ KAGURA Viewer")
 
-# --- 試合詳細データを表示する関数 (共通化) ---
-def render_match_details(day_b, day_p):
-    t_d_bat, t_d_pit = st.tabs(["打撃詳細", "投手詳細"])
+# 入力用の設定項目（試合区分、日付、グラウンド、対戦相手、攻守）はすべて削除しました。
+# データから自動で読み取るため不要です。
+
+page = st.sidebar.radio("表示", [" 📣 試合速報"," 🏆 チーム成績", " 📊 個人成績"])
+
+# ※ 入力用の today_batting_df などの定義も、閲覧用では使わないため削除してOKです。
+
+# ==========================================
+# ページ分岐: 試合速報 (Live Bulletin)
+# ==========================================
+if page == " 📣 試合速報":
+    st.title(" 📣 試合速報 (Live)")
     
-    with t_d_bat:
-        # ベンチ以外、かつ「チーム記録」を除外
-        active_b = day_b[~day_b["イニング"].astype(str).str.contains("ベンチ")].copy()
-        
-        # チーム記録の除外処理
-        active_b = active_b[active_b["選手名"] != "チーム記録"]
-
-        if not active_b.empty:
-            def inn_key(x):
-                try: return int(str(x).replace("回", ""))
-                except: return 99
-            active_b["_sort"] = active_b["イニング"].apply(inn_key)
-            active_b = active_b.sort_values(["_sort"])
-            
-            players = active_b["選手名"].unique()
-            rows = []
-            max_cols = 0
-            
-            for i, p in enumerate(players):
-                p_df = active_b[active_b["選手名"] == p]
-                res_list = p_df[p_df["種別"] == "打撃"]["結果"].tolist()
-                if len(res_list) > max_cols: max_cols = len(res_list)
-                
-                rbi = pd.to_numeric(p_df["打点"], errors='coerce').sum()
-                run = pd.to_numeric(p_df["得点"], errors='coerce').sum()
-                sb = pd.to_numeric(p_df["盗塁"], errors='coerce').sum()
-                hits = p_df[p_df["結果"].isin(["単打", "二塁打", "三塁打", "本塁打", "安打"])].shape[0]
-                pos = p_df["位置"].iloc[-1] if "位置" in p_df.columns else ""
-                
-                rows.append({
-                    "打順": i+1, "選手名": p, "守備": pos,
-                    "安打": hits, "打点": int(rbi), "得点": int(run), "盗塁": int(sb),
-                    "results": res_list
-                })
-            
-            if rows:
-                df_show = pd.DataFrame(rows)
-                for k in range(max_cols):
-                    df_show[f"第{k+1}打席"] = df_show["results"].apply(lambda x: x[k] if k < len(x) else "")
-                
-                cols = ["打順", "守備", "選手名"] + [f"第{k+1}打席" for k in range(max_cols)] + ["安打", "打点", "得点", "盗塁"]
-                st.dataframe(df_show[cols], hide_index=True, use_container_width=True)
-        else:
-            st.info("詳細データなし")
-
-    with t_d_pit:
-        if not day_p.empty and "投手名" in day_p.columns:
-            p_real = day_p[day_p["投手名"] != "チーム記録"]
-            if not p_real.empty:
-                p_stats = []
-                for p_name, g in p_real.groupby("投手名"):
-                    outs = pd.to_numeric(g["アウト数"], errors='coerce').sum()
-                    inn_str = f"{int(outs//3)}回{int(outs%3)}/3"
-                    er = pd.to_numeric(g["自責点"], errors='coerce').sum()
-                    r = pd.to_numeric(g["失点"], errors='coerce').sum()
-                    balls = pd.to_numeric(g["球数"], errors='coerce').sum()
-                    p_stats.append({
-                        "投手名": p_name, "投球回": inn_str, "球数": int(balls),
-                        "失点": int(r), "自責点": int(er)
-                    })
-                st.dataframe(pd.DataFrame(p_stats), hide_index=True, use_container_width=True)
-            else:
-                st.info("投手詳細なし")
-        else:
-            st.info("データなし")
-# ----------------------------------------------------------------------
-
-# ==========================================
-# 4. サイドバーメニュー
-# ==========================================
-st.sidebar.title("⚾ KAGURA Stats")
-st.sidebar.caption("閲覧専用モード")
-menu = st.sidebar.radio("MENU", [" 🏠  最新試合結果", " 🏆  チーム成績", " 📊  個人成績"])
-
-# ==========================================
-# 5. 各ページの実装
-# ==========================================
-
-# -------------------------------------------------------------------
-# PAGE: 最新試合結果
-# -------------------------------------------------------------------
-if menu == " 🏠  最新試合結果":
-    st.title(" 📢  最新試合結果")
+    import datetime
+    today = datetime.date.today()
     
-    if not df_batting.empty:
-        # 最新の日付を取得
-        latest_date = df_batting["日付"].max()
-        latest_date_str = latest_date.strftime('%Y-%m-%d')
-        
-        # その日のデータを抽出
-        day_b = df_batting[df_batting["DateStr"] == latest_date_str]
-        day_p = df_pitching[df_pitching["DateStr"] == latest_date_str]
-        
-        if not day_b.empty:
-            opp = day_b["対戦相手"].iloc[0] if "対戦相手" in day_b.columns else "-"
-            ground = day_b["グラウンド"].iloc[0] if "グラウンド" in day_b.columns else "-"
-            m_type = day_b["試合種別"].iloc[0] if "試合種別" in day_b.columns else "-"
-            
-            # スコアボード
-            render_scoreboard(day_b, day_p, latest_date_str, m_type, ground, opp, is_top_first=True)
-            
-            st.divider()
-            st.subheader(" 📝  試合詳細データ")
-            # ▼▼▼ 修正: 関数定義を削除し、呼び出し(実行)コードだけにする ▼▼▼
-            render_match_details(day_b, day_p)
-            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    # 日付選択
+    c_live_date, c_live_btn = st.columns([2, 1])
+    with c_live_date:
+        target_date = st.date_input("日付を選択", today, key="live_date_select")
+        target_date_str = target_date.strftime('%Y-%m-%d')
+    with c_live_btn:
+        st.write("") 
+        if st.button("🔄 最新状況に更新", type="primary", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
-# -------------------------------------------------------------------
-# PAGE: チーム成績
-# -------------------------------------------------------------------
-elif menu == " 🏆  チーム成績":
-    st.title(" 🏆  チーム成績ダッシュボード")
-    
-    if not df_batting.empty:
-        # データ前処理 (チーム成績集計用)
-        # ※本来はメインアプリと同様の複雑な集計ロジックが必要ですが、
-        #   ここでは簡略化のため、既存のデータフレームから計算します。
-        
-        # 1. 試合ごとの集計データを作成
-        df_b_src = df_batting.copy()
-        df_b_src["Year"] = df_b_src["日付"].dt.year.astype(str)
-        
-        # フィルタリング
-        all_years = sorted(df_b_src["Year"].unique().tolist(), reverse=True)
-        
-        c_f1, c_f2, c_f3 = st.columns(3)
-        with c_f1:
-            default_idx = 1 if all_years else 0
-            sel_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx)
-        
-        with c_f2:
-            types = [x for x in df_b_src["試合種別"].unique() if x]
-            others = [t for t in types if t != "練習試合"]
-            type_opts = ["全種別", "練習試合", "公式戦 (トータル)"] + sorted(others)
-            sel_type = st.selectbox("試合種別", type_opts)
-            
-        with c_f3:
-            opps = sorted([x for x in df_b_src["対戦相手"].unique() if x])
-            sel_opp = st.selectbox("対戦相手", ["全対戦相手"] + opps)
+    live_batting = df_batting[df_batting["日付"] == target_date].copy()
+    live_pitching = df_pitching[df_pitching["日付"] == target_date].copy()
 
-        # フィルタ適用
-        df_view = df_b_src.copy()
-        df_p_view = df_pitching.copy()
-        df_p_view["Year"] = df_p_view["日付"].dt.year.astype(str)
-
-        if sel_year != "通算":
-            df_view = df_view[df_view["Year"] == sel_year]
-            df_p_view = df_p_view[df_p_view["Year"] == sel_year]
-            
-        if sel_type != "全種別":
-            if sel_type == "公式戦 (トータル)":
-                df_view = df_view[df_view["試合種別"].isin(OFFICIAL_GAME_TYPES)]
-                df_p_view = df_p_view[df_p_view["試合種別"].isin(OFFICIAL_GAME_TYPES)]
-            else:
-                df_view = df_view[df_view["試合種別"] == sel_type]
-                df_p_view = df_p_view[df_p_view["試合種別"] == sel_type]
-                
-        if sel_opp != "全対戦相手":
-            df_view = df_view[df_view["対戦相手"] == sel_opp]
-            df_p_view = df_p_view[df_p_view["対戦相手"] == sel_opp]
-
-        if not df_view.empty:
-            # 集計
-            dates = sorted(df_view["DateStr"].unique(), reverse=True)
-            wins, losses, draws = 0, 0, 0
-            total_runs, total_lost = 0, 0
-            match_history = []
-
-            for d in dates:
-                d_b = df_view[df_view["DateStr"] == d]
-                d_p = df_p_view[df_p_view["DateStr"] == d]
-                
-                # ▼▼▼ 修正: 重複防止ロジック（チーム記録がある場合はそちらを優先） ▼▼▼
-                # 得点計算
-                if "選手名" in d_b.columns and (d_b["選手名"] == "チーム記録").any():
-                    score = pd.to_numeric(d_b[d_b["選手名"] == "チーム記録"]["得点"], errors='coerce').sum()
-                else:
-                    score = pd.to_numeric(d_b["得点"], errors='coerce').sum()
-
-                # 失点計算
-                if "選手名" in d_p.columns and (d_p["選手名"] == "チーム記録").any():
-                    lost = pd.to_numeric(d_p[d_p["選手名"] == "チーム記録"]["失点"], errors='coerce').sum()
-                elif "投手名" in d_p.columns and (d_p["投手名"] == "チーム記録").any():
-                    lost = pd.to_numeric(d_p[d_p["投手名"] == "チーム記録"]["失点"], errors='coerce').sum()
-                else:
-                    lost = pd.to_numeric(d_p["失点"], errors='coerce').sum()
-                # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-
-                total_runs += score
-                total_lost += lost
-
-                res = "引分"
-                if score > lost: 
-                    wins += 1; res = "〇 勝利"
-                elif score < lost: 
-                    losses += 1; res = "● 敗戦"
-                else: 
-                    draws += 1
-                
-                opp_name = d_b["対戦相手"].iloc[0] if "対戦相手" in d_b.columns else "-"
-                g_name = d_b["グラウンド"].iloc[0] if "グラウンド" in d_b.columns else "-"
-                
-                match_history.append({
-                    "日付": d, "対戦相手": opp_name, "結果": res,
-                    "スコア": f"{int(score)} - {int(lost)}", "グラウンド": g_name
-                })
-
-            games = wins + losses + draws
-            win_rate = wins / (wins + losses) if (wins + losses) > 0 else 0.0
-
-            # ... (以下、打率などの計算部分は `df_view` のまま利用しますが、
-            #      打率計算などは個人成績ベースで行うのが基本のため、チーム記録行を除外したほうが正確です) ...
-            
-            # 打撃スタッツ用（チーム記録行を除外）
-            df_stats_src = df_view[df_view["選手名"] != "チーム記録"]
-            hits = len(df_stats_src[df_stats_src["結果"].isin(["単打", "二塁打", "三塁打", "本塁打", "安打"])])
-            ab_list = ["単打", "二塁打", "三塁打", "本塁打", "安打", "三振", "凡退", "失策", "併殺打", "野選"]
-            ab = len(df_stats_src[df_stats_src["結果"].isin(ab_list)])
-            avg = hits / ab if ab > 0 else 0.0
-            
-            # 投手スタッツ
-            er = pd.to_numeric(df_p_view["自責点"], errors='coerce').sum()
-            outs = pd.to_numeric(df_p_view["アウト数"], errors='coerce').sum()
-            era = (er * 7) / (outs / 3) if outs > 0 else 0.0
-
-            # 表示
-            st.markdown("##### 📊 チーム成績サマリー")
-            m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("試合数", games)
-            m2.metric("勝利", wins)
-            m3.metric("敗戦", losses)
-            m4.metric("引分", draws)
-            m5.metric("勝率", f"{win_rate:.3f}")
-            
-            st.divider()
-            
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("チーム打率", f"{avg:.3f}")
-            c2.metric("総得点", int(total_runs))
-            c3.metric("総失点", int(total_lost))
-            c4.metric("防御率", f"{era:.2f}")
-
-            # ▼▼▼ 追加: 試合履歴 & 詳細ビューワー ▼▼▼
-            st.divider()
-            st.subheader(" 📜  試合履歴 & 詳細ビューワー")
-            
-            if match_history:
-                # 2. 履歴テーブル表示
-                df_hist = pd.DataFrame(match_history)
-                st.dataframe(df_hist, hide_index=True, use_container_width=True)
-                
-                # 3. 詳細表示用セレクタ
-                st.write("")
-                st.markdown("##### 🔍 試合の詳細を確認")
-                # セレクトボックス用に文字列を作成
-                match_opts = df_hist.apply(lambda x: f"{x['日付']} vs {x['対戦相手']} ({x['結果']})", axis=1).tolist()
-                sel_match_str = st.selectbox("試合を選択してください", match_opts, key="team_history_sel")
-                
-                if sel_match_str:
-                    sel_date = sel_match_str.split(" ")[0] # 日付部分を抽出
-                    
-                    target_b = df_batting[df_batting["DateStr"] == sel_date]
-                    target_p = df_pitching[df_pitching["DateStr"] == sel_date]
-                    
-                    if not target_b.empty:
-                        m_opp = target_b["対戦相手"].iloc[0]
-                        m_g = target_b["グラウンド"].iloc[0]
-                        m_type = target_b["試合種別"].iloc[0]
-                        
-                        st.markdown("---")
-                        # スコアボード表示
-                        render_scoreboard(target_b, target_p, sel_date, m_type, m_g, m_opp)
-                        # 詳細データ表示 (修正した関数を使用)
-                        render_match_details(target_b, target_p)
-            else:
-                st.info("表示できる試合履歴がありません")
-            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-
-        else:
-            st.info("データがありません")
+    if live_batting.empty and live_pitching.empty:
+        st.info(f"{target_date_str} の試合データはまだありません。")
     else:
-        st.info("データがありません")
+        # ---------------------------------------------------------
+        # ▼▼▼ 自動判定ロジックの追加 ▼▼▼
+        # ---------------------------------------------------------
+        # デフォルトは「先攻」にしておく
+        is_kagura_top = True 
+        
+        # 「チーム記録」の行を探す
+        team_rec_row = live_batting[live_batting["選手名"] == "チーム記録"]
+        
+        if not team_rec_row.empty:
+            # 「位置」列に保存された情報を取得（入力アプリで保存している前提）
+            order_info = str(team_rec_row.iloc[0]["位置"])
+            
+            # 文字列の中に「後攻」や「裏」が含まれていたら後攻と判定
+            if "後攻" in order_info or "裏" in order_info:
+                is_kagura_top = False
+        # ---------------------------------------------------------
 
-# -------------------------------------------------------------------
-# PAGE: 成績・記録
-# -------------------------------------------------------------------
-elif menu == " 📊  個人成績":
-    st.title(" 📊  個人成績")
+        # 対戦相手の取得
+        opp_candidates = live_batting["対戦相手"].unique()
+        opp_candidates = [x for x in opp_candidates if x and x != "チーム記録"]
+        if len(opp_candidates) > 0:
+            current_opp = opp_candidates[0]
+        else:
+            current_opp = "対戦相手不明"
+        
+        # グラウンド・試合種別の取得
+        try:
+            current_ground = live_batting["グラウンド"].iloc[0]
+            current_match_type = live_batting["試合種別"].iloc[0]
+        except:
+            current_ground = "-"
+            current_match_type = "-"
+
+        # スコアボード表示（自動判定フラグを使用）
+        st.subheader("  🏟️   Score Board")
+        
+        render_scoreboard(
+            live_batting, live_pitching, 
+            target_date_str, 
+            current_match_type, 
+            current_ground, 
+            current_opp, 
+            is_top_first=is_kagura_top  # ★ここが自動になります
+        )
+
+        st.divider()
+
+        # プレイバイプレイ
+        st.subheader("  ⚡   Play-by-Play (直近のプレー)")
+        
+        timeline_df = live_batting[
+            (~live_batting["選手名"].isin(["チーム記録", ""])) & 
+            (live_batting["イニング"] != "ベンチ") &
+            (live_batting["イニング"] != "試合開始") &
+            (live_batting["結果"] != "スタメン")
+        ].copy()
+
+        if not timeline_df.empty:
+            timeline_df = timeline_df.iloc[::-1].reset_index(drop=True)
+
+            for i, row in timeline_df.iterrows():
+                inn = row["イニング"]
+                name = row["選手名"]
+                res = row["結果"]
+                
+                extras = []
+                rbi = pd.to_numeric(row["打点"], errors='coerce')
+                if rbi > 0: extras.append(f"🔥 +{int(rbi)}点")
+                extra_text = " ".join(extras)
+                
+                icon = "⚪"
+                if res in ["安打", "単打", "二塁打", "三塁打"]: icon = "🟡 Hit"
+                elif res == "本塁打": icon = "🌈 HR!"
+                elif res in ["四球", "死球"]: icon = "🟢 Walk"
+                elif res in ["三振"]: icon = "❌ SO"
+                elif res == "得点": icon = "🏃 Run"
+                elif res == "盗塁": icon = "💨 Steal"
+                elif "失策" in res: icon = "⚠️ Error"
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        padding: 10px; 
+                        margin-bottom: 8px; 
+                        background-color: white; 
+                        border-left: 5px solid #1e3a8a; 
+                        border-radius: 4px; 
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                        <div style="font-size: 12px; color: #666;">{inn}</div>
+                        <div style="font-size: 16px; font-weight: bold;">
+                            {name} <span style="font-weight:normal;">➝</span> {res} 
+                            <span style="color: #d93025; margin-left:10px;">{extra_text}</span>
+                        </div>
+                        <div style="font-size: 12px; color: #888; text-align: right;">{icon}</div>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+        else:
+            st.info("まだプレー記録がありません。")
+
+# ==========================================
+# ページ分岐: チーム戦績 (修正・統合版)
+# ==========================================
+elif page == " 🏆 チーム成績":
+    st.title(" 🏆 チーム成績ダッシュボード")
+
+# --------------------------------------------------
+# 1. データ準備 & スマート集計ロジック（修正版）
+# --------------------------------------------------
+    if df_batting.empty and df_pitching.empty:
+        st.info("データがまだありません。")
+    else:
+        games_map = {}
+
+   # --- A. 打撃データから集計 ---
+        df_b_work = df_batting.copy()
+        df_b_work["DateStr"] = pd.to_datetime(df_b_work["日付"]).dt.strftime('%Y-%m-%d')
+        
+        for (d_str, opp, m_type), group in df_b_work.groupby(["DateStr", "対戦相手", "試合種別"]):
+            # 1. 得点の計算（チーム記録があればそれを優先）
+            team_rec_rows = group[group["選手名"] == "チーム記録"]
+            if not team_rec_rows.empty:
+                runs = pd.to_numeric(team_rec_rows["得点"], errors='coerce').fillna(0).sum()
+                is_team_record = True
+            else:
+                runs = pd.to_numeric(group["得点"], errors='coerce').fillna(0).sum()
+                is_team_record = False
+
+            # 2. スタッツの計算（個人成績の積み上げ）
+            individuals = group[group["選手名"] != "チーム記録"]
+            
+            # 初期値
+            total_hits = 0
+            total_ab = 0
+            total_hr = 0
+            total_sb = 0
+
+            if not individuals.empty:
+                # (a) 安打数・本塁打の計算
+                # 「結果」列に含まれる文字列の個数（行数）をカウントします
+                # ※まとめ入力機能でも、入力された数だけ行が複製されているため、この単純カウントで合致します
+                s1 = len(individuals[individuals["結果"] == "単打"])
+                s2 = len(individuals[individuals["結果"] == "二塁打"])
+                s3 = len(individuals[individuals["結果"] == "三塁打"])
+                hr = len(individuals[individuals["結果"] == "本塁打"])
+                
+                total_hits = s1 + s2 + s3 + hr
+                total_hr = hr
+                
+                # (b) 盗塁の計算
+                # 「盗塁」カラムの数値を合計（詳細入力・まとめ入力ともに数値が入る仕様のため）
+                total_sb = pd.to_numeric(individuals["盗塁"], errors='coerce').fillna(0).sum()
+
+                # (c) 打数(AB)の計算
+                # 打数としてカウントすべき結果リスト（四死球・犠打・打撃妨害などを除く）
+                ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退", "失策", "併殺打", "野選", "振り逃げ"]
+                
+                # 該当する行数をカウントして打数とする
+                total_ab = len(individuals[individuals["結果"].isin(ab_results)])
+
+            # グラウンド情報
+            gr = group["グラウンド"].iloc[0] if not group.empty else ""
+            key = (d_str, opp, m_type)
+
+            if key not in games_map:
+                games_map[key] = {
+                    "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
+                    "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
+                    "自責点": 0, "投球回": 0.0,
+                    "has_team_record": False
+                }
+            
+            # 計算結果を格納
+            games_map[key]["得点"] = runs
+            games_map[key]["打数"] = total_ab
+            games_map[key]["安打"] = total_hits
+            games_map[key]["本塁打"] = total_hr
+            games_map[key]["盗塁"] = total_sb
+            
+            if is_team_record:
+                games_map[key]["has_team_record"] = True
+
+        # --- B. 投手データから集計 ---
+        df_p_work = df_pitching.copy()
+        df_p_work["DateStr"] = pd.to_datetime(df_p_work["日付"]).dt.strftime('%Y-%m-%d')
+
+        for (d_str, opp, m_type), group in df_p_work.groupby(["DateStr", "対戦相手", "試合種別"]):
+            # 1. 失点の計算（チーム記録優先）
+            team_rec_rows = group[group["選手名"] == "チーム記録"]
+            if not team_rec_rows.empty:
+                runs_allowed = pd.to_numeric(team_rec_rows["失点"], errors='coerce').fillna(0).sum()
+            else:
+                runs_allowed = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
+
+            # 2. 自責点・投球回の計算（個人成績の積み上げ）
+            # 投手名または選手名でフィルタリング（チーム記録行を除外）
+            if "投手名" in group.columns:
+                individuals_p = group[group["投手名"] != "チーム記録"]
+            else:
+                individuals_p = group[group["選手名"] != "チーム記録"]
+
+            er = 0
+            outs = 0.0
+
+            if not individuals_p.empty:
+                # 自責点
+                if "自責点" in individuals_p.columns:
+                    er = pd.to_numeric(individuals_p["自責点"], errors='coerce').fillna(0).sum()
+                
+                # 投球回（アウト数 ÷ 3）
+                if "アウト数" in individuals_p.columns:
+                    total_outs = pd.to_numeric(individuals_p["アウト数"], errors='coerce').fillna(0).sum()
+                    outs = total_outs / 3
+                elif "投球回" in individuals_p.columns:
+                    outs = pd.to_numeric(individuals_p["投球回"], errors='coerce').fillna(0).sum()
+
+            key = (d_str, opp, m_type)
+            if key not in games_map:
+                gr = group["グラウンド"].iloc[0] if not group.empty else ""
+                games_map[key] = {
+                    "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
+                    "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
+                    "自責点": 0, "投球回": 0.0,
+                    "has_team_record": False
+                }
+            
+            # 計算結果を保存
+            # 失点はチーム全体の値をセット
+            games_map[key]["失点"] = runs_allowed
+            # 自責点と投球回は、個人の積み上げを加算
+            games_map[key]["自責点"] += er
+            games_map[key]["投球回"] += outs
+
+        # DataFrame化
+        match_results = list(games_map.values())
+        df_team_stats = pd.DataFrame(match_results)
+
+        if not df_team_stats.empty:
+            df_team_stats["日付"] = pd.to_datetime(df_team_stats["日付"])
+            df_team_stats = df_team_stats.sort_values("日付", ascending=False)
+
+        # --------------------------------------------------
+        # 2. フィルタリング (年度・試合種別)
+        # --------------------------------------------------
+        if not df_team_stats.empty:
+            df_team_stats["Year"] = df_team_stats["日付"].dt.year.astype(str)
+            all_years = sorted(list(df_team_stats["Year"].unique()), reverse=True)
+            
+            c_filter1, c_filter2 = st.columns(2)
+            with c_filter1:
+                # デフォルトを最新年に設定
+                default_idx = 1 if all_years else 0
+                target_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx, key="team_stats_year")
+            
+            with c_filter2:
+                # ▼▼▼ 修正: 並び順を「全種別 → 練習試合 → 公式戦まとめ → その他」に変更 ▼▼▼
+                # 1. データに含まれる全種別を取得
+                types_list = [x for x in df_team_stats["試合種別"].unique() if str(x) != 'nan']
+                
+                # 2. "練習試合" をリストから除外（先頭に固定するため）
+                others = [t for t in types_list if t != "練習試合"]
+                
+                # 3. 選択肢を作成
+                all_types = ["全種別", "練習試合", "公式戦 (トータル)"] + sorted(others)
+                
+                target_type = st.selectbox("試合種別", all_types, key="team_stats_type")
+                # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                
+            # フィルタ適用
+            df_display = df_team_stats.copy()
+            
+            if target_year != "通算":
+                df_display = df_display[df_display["Year"] == target_year]
+
+            # ▼▼▼ 修正: 種別フィルタリングの分岐処理 ▼▼▼
+            if target_type == "全種別":
+                pass # 何もしない
+            elif target_type == "公式戦 (トータル)":
+                # リストに含まれる種別のみを抽出
+                df_display = df_display[df_display["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+            else:
+                # 個別の種別（大会名や練習試合など）で完全一致検索
+                df_display = df_display[df_display["試合種別"] == target_type]
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+        else:
+            df_display = pd.DataFrame()
+
+        st.divider()
+
+        # --------------------------------------------------
+        # 3. 集計 & メトリクス表示
+        # --------------------------------------------------
+        wins = 0
+        losses = 0
+        draws = 0
+        
+        # 合計用変数
+        total_score = 0
+        total_lost = 0
+        total_ab_sum = 0  # 打数合計
+        total_hits = 0    # 安打
+        total_hr = 0      # 本塁打
+        total_sb = 0      # 盗塁
+        total_er = 0      # 自責点
+        total_ip = 0.0    # 投球回
+
+        viewer_options = []
+
+        if not df_display.empty:
+            for index, row in df_display.iterrows():
+                # 勝敗・得点・失点
+                s = row["得点"]
+                l = row["失点"]
+                total_score += s
+                total_lost += l
+                
+                # 新しい指標の加算
+                # 【修正箇所】ここで "打席" ではなく "打数" を取得します
+                total_ab_sum += row.get("打数", 0) 
+                
+                total_hits += row.get("安打", 0)
+                total_hr += row.get("本塁打", 0)
+                total_sb += row.get("盗塁", 0)
+                total_er += row.get("自責点", 0)
+                total_ip += row.get("投球回", 0)
+
+                res_txt = "-"
+                if s > l:
+                    wins += 1; res_txt = " 🔴 勝ち"
+                elif s < l:
+                    losses += 1; res_txt = " 🔵 敗け"
+                else:
+                    draws += 1; res_txt = " △ 引き分け"
+                
+                df_display.at[index, "勝敗"] = res_txt
+                
+                d_str = row["日付"].strftime('%Y-%m-%d')
+                label = f"{d_str} vs {row['対戦相手']} ({res_txt}) - {row['試合種別']}"
+                viewer_options.append(label)
+
+        total_games = wins + losses + draws
+        
+        # --- 率系の計算 ---
+        # 勝率
+        win_pct = wins / (wins + losses) if (wins + losses) > 0 else 0.0
+        
+        # チーム打率 (安打 / 打数)
+        team_avg = total_hits / total_ab_sum if total_ab_sum > 0 else 0.0
+        
+        # チーム防御率 (自責点 * 7 / 投球回)
+        # ※投球回が0の場合は0.0とする
+        team_era = (total_er * 7) / total_ip if total_ip > 0 else 0.0
+        
+        # 得点率・失点率 (1試合平均)
+        runs_per_game = total_score / total_games if total_games > 0 else 0.0
+        runs_allowed_per_game = total_lost / total_games if total_games > 0 else 0.0
+
+        # --- 表示 ---
+        
+        # 1段目：勝敗情報
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("試合数", f"{total_games}")
+        m2.metric("勝利", f"{wins}", delta="WIN")
+        m3.metric("敗戦", f"{losses}", delta="-LOSE", delta_color="inverse")
+        m4.metric("引分", f"{draws}")
+        m5.metric("勝率", f"{win_pct:.3f}")
+
+        st.markdown("---")
+        
+        # 2段目：攻撃指標
+        st.markdown("#####  ⚔️  攻撃スタッツ")
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("チーム打率", f"{team_avg:.3f}", help=f"{int(total_hits)}安打 / {int(total_ab_sum)}打数")
+        a2.metric("平均得点", f"{runs_per_game:.2f}", delta=f"総: {int(total_score)}")
+        a3.metric("本塁打数", f"{int(total_hr)} 本")
+        a4.metric("盗塁数", f"{int(total_sb)} 個")
+
+        # 3段目：守備指標
+        st.markdown("#####   🛡️   守備スタッツ")
+        d1, d2, d3 = st.columns(3)
+        d1.metric("チーム防御率", f"{team_era:.2f}", help="自責点×7 ÷ 投球回")
+        # 得点・失点も念のため int() で整数化して表示
+        d2.metric("平均失点", f"{runs_allowed_per_game:.2f}", delta=f"総: {int(total_lost)}", delta_color="inverse")
+        d3.metric("得失点差", f"{int(total_score - total_lost):+d}")
+
+        # --------------------------------------------------
+        # 4. 試合履歴リスト
+        # --------------------------------------------------
+        st.subheader(" 📋  試合履歴")
+        if not df_display.empty:
+            # 表示カラム整理
+            cols = ["日付", "対戦相手", "得点", "失点", "勝敗", "試合種別", "グラウンド"]
+            st.dataframe(
+                df_display[cols],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.write("履歴データがありません")
+
+        # --------------------------------------------------
+        # 5. 試合詳細ビューワー (インデックス番号削除版)
+        # --------------------------------------------------
+        st.markdown("### 📝 試合詳細ビューワー")
+        
+        if viewer_options:
+            selected_label = st.selectbox(
+                "詳細を確認したい試合を選択してください", 
+                viewer_options,
+                key="detail_selector"
+            )
+            
+            if selected_label:
+                # ラベルから日付・相手を特定
+                try:
+                    parts = selected_label.split(" vs ")
+                    target_date_str = parts[0]
+                    rest = parts[1]
+                    target_opp = rest.split(" (")[0]
+                except:
+                    st.error("データの特定に失敗しました。")
+                    target_date_str = ""
+                    target_opp = ""
+
+                if target_date_str:
+                    # メタデータ取得
+                    target_row = df_display[
+                        (df_display["日付"] == pd.to_datetime(target_date_str)) &
+                        (df_display["対戦相手"] == target_opp)
+                    ].iloc[0]
+                    
+                    has_team_rec = target_row["has_team_record"]
+                    
+                    # データ抽出
+                    match_bat = df_batting[
+                        (pd.to_datetime(df_batting["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & 
+                        (df_batting["対戦相手"] == target_opp)
+                    ].copy()
+                    
+                    match_pit = df_pitching[
+                        (pd.to_datetime(df_pitching["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & 
+                        (df_pitching["対戦相手"] == target_opp)
+                    ].copy()
+
+                    # --- A. スコアボード表示 ---
+                    # ▼▼▼【重要】ここが抜けているとエラーになります ▼▼▼
+                    is_past_game_top = True # まずデフォルト値を定義
+                    
+                    # チーム記録の行を探して、先攻・後攻を判定
+                    tr_row = match_bat[match_bat["選手名"] == "チーム記録"]
+                    if not tr_row.empty:
+                        # 位置カラムの文字を確認
+                        p_info = str(tr_row.iloc[0]["位置"])
+                        if "後攻" in p_info or "裏" in p_info:
+                            is_past_game_top = False
+                    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                    if has_team_rec:
+                        sb_bat = match_bat[match_bat["選手名"] == "チーム記録"].copy()
+                        sb_pit = match_pit[match_pit["選手名"] == "チーム記録"].copy()
+                    else:
+                        sb_bat = match_bat
+                        sb_pit = match_pit
+
+                    render_scoreboard(
+                        sb_bat, sb_pit, 
+                        target_date_str, 
+                        target_row["試合種別"], 
+                        target_row["グラウンド"], 
+                        target_opp, 
+                        is_top_first=is_past_game_top  # ★修正: 自動判定した変数を使う
+                    )
+
+                    st.divider()
+
+                    # --- B. 打撃成績 (個人サマリー) ---
+                    st.markdown("#### 🏏  打撃成績")
+                    
+                    # 個人成績抽出（チーム記録行を除外）
+                    personal_bat = match_bat[match_bat["選手名"] != "チーム記録"].copy()
+                    
+                    if not personal_bat.empty:
+                        # ベンチメンバー分離
+                        active_mask = personal_bat["イニング"] != "ベンチ"
+                        active_players = personal_bat.loc[active_mask, "選手名"].unique()
+                        
+                        df_active = personal_bat[
+                            (personal_bat["選手名"].isin(active_players)) & 
+                            (personal_bat["イニング"] != "ベンチ")
+                        ].copy()
+                        
+                        df_bench = personal_bat[~personal_bat["選手名"].isin(active_players)].copy()
+
+                        # 出場選手の集計
+                        if not df_active.empty:
+                            def summarize_batting_text(df_group):
+                                df_group["打点"] = pd.to_numeric(df_group["打点"], errors='coerce').fillna(0)
+                                df_group["盗塁"] = pd.to_numeric(df_group["盗塁"], errors='coerce').fillna(0)
+                                
+                                # 1. 打席数の計算（打撃結果のみカウント）
+                                pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退", "失策", "併殺打", "野選", "振り逃げ", "打撃妨害"]
+                                tpa = df_group[df_group["結果"].isin(pa_list)].shape[0]
+
+                                # 2. 各スタッツの集計
+                                hits = df_group[df_group["結果"].isin(["単打", "二塁打", "三塁打", "本塁打"])].shape[0]
+                                hr = df_group[df_group["結果"] == "本塁打"].shape[0]
+                                rbi = int(df_group["打点"].sum())
+                                so = df_group[df_group["結果"].isin(["三振", "振り逃げ"])].shape[0]
+                                bb = df_group[df_group["結果"].isin(["四球", "死球"])].shape[0]
+                                sb = int(df_group["盗塁"].sum())
+                                run = int(pd.to_numeric(df_group["得点"], errors='coerce').fillna(0).sum())
+
+                                # 3. 打順の取得（スタメン登録データがあればそこから取得）
+                                order_val = 999
+                                if "打順" in df_group.columns:
+                                    vals = pd.to_numeric(df_group["打順"], errors='coerce').dropna()
+                                    if not vals.empty: 
+                                        order_val = int(vals.min()) # 最小値（スタメン時の打順）を採用
+                                
+                                # 4. 守備位置の取得
+                                pos_val = ""
+                                if "位置" in df_group.columns:
+                                    valid_pos = df_group["位置"].dropna().astype(str)
+                                    valid_pos = valid_pos[valid_pos != ""]
+                                    if not valid_pos.empty:
+                                        pos_val = valid_pos.iloc[0]
+
+                                # 5. 成績テキスト生成
+                                res_parts = []
+                                if hits > 0: res_parts.append(f"安打{hits}")
+                                if hr > 0: res_parts.append(f"本塁打{hr}")
+                                if rbi > 0: res_parts.append(f"打点{rbi}")
+                                if sb > 0: res_parts.append(f"盗塁{sb}")
+                                if run > 0: res_parts.append(f"得点{run}")
+                                if so > 0: res_parts.append(f"三振{so}")
+                                if bb > 0: res_parts.append(f"四死球{bb}")
+
+                                summary_str = " ".join(res_parts) if res_parts else "" 
+
+                                return pd.Series({
+                                    "打順": order_val,
+                                    "守備": pos_val,
+                                    "選手名": df_group["選手名"].iloc[0],
+                                    "打席": tpa,
+                                    "成績詳細": summary_str
+                                })
+
+                            # 集計実行
+                            df_summary = df_active.groupby("選手名", sort=False).apply(summarize_batting_text).reset_index(drop=True)
+                            
+                            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+                            # 【修正】打順の自動補完ロジック (救済措置)
+                            # データに打順が入っていない(999)場合、入力順(上から順)に連番を振ります。
+                            # これにより、過去のデータやスタメン登録忘れでも打順が表示されます。
+                            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+                            # 暫定的にリストを作成
+                            temp_orders = []
+                            for i in range(len(df_summary)):
+                                current_val = df_summary.at[i, "打順"]
+                                if current_val == 999:
+                                    # データがない場合は連番(1, 2, 3...)を割り当て
+                                    temp_orders.append(i + 1)
+                                else:
+                                    # データがある場合はそれを使う
+                                    temp_orders.append(current_val)
+                            
+                            # 補完した打順を適用
+                            df_summary["打順"] = temp_orders
+                            
+                            # 打順でソート
+                            df_summary = df_summary.sort_values("打順")
+                                    
+                            # 表示用に文字列化
+                            df_summary["打順"] = df_summary["打順"].astype(int).astype(str)
+                                    
+                            # ▼▼▼ 表示: 打順を一番左（インデックス）にして表示 ▼▼▼
+                            st.table(df_summary.set_index("打順")[["守備", "選手名", "打席", "成績詳細"]])
+                            
+                        else:
+                            if not has_team_rec: st.info("出場選手の記録がありません")
+
+                        # ベンチ入りメンバー
+                        if not df_bench.empty:
+                            st.write("")
+                            st.markdown("##### 🚌  ベンチ入りメンバー (出場なし)")
+                            bench_names = df_bench["選手名"].unique().tolist()
+                            st.success(", ".join(bench_names))
+                        
+                    else:
+                        if has_team_rec: st.caption("※ 個人打撃成績なし（スコアのみ登録）")
+                        else: st.info("打撃データがありません")
+
+                    st.write("") 
+
+                    # --- C. 投手成績 (統合表示) ---
+                    st.markdown("#### ⚾  投手成績")
+                    
+                    # チーム記録を除外
+                    personal_pit = match_pit[match_pit["選手名"] != "チーム記録"].copy()
+                    
+                    if not personal_pit.empty:
+                        # -------------------------------------------------------
+                        # ▼▼▼ 修正: 名前解決のロジック強化 ▼▼▼
+                        # -------------------------------------------------------
+                        # 1. 「選手名」があれば、それを「投手名」の空欄箇所に優先的に埋める
+                        if "選手名" in personal_pit.columns:
+                            if "投手名" not in personal_pit.columns:
+                                personal_pit["投手名"] = personal_pit["選手名"]
+                            else:
+                                # 既にカラムがある場合でも、空文字("")なら選手名を採用する
+                                personal_pit["投手名"] = personal_pit["投手名"].replace("", pd.NA).fillna(personal_pit["選手名"])
+                        
+                        # 2. それでも空データなら「不明」に
+                        personal_pit["投手名"] = personal_pit["投手名"].fillna("不明")
+                        # -------------------------------------------------------
+
+                        # 集計用関数の定義
+                        def summarize_pitching_series(df_group):
+                            def get_sum(col_name):
+                                if col_name in df_group.columns:
+                                    return pd.to_numeric(df_group[col_name], errors='coerce').fillna(0).sum()
+                                return 0
+                            
+                            balls = get_sum("球数")
+                            runs = get_sum("失点")
+                            er = get_sum("自責点")
+                            
+                            total_hits = 0; total_so = 0; total_bb = 0
+                            
+                            for _, row in df_group.iterrows():
+                                raw_h = row.get("被安打", 0)
+                                val_h = int(raw_h) if pd.notna(raw_h) else 0
+                                raw_so = row.get("奪三振", 0)
+                                val_so = int(raw_so) if pd.notna(raw_so) else 0
+                                raw_bb = row.get("与四球", 0) 
+                                val_bb = int(raw_bb) if pd.notna(raw_bb) else 0
+                                res = str(row.get("結果", ""))
+                                r_type = str(row.get("種別", ""))
+                                
+                                if res == "まとめ" or "まとめ" in str(row.get("イニング", "")):
+                                    total_hits += val_h; total_so += val_so; total_bb += val_bb
+                                elif "ダミー" in r_type: continue
+                                else:
+                                    # ▼▼▼ 修正: 「安打」もヒットとしてカウントするよう追加 ▼▼▼
+                                    if res in ["安打", "単打", "二塁打", "三塁打", "本塁打"]: total_hits += 1
+                                    elif res in ["三振", "振り逃げ"]: total_so += 1
+                                    elif res in ["四球", "死球"]: total_bb += 1
+                            
+                            total_outs = 0
+                            if "投球回(整数)" in df_group.columns:
+                                i_int = pd.to_numeric(df_group["投球回(整数)"], errors='coerce').fillna(0).sum()
+                                i_frac = pd.to_numeric(df_group["投球回(端数)"], errors='coerce').fillna(0).sum()
+                                total_outs += (i_int * 3) + i_frac
+                            if "アウト数" in df_group.columns:
+                                total_outs += pd.to_numeric(df_group["アウト数"], errors='coerce').fillna(0).sum()
+
+                            final_inn = int(total_outs // 3)
+                            final_frac = int(total_outs % 3)
+                            frac_str = " 1/3" if final_frac == 1 else " 2/3" if final_frac == 2 else ""
+                            display_inn = f"{final_inn}{frac_str}"
+                            
+                            final_res = "-"
+                            if "勝敗" in df_group.columns:
+                                r_str = str(df_group["勝敗"].astype(str).unique())
+                                if "勝" in r_str: final_res = "勝"
+                                elif "負" in r_str: final_res = "負"
+                                elif "S" in r_str: final_res = "S"
+                                elif "H" in r_str: final_res = "H"
+                            
+                            # 名前取得
+                            p_name = df_group["投手名"].iloc[0]
+
+                            return {
+                                "投手名": p_name, "結果": final_res, "回": display_inn,
+                                "球数": int(balls), "被安": int(total_hits), "奪三": int(total_so),
+                                "四死": int(total_bb), "失点": int(runs), "自責": int(er)
+                            }
+
+                        # リストを作成して集計
+                        summary_list = []
+                        for p_name, group in personal_pit.groupby("投手名", sort=False, dropna=False):
+                            data_dict = summarize_pitching_series(group)
+                            summary_list.append(data_dict)
+                        
+                        # リストからDataFrameを作成
+                        df_p_summary = pd.DataFrame(summary_list)
+                        
+                        # 表を表示
+                        if not df_p_summary.empty:
+                            st.table(df_p_summary[["投手名", "結果", "回", "球数", "被安", "奪三", "四死", "失点", "自責"]].set_index("投手名"))
+                        else:
+                            st.warning("集計結果が0件でした。")
+
+                    else:
+                        if has_team_rec: st.caption("※ 個人投手成績なし（スコアのみ登録）")
+                        else: st.info("投手データがありません")
+                else:
+                    st.info("表示できる試合データがありません")
+
+# ==========================================
+# ページ分岐: 成績・記録 (統合版)
+# ==========================================
+elif page == " 📊 個人成績":
+    st.title(" 📊 個人成績")
     
-    # データ整形
+    # --------------------------------------------------
+    # 共通関数・変数の定義
+    # --------------------------------------------------
+    # 1. 集計用関数
+    def get_ranking_df(df, group_keys, agg_dict):
+        grouped = df.groupby(group_keys).agg(agg_dict).reset_index()
+        return grouped
+
+    # 2. 指標計算関数 (WHIP対応済み)
+    def calc_advanced_stats(df):
+        # 打率
+        df["AVG"] = df.apply(lambda x: x["is_hit"] / x["is_ab"] if x["is_ab"] > 0 else 0, axis=1)
+        # 出塁率 (OBP)
+        df["OBP"] = df.apply(lambda x: (x["is_hit"] + x["is_bb"]) / (x["is_ab"] + x["is_bb"]) if (x["is_ab"] + x["is_bb"]) > 0 else 0, axis=1)
+        # 長打率 (SLG)
+        if "is_1b" in df.columns:
+            df["TotalBases"] = df["is_1b"] + (df["is_2b"] * 2) + (df["is_3b"] * 3) + (df["is_hr"] * 4)
+            df["SLG"] = df.apply(lambda x: x["TotalBases"] / x["is_ab"] if x["is_ab"] > 0 else 0, axis=1)
+            # OPS
+            df["OPS"] = df["OBP"] + df["SLG"]
+        else:
+            df["OPS"] = 0 # 簡易計算時など
+        return df
+
+    # 3. ランキング表示関数
+    def show_top5(title, df, sort_col, label_col, value_col, ascending=False, suffix="", format_float=False):
+        st.markdown(f"##### {title}")
+        if ascending:
+            target_df = df.copy() 
+        else:
+            target_df = df[df[value_col] > 0].copy()
+
+        sorted_df = target_df.sort_values(sort_col, ascending=ascending).reset_index(drop=True)
+        top5 = sorted_df.head(5)
+        if top5.empty:
+            st.caption("データなし")
+        else:
+            for i, row in top5.iterrows():
+                rank = i + 1
+                icon = "   🥇   " if rank == 1 else "   🥈   " if rank == 2 else "   🥉   " if rank == 3 else f"{rank}."
+                val = row[value_col]
+                val_str = f"{val:.3f}" if format_float else (f"{val:.2f}" if ascending else f"{int(val)}")
+                st.write(f"{icon} **{row[label_col]}** : {val_str}{suffix}")
+
+    # 4. データ準備 (チーム記録除外 & 計算用フラグ付与)
     if not df_batting.empty:
-        df_batting["Year"] = df_batting["日付"].dt.year.astype(str)
-        df_pitching["Year"] = df_pitching["日付"].dt.year.astype(str)
-        
-        # 打撃計算用
-        df_b_calc = df_batting.copy()
+        df_batting["Year"] = pd.to_datetime(df_batting["日付"]).dt.year.astype(str)
+    if not df_pitching.empty:
+        df_pitching["Year"] = pd.to_datetime(df_pitching["日付"]).dt.year.astype(str)
+
+    # A. 打撃データ整形
+    hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
+    ab_cols  = hit_cols + ["凡退", "失策", "走塁死", "盗塁死", "牽制死", "三振", "併殺打", "野選", "振り逃げ", "打撃妨害"]
+    
+    df_b_calc = df_batting.copy()
+    if not df_b_calc.empty:
         df_b_calc = df_b_calc[df_b_calc["選手名"] != "チーム記録"]
-        hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
-        ab_cols = hit_cols + ["凡退", "失策", "走塁死", "盗塁死", "牽制死", "三振", "併殺打", "野選", "振り逃げ", "打撃妨害"]
-        
         df_b_calc["is_hit"] = df_b_calc["結果"].isin(hit_cols).astype(int)
-        df_b_calc["is_ab"] = df_b_calc["結果"].isin(ab_cols).astype(int)
-        df_b_calc["is_hr"] = (df_b_calc["結果"] == "本塁打").astype(int)
+        df_b_calc["is_ab"]  = df_b_calc["結果"].isin(ab_cols).astype(int)
+        df_b_calc["is_hr"]  = (df_b_calc["結果"] == "本塁打").astype(int)
         df_b_calc["is_1b"] = (df_b_calc["結果"] == "単打").astype(int)
         df_b_calc["is_2b"] = (df_b_calc["結果"] == "二塁打").astype(int)
         df_b_calc["is_3b"] = (df_b_calc["結果"] == "三塁打").astype(int)
         df_b_calc["is_bb"] = (df_b_calc["結果"].isin(["四球", "死球"])).astype(int)
-        for c in ["打点", "盗塁", "得点"]:
-            df_b_calc[c] = pd.to_numeric(df_b_calc[c], errors='coerce').fillna(0)
-            
-        agg_rules_b = {
-            "is_hit": "sum", "is_ab": "sum", "is_hr": "sum",
-            "is_1b": "sum", "is_2b": "sum", "is_3b": "sum", "is_bb": "sum",
-            "打点": "sum", "盗塁": "sum", "得点": "sum"
-        }
-        
-        # 投手計算用
-        df_p_calc = df_pitching.copy()
+        for col in ["打点", "盗塁", "得点"]:
+            df_b_calc[col] = pd.to_numeric(df_b_calc[col], errors='coerce').fillna(0)
+
+    agg_rules_b = {
+        "is_hit": "sum", "is_ab": "sum", "is_hr": "sum",
+        "is_1b": "sum", "is_2b": "sum", "is_3b": "sum", "is_bb": "sum",
+        "打点": "sum", "盗塁": "sum", "得点": "sum"
+    }
+
+    # B. 投手データ整形
+    df_p_calc = df_pitching.copy()
+    if not df_p_calc.empty:
         if "投手名" in df_p_calc.columns:
             df_p_calc = df_p_calc[df_p_calc["投手名"] != "チーム記録"]
-            # 名前補完
-            if "選手名" in df_p_calc.columns:
-                 df_p_calc["投手名"] = df_p_calc["投手名"].replace("", pd.NA).fillna(df_p_calc["選手名"])
+        # 投手名補完
+        if "選手名" in df_p_calc.columns and "投手名" in df_p_calc.columns:
+            df_p_calc["投手名"] = df_p_calc["投手名"].replace("", pd.NA).fillna(df_p_calc["選手名"])
         
-        df_p_calc["is_so"] = (df_p_calc["結果"] == "三振").astype(int)
-        if "勝敗" in df_p_calc.columns:
-            df_p_calc["is_win"] = df_p_calc["勝敗"].astype(str).str.contains("勝").astype(int)
-            df_p_calc["is_lose"] = df_p_calc["勝敗"].astype(str).str.contains("負|敗").astype(int)
-        else:
-            df_p_calc["is_win"] = 0; df_p_calc["is_lose"] = 0
-            
-        for c in ["自責点", "失点", "アウト数", "被安打", "与四球"]:
-            if c not in df_p_calc.columns: df_p_calc[c] = 0
-            df_p_calc[c] = pd.to_numeric(df_p_calc[c], errors='coerce').fillna(0)
+        df_p_calc["is_so"]  = (df_p_calc["結果"] == "三振").astype(int)
+        df_p_calc["is_win"] = df_p_calc["勝敗"].astype(str).str.contains("勝").astype(int)
+        df_p_calc["is_lose"] = df_p_calc["勝敗"].astype(str).str.contains("負|敗").astype(int)
         
+        for col in ["自責点", "失点", "アウト数", "被安打", "与四球"]:
+            if col not in df_p_calc.columns: df_p_calc[col] = 0
+            df_p_calc[col] = pd.to_numeric(df_p_calc[col], errors='coerce').fillna(0)
+
         df_p_calc["is_bb_detail"] = df_p_calc["結果"].isin(["四球", "死球"]).astype(int)
         df_p_calc["total_bb"] = df_p_calc["与四球"] + df_p_calc["is_bb_detail"]
-        
-        agg_rules_p = {
-            "アウト数": "sum", "自責点": "sum", "失点": "sum",
-            "is_so": "sum", "is_win": "sum", "is_lose": "sum",
-            "被安打": "sum", "total_bb": "sum"
-        }
 
-        # タブ構成
-        t1, t2, t3, t4 = st.tabs([" 👤  個人通算成績", " 📈  個人年度別", " 🏆  期間別ランキング", " 👑  歴代記録"])
+    agg_rules_p = {
+        "アウト数": "sum", "自責点": "sum", "失点": "sum",
+        "is_so": "sum", "is_win": "sum", "is_lose": "sum",
+        "被安打": "sum", "total_bb": "sum"
+    }
+
+    # ==========================================
+    # タブ構成
+    # ==========================================
+    t_total, t_year, t_rank, t_rec = st.tabs([" 👤  個人通算成績", " 📈  個人年度別", " 🏆  期間別ランキング", " 👑  歴代記録"])
+
+    # ----------------------------------------------------
+    # Tab 1: 個人通算成績 (旧: 個人成績ページ)
+    # ----------------------------------------------------
+    with t_total:
+        st.markdown("####  📊  個人成績一覧 (通算・年度別フィルター)")
         
-        # --- Tab 1: 個人通算成績 ---
-        with t1:
-            st.markdown("####  📊  個人成績一覧 (通算・年度別フィルター)")
-            years = sorted(list(set(df_b_calc["Year"].unique()) | set(df_p_calc["Year"].unique())), reverse=True)
+        # フィルタリング設定
+        if not df_batting.empty:
+            all_years_p = sorted(list(set(df_batting["Year"].unique()) | set(df_pitching["Year"].unique())), reverse=True)
+        else:
+            all_years_p = []
             
-            c1, c2 = st.columns(2)
-            default_idx = 1 if years else 0
-            sel_year = c1.selectbox("年度", ["通算"] + years, index=default_idx, key="p_stat_year")
-            
-            # 種別選択
-            types = [x for x in df_b_calc["試合種別"].unique() if x]
-            others = [t for t in types if t != "練習試合"]
-            type_opts = ["全種別", "練習試合", "公式戦 (トータル)"] + sorted(others)
-            sel_type = c2.selectbox("試合種別", type_opts, key="p_stat_type")
-            
-            # フィルタ
-            target_b = df_b_calc.copy()
-            target_p = df_p_calc.copy()
-            
-            if sel_year != "通算":
-                target_b = target_b[target_b["Year"] == sel_year]
-                target_p = target_p[target_p["Year"] == sel_year]
-            
-            if sel_type != "全種別":
-                if sel_type == "公式戦 (トータル)":
-                    target_b = target_b[target_b["試合種別"].isin(OFFICIAL_GAME_TYPES)]
-                    target_p = target_p[target_p["試合種別"].isin(OFFICIAL_GAME_TYPES)]
-                else:
-                    target_b = target_b[target_b["試合種別"] == sel_type]
-                    target_p = target_p[target_p["試合種別"] == sel_type]
-            
-            st_b, st_p, st_fld = st.tabs(["打撃部門", "投手部門", "守備部門"])
-            
-            with st_b:
-                if not target_b.empty:
-                    res_df = get_ranking_df(target_b, ["選手名"], agg_rules_b)
-                    res_df = calc_advanced_stats(res_df)
+        c_p_year, c_p_type = st.columns(2)
+        
+        default_idx = 1 if all_years_p else 0
+        p_target_year = c_p_year.selectbox("年度 (Season)", ["通算"] + all_years_p, index=default_idx, key="p_stats_year_sel")
+        
+        # ▼▼▼ 修正: 並び順を「全種別 → 練習試合 → 公式戦まとめ → その他」に変更 ▼▼▼
+        # 1. データに含まれる全種別を取得
+        existing_types = [x for x in list(df_batting["試合種別"].unique()) if str(x) != "nan" and x != ""]
+        
+        # 2. "練習試合" をリストから除外
+        others_p = [t for t in existing_types if t != "練習試合"]
+        
+        # 3. 選択肢を作成
+        p_avail_types = ["全種別", "練習試合", "公式戦 (トータル)"] + sorted(others_p)
+        
+        p_target_type = c_p_type.selectbox("試合種別", p_avail_types, key="p_stats_type_sel")
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        p_use_ground = st.checkbox("  🏟️   グラウンドで絞り込む", key="p_stats_ground_check")
+        p_target_ground = None
+        if p_use_ground:
+            p_avail_grounds = [x for x in list(df_batting["グラウンド"].unique()) if str(x) != "nan" and x != ""]
+            p_target_ground = st.selectbox("グラウンド選択", p_avail_grounds, key="p_stats_ground_sel")
+
+        # フィルタ適用
+        df_b_target = df_batting.copy()
+        df_p_target = df_pitching.copy()
+        
+        if p_target_year != "通算":
+            df_b_target = df_b_target[df_b_target["Year"] == p_target_year]
+            df_p_target = df_p_target[df_p_target["Year"] == p_target_year]
+
+        # ▼▼▼ 修正: 種別フィルタリングの分岐処理 ▼▼▼
+        if p_target_type == "全種別":
+            pass
+        elif p_target_type == "公式戦 (トータル)":
+            df_b_target = df_b_target[df_b_target["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+            df_p_target = df_p_target[df_p_target["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+        else:
+            df_b_target = df_b_target[df_b_target["試合種別"] == p_target_type]
+            df_p_target = df_p_target[df_p_target["試合種別"] == p_target_type]
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        # サブタブ (打撃/投手/守備)
+        st_bat, st_pit, st_fld = st.tabs(["打撃部門", "投手部門", "守備部門"])
+
+        # (A) 打撃一覧
+        with st_bat:
+            if not df_b_target.empty:
+                batting_stats = []
+                for player in all_players:
+                    p_data = df_b_target[df_b_target["選手名"] == player]
+                    if p_data.empty: continue
+                    p_num = PLAYER_NUMBERS.get(player, "-")
+                    # 打撃のみ
+                    p_bat = p_data[p_data["種別"] == "打撃"]
                     
-                    # No. 追加
-                    res_df["No."] = res_df["選手名"].apply(lambda x: PLAYER_NUMBERS.get(x, "-"))
+                    hits = p_bat[p_bat["結果"].isin(hit_cols)].shape[0]
+                    singles = p_bat[p_bat["結果"] == "単打"].shape[0]
+                    doubles = p_bat[p_bat["結果"] == "二塁打"].shape[0]
+                    triples = p_bat[p_bat["結果"] == "三塁打"].shape[0]
+                    hrs = p_bat[p_bat["結果"] == "本塁打"].shape[0]
                     
-                    # 表示カラム
-                    cols = ["No.", "選手名", "AVG", "OPS", "is_hr", "打点", "is_hit", "盗塁", "is_ab"]
-                    disp_cols = ["No.", "氏名", "打率", "OPS", "本塁打", "打点", "安打", "盗塁", "打数"]
+                    pa = p_bat[p_bat["結果"].isin(ab_cols + ["四球", "死球", "犠打"])].shape[0]
+                    ab = p_bat[p_bat["結果"].isin(ab_cols)].shape[0]
                     
-                    res_df = res_df.rename(columns={"選手名": "氏名", "is_hr": "本塁打", "is_hit": "安打", "is_ab": "打数"})
-                    res_df = res_df.rename(columns={"AVG": "打率"})
-                    
-                    # フォーマット
-                    res_df["打率"] = res_df["打率"].map(lambda x: f"{x:.3f}")
-                    res_df["OPS"] = res_df["OPS"].map(lambda x: f"{x:.3f}")
-                    
-                    st.dataframe(res_df[disp_cols].sort_values("打率", ascending=False), hide_index=True, use_container_width=True)
+                    bbs = p_bat[p_bat["結果"] == "四球"].shape[0]
+                    hbps = p_bat[p_bat["結果"] == "死球"].shape[0]
+                    rbi = pd.to_numeric(p_data["打点"], errors='coerce').sum()
+                    sb = pd.to_numeric(p_data["盗塁"], errors='coerce').sum()
+
+                    avg = hits / ab if ab > 0 else 0.000
+                    obp_demon = ab + bbs + hbps
+                    obp = (hits + bbs + hbps) / obp_demon if obp_demon > 0 else 0.000
+                    total_bases = singles + (doubles * 2) + (triples * 3) + (hrs * 4)
+                    slg = total_bases / ab if ab > 0 else 0.000
+                    ops = obp + slg
+
+                    batting_stats.append({
+                        "No.": p_num, "氏名": player,
+                        "打率": avg, "OPS": ops,
+                        "本塁打": hrs, "打点": int(rbi), "安打": hits,
+                        "二塁打": doubles, "三塁打": triples, "出塁率": obp,
+                        "打席": pa, "打数": ab, "盗塁": int(sb), "四死球": bbs + hbps
+                    })
+                if batting_stats:
+                    df_res = pd.DataFrame(batting_stats).sort_values("打率", ascending=False)
+                    for col in ["打率", "OPS", "出塁率"]:
+                        df_res[col] = df_res[col].map(lambda x: f"{x:.3f}")
+                    cols = ["No.", "氏名", "打率", "OPS", "本塁打", "打点", "安打", "盗塁", "出塁率", "二塁打", "三塁打", "四死球", "打席", "打数"]
+                    st.dataframe(df_res[cols], use_container_width=True, hide_index=True)
                 else:
                     st.info("データなし")
-            
-            with st_p:
-                if not target_p.empty:
-                    res_df_p = get_ranking_df(target_p, ["投手名"], agg_rules_p)
-                    res_df_p["Innings"] = res_df_p["アウト数"] / 3
-                    res_df_p["ERA"] = res_df_p.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
-                    res_df_p["WHIP"] = res_df_p.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
-                    
-                    res_df_p["No."] = res_df_p["投手名"].apply(lambda x: PLAYER_NUMBERS.get(x, "-"))
-                    
-                    # 表示
-                    res_df_p["投球回"] = res_df_p["Innings"].map(lambda x: f"{int(x)}.{int((x*3)%3)}")
-                    
-                    cols = ["No.", "投手名", "ERA", "WHIP", "is_win", "is_lose", "is_so", "投球回"]
-                    disp_cols = ["No.", "氏名", "防御率", "WHIP", "勝利", "敗戦", "奪三振", "投球回"]
-                    
-                    res_df_p = res_df_p.rename(columns={"投手名": "氏名", "is_win": "勝利", "is_lose": "敗戦", "is_so": "奪三振", "ERA": "防御率"})
-                    
-                    res_df_p["防御率"] = res_df_p["防御率"].map(lambda x: f"{x:.2f}")
-                    res_df_p["WHIP"] = res_df_p["WHIP"].map(lambda x: f"{x:.2f}")
-                    
-                    st.dataframe(res_df_p[disp_cols].sort_values("防御率"), hide_index=True, use_container_width=True)
-                else:
-                    st.info("データなし")
+            else:
+                st.info("条件に一致するデータがありません")
 
-            # (C) ▼▼▼ 追加: 守備部門 ▼▼▼
-            with st_fld:
-                # 処理野手が記録されているデータを抽出
-                if not target_p.empty and "処理野手" in target_p.columns:
-                    df_f = target_p[target_p["処理野手"].notna() & (target_p["処理野手"] != "")].copy()
+        # (B) 投手一覧
+        with st_pit:
+            if not df_p_target.empty:
+                pitch_stats = []
+                for p in all_players:
+                    pd_p = df_p_target[df_p_target["投手名"] == p]
+                    if pd_p.empty: continue
+                    outs = pd_p["アウト数"].sum()
+                    er = pd_p["自責点"].sum()
+                    innings = outs / 3
+                    era = (er * 7) / innings if innings > 0 else 0.0
                     
-                    if not df_f.empty:
-                        # 名前とポジションが混在している場合 ("佐藤 (投)") などを考慮して集計
-                        # ここではシンプルに「処理野手」の文字列そのままでグルーピングします
-                        
-                        fld_stats = []
-                        for p_name, group in df_f.groupby("処理野手"):
-                            # 守備機会 = その選手が関与した全プレイ数
-                            chances = len(group)
-                            # 失策数
-                            errors = len(group[group["結果"] == "失策"])
-                            # 守備率 = (機会 - 失策) / 機会
-                            fpct = (chances - errors) / chances if chances > 0 else 0.000
-                            
-                            # 表示用背番号取得 (名前部分だけ抽出してマッチング)
-                            pure_name = p_name.split(" (")[0] if "(" in p_name else p_name
-                            p_num = PLAYER_NUMBERS.get(pure_name, "-")
-                            
-                            fld_stats.append({
-                                "No.": p_num,
-                                "氏名": p_name,
-                                "守備機会": chances,
-                                "失策": errors,
-                                "守備率": fpct
-                            })
-                        
-                        if fld_stats:
-                            df_show_f = pd.DataFrame(fld_stats).sort_values(["守備率", "守備機会"], ascending=[False, False])
-                            df_show_f["守備率"] = df_show_f["守備率"].map(lambda x: f"{x:.3f}")
-                            
-                            st.dataframe(
-                                df_show_f[["No.", "氏名", "守備機会", "失策", "守備率"]],
-                                hide_index=True,
-                                use_container_width=True
-                            )
-                        else:
-                            st.info("守備記録なし")
+                    if "勝敗" in pd_p.columns:
+                        wins = pd_p[pd_p["勝敗"].astype(str).str.contains("勝")].shape[0]
+                        loses = pd_p[pd_p["勝敗"].astype(str).str.contains("負|敗")].shape[0]
                     else:
-                        st.info("守備データなし")
+                        wins=0; loses=0
+                    win_pct = wins/(wins+loses) if (wins+loses)>0 else 0.0
+                    
+                    k_detailed = pd_p[(pd_p["イニング"] != "まとめ入力") & (pd_p["結果"] == "三振")].shape[0]
+                    k_bulk = pd_p[pd_p["イニング"] == "まとめ入力"]["奪三振"].sum() if "奪三振" in pd_p.columns else 0
+                    ks = k_detailed + k_bulk
+                    
+                    bb_detailed = pd_p[(pd_p["イニング"] != "まとめ入力") & (pd_p["結果"].isin(["四球", "死球"]))].shape[0]
+                    bb_bulk = pd_p[pd_p["イニング"] == "まとめ入力"]["与四球"].sum() if "与四球" in pd_p.columns else 0
+                    bbs = bb_detailed + bb_bulk
+                    
+                    total_hits = pd_p["被安打"].sum()
+                    whip = (bbs + total_hits) / innings if innings > 0 else 0.00
+                    k9 = (ks * 9) / innings if innings > 0 else 0.0
+                    
+                    p_num = PLAYER_NUMBERS.get(p, "-")
+                    pitch_stats.append({
+                        "No.": p_num, "氏名": p,
+                        "防御率": era, "WHIP": whip,
+                        "勝利": wins, "敗戦": loses, "勝率": win_pct,
+                        "奪三振": int(ks), "奪三振率": k9, "四死球": int(bbs),
+                        "投球回": f"{int(outs//3)}.{int(outs%3)}", "失点": int(pd_p["失点"].sum())
+                    })
+                if pitch_stats:
+                    df_p_res = pd.DataFrame(pitch_stats).sort_values("防御率")
+                    for col in ["防御率", "WHIP", "奪三振率", "勝率"]:
+                        df_p_res[col] = df_p_res[col].map(lambda x: f"{x:.2f}" if col!="勝率" else f"{x:.3f}")
+                    cols_order = ["No.", "氏名", "防御率", "WHIP", "勝利", "敗戦", "勝率", "投球回", "奪三振", "奪三振率", "四死球", "失点"]
+                    st.dataframe(df_p_res[cols_order], use_container_width=True, hide_index=True)
                 else:
                     st.info("データなし")
-
-        # --- Tab 2: 個人年度別 ---
-        with t2:
-            st.markdown("####  📈  個人年度別成績推移")
-            target_player = st.selectbox("選手を選択", all_players)
-            
-            if target_player:
-                p_hist = df_b_calc[df_b_calc["選手名"] == target_player]
-                
-                if not p_hist.empty:
-                    # 年度別集計
-                    hist_df = get_ranking_df(p_hist, ["Year"], agg_rules_b)
-                    hist_df = calc_advanced_stats(hist_df)
-                    hist_df = hist_df.sort_values("Year", ascending=False)
-                    
-                    # ▼▼▼ 追加: 通算行の計算 ▼▼▼
-                    total_row = hist_df.sum(numeric_only=True) # 数値カラムを合計
-                    total_row["Year"] = "通算" # 表示名
-                    
-                    # 率系の指標を再計算 (合計値から算出しないと平均の平均になってしまうため)
-                    t_ab = total_row["is_ab"]
-                    t_hit = total_row["is_hit"]
-                    total_row["AVG"] = t_hit / t_ab if t_ab > 0 else 0.000
-                    # (必要ならOPSなどもここで再計算できますが、今回は打率のみ再計算例とします)
-                    
-                    # DataFrame化して結合
-                    df_total = pd.DataFrame([total_row])
-                    hist_df = pd.concat([hist_df, df_total], ignore_index=True)
-                    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-                    
-                    # 表示フォーマット
-                    hist_df["打率"] = hist_df["AVG"].map(lambda x: f"{x:.3f}")
-                    
-                    # 表示
-                    st.dataframe(
-                        hist_df[["Year", "打率", "is_ab", "is_hit", "is_hr", "打点", "盗塁"]]
-                        .rename(columns={"Year":"年度", "is_ab":"打数", "is_hit":"安打", "is_hr":"本塁打"}),
-                        hide_index=True,
-                        use_container_width=True
-                    )
+            else:
+                st.info("データなし")
+        
+        # (C) 守備一覧
+        with st_fld:
+            # 守備ロジック（そのまま移植）
+            if not df_p_target.empty and "処理野手" in df_p_target.columns:
+                fld_data = df_p_target[df_p_target["処理野手"] != ""].copy()
+                fld_data = fld_data[fld_data["処理野手"].notna()]
+                if not fld_data.empty:
+                    stats = pd.crosstab(fld_data["処理野手"], fld_data["結果"])
+                    target_cols = ["凡退", "犠打", "失策", "走塁死", "牽制死", "盗塁死", "併殺打"]
+                    for col in target_cols:
+                        if col not in stats.columns: stats[col] = 0
+                    out_cols = [c for c in target_cols if c != "失策"]
+                    stats["刺殺・補殺"] = stats[out_cols].sum(axis=1)
+                    stats["守備機会"] = stats["刺殺・補殺"] + stats["失策"]
+                    stats["守備率"] = stats.apply(lambda row: (row["守備機会"] - row["失策"]) / row["守備機会"] if row["守備機会"] > 0 else 0.000, axis=1)
+                    stats = stats.reset_index()
+                    display_rows = []
+                    pos_order_list = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                    for _, row in stats.iterrows():
+                        raw_name = row["処理野手"]
+                        if "(" in raw_name and ")" in raw_name:
+                            try:
+                                parts = raw_name.split(" (")
+                                p_name = parts[0]; p_pos = parts[1].replace(")", "")
+                            except:
+                                p_name = raw_name; p_pos = "-"
+                        else:
+                            p_name = raw_name; p_pos = "-"
+                        try: sort_key = pos_order_list.index(p_pos)
+                        except: sort_key = 99
+                        p_num = PLAYER_NUMBERS.get(p_name, "-")
+                        display_rows.append({
+                            "SortKey": sort_key, "位置": p_pos, "No.": p_num, "氏名": p_name,
+                            "守備機会": row["守備機会"], "刺殺・補殺": row["刺殺・補殺"],
+                            "併殺打": row["併殺打"], "失策": row["失策"], "守備率": row["守備率"]
+                        })
+                    if display_rows:
+                        df_disp = pd.DataFrame(display_rows).sort_values(["SortKey", "守備機会"], ascending=[True, False])
+                        df_disp["守備率"] = df_disp["守備率"].map(lambda x: f"{x:.3f}")
+                        st.dataframe(df_disp[["位置", "No.", "氏名", "守備機会", "刺殺・補殺", "併殺打", "失策", "守備率"]], use_container_width=True, hide_index=True)
+                    else:
+                        st.info("データなし")
                 else:
-                    st.info("打撃データなし")
-
-        # --- Tab 3: 期間別ランキング ---
-        with t3:
-            st.markdown("####  🏆  期間別ランキング")
-            mode = st.radio("集計期間", ["年度別", "月間", "直近3試合"], horizontal=True)
-            
-            df_tgt_b = df_b_calc.copy()
-            df_tgt_p = df_p_calc.copy()
-            
-            if mode == "年度別":
-                yr = st.selectbox("年度", years, key="rank_yr")
-                df_tgt_b = df_tgt_b[df_tgt_b["Year"] == yr]
-                df_tgt_p = df_tgt_p[df_tgt_p["Year"] == yr]
-                def_ab = 10
-            elif mode == "月間":
-                df_tgt_b["Month"] = df_tgt_b["日付"].dt.strftime('%Y-%m')
-                months = sorted(df_tgt_b["Month"].unique(), reverse=True)
-                sel_m = st.selectbox("月", months)
-                df_tgt_b = df_tgt_b[df_tgt_b["Month"] == sel_m]
-                # 投手も同様に
-                df_tgt_p["Month"] = df_tgt_p["日付"].dt.strftime('%Y-%m')
-                df_tgt_p = df_tgt_p[df_tgt_p["Month"] == sel_m]
-                def_ab = 3
+                    st.info("データなし")
             else:
-                dates = sorted(df_tgt_b["日付"].unique(), reverse=True)[:3]
-                df_tgt_b = df_tgt_b[df_tgt_b["日付"].isin(dates)]
-                df_tgt_p = df_tgt_p[df_tgt_p["日付"].isin(dates)]
-                st.caption(f"対象: {[d.strftime('%m/%d') for d in dates]}")
-                def_ab = 1
+                st.info("データなし")
 
-            if not df_tgt_b.empty:
-                ranked = get_ranking_df(df_tgt_b, ["選手名"], agg_rules_b)
-                ranked = calc_advanced_stats(ranked)
-                ranked["Display"] = ranked["選手名"]
+    # ----------------------------------------------------
+    # Tab 2: 個人年度別 (旧: 個人年度別タブ)
+    # ----------------------------------------------------
+    with t_year:
+        st.markdown("####  📈  個人年度別成績推移")
+        sel_player = st.selectbox("選手を選択", all_players, key="hist_player_sel_merged")
+
+        if sel_player:
+            # 打撃
+            st.markdown(f"#####  🏏  {sel_player} の打撃成績")
+            my_bat = df_b_calc[df_b_calc["選手名"] == sel_player].copy()
+            if not my_bat.empty:
+                bat_hist = my_bat.groupby("Year").agg({
+                    "日付": "nunique", "is_ab": "sum", "is_hit": "sum", "is_hr": "sum",
+                    "打点": "sum", "得点": "sum", "盗塁": "sum",
+                    "結果": lambda x: x[x.isin(["四球", "死球"])].count()
+                }).rename(columns={"日付": "試合", "is_ab": "打数", "is_hit": "安打", "is_hr": "本塁打", "結果": "四死球"})
                 
-                st.write("---")
-                c_1, c_2, c_3 = st.columns(3)
-                with c_1: show_top5("打率", ranked[ranked["is_ab"] >= def_ab], "AVG", "Display", "AVG", format_float=True)
-                with c_2: show_top5("打点", ranked, "打点", "Display", "打点", suffix=" 点")
-                with c_3: show_top5("OPS", ranked[ranked["is_ab"] >= def_ab], "OPS", "Display", "OPS", format_float=True)
-
-        # --- Tab 4: 歴代記録 ---
-        with t4:
-            st.markdown("####  👑  歴代記録 (シーズン最高 & 通算)")
-            rtype = st.radio("集計対象", ["シーズン最高", "通算"], horizontal=True)
-            
-            if rtype == "シーズン最高":
-                r_df = get_ranking_df(df_b_calc, ["Year", "選手名"], agg_rules_b)
-                r_df = calc_advanced_stats(r_df)
-                r_df["Display"] = r_df["選手名"] + " (" + r_df["Year"] + ")"
-                min_ab_r = 10
+                so_series = my_bat[my_bat["結果"].isin(["三振", "振り逃げ"])].groupby("Year").size()
+                bat_hist["三振"] = so_series.fillna(0).astype(int)
+                bat_hist["打率"] = bat_hist.apply(lambda x: x["安打"] / x["打数"] if x["打数"] > 0 else 0.000, axis=1)
+                bat_hist = bat_hist.sort_index(ascending=False)
+                
+                total_row = bat_hist.sum(numeric_only=True)
+                total_row.name = "通算"
+                total_row["打率"] = total_row["安打"] / total_row["打数"] if total_row["打数"] > 0 else 0.0
+                bat_hist = pd.concat([bat_hist, pd.DataFrame([total_row])])
+                
+                disp_bat = bat_hist[["試合", "打率", "打数", "安打", "本塁打", "打点", "盗塁", "四死球", "三振"]].copy()
+                disp_bat["打率"] = disp_bat["打率"].map(lambda x: f"{x:.3f}")
+                st.dataframe(disp_bat, use_container_width=True)
             else:
-                r_df = get_ranking_df(df_b_calc, ["選手名"], agg_rules_b)
-                r_df = calc_advanced_stats(r_df)
-                r_df["Display"] = r_df["選手名"]
-                min_ab_r = 30
+                st.info("データなし")
+
+            # 投手
+            st.markdown(f"##### ⚾ {sel_player} の投手成績")
+            my_pit = df_p_calc[df_p_calc["投手名"] == sel_player].copy()
+            if not my_pit.empty:
+                pit_hist = my_pit.groupby("Year").agg({
+                    "日付": "nunique", "is_win": "sum", "is_lose": "sum",
+                    "アウト数": "sum", "自責点": "sum", "失点": "sum", "is_so": "sum"
+                }).rename(columns={"日付": "登板", "is_win": "勝", "is_lose": "敗", "is_so": "奪三振"})
+                
+                pit_hist["回"] = pit_hist["アウト数"] // 3
+                pit_hist["frac"] = pit_hist["アウト数"] % 3
+                pit_hist["投球回"] = pit_hist.apply(lambda x: f"{int(x['回'])}.{int(x['frac'])}", axis=1)
+                
+                pit_hist["InnFloat"] = pit_hist["アウト数"] / 3
+                pit_hist["防御率"] = pit_hist.apply(lambda x: (x["自責点"] * 7) / x["InnFloat"] if x["InnFloat"] > 0 else 0.00, axis=1)
+                pit_hist = pit_hist.sort_index(ascending=False)
+                
+                p_total = pit_hist.sum(numeric_only=True)
+                p_total.name = "通算"
+                p_total_inn_str = f"{int(p_total['アウト数']//3)}.{int(p_total['アウト数']%3)}"
+                p_era = (p_total["自責点"] * 7) / (p_total["アウト数"]/3) if p_total["アウト数"]>0 else 0.0
+                
+                df_total_p = pd.DataFrame([p_total])
+                df_total_p["投球回"] = p_total_inn_str
+                df_total_p["防御率"] = p_era
+                pit_hist = pd.concat([pit_hist, df_total_p])
+                
+                disp_pit = pit_hist[["登板", "防御率", "勝", "敗", "投球回", "奪三振", "自責点", "失点"]].copy()
+                disp_pit["防御率"] = disp_pit["防御率"].map(lambda x: f"{x:.2f}")
+                st.dataframe(disp_pit, use_container_width=True)
+            else:
+                st.info("データなし")
+
+    # ----------------------------------------------------
+    # Tab 3: 期間別ランキング (Season/Monthly/Last3)
+    # ----------------------------------------------------
+    with t_rank:
+        st.markdown("####   🏆   期間別ランキング")
+        period_mode = st.radio("集計期間を選択", ["年度別 (Season)", "月間 (Monthly)", "直近3試合 (Last 3 Games)"], horizontal=True)
+
+        df_b_src = df_b_calc.copy()
+        df_p_src = df_p_calc.copy()
+        df_b_src["Date"] = pd.to_datetime(df_b_src["日付"])
+        df_p_src["Date"] = pd.to_datetime(df_p_src["日付"])
+        target_label_suffix = ""
+
+        # ▼▼▼ 初期化 ▼▼▼
+        def_ab = 1
+        def_inn = 1
+        games_count = 1 
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        if period_mode == "年度別 (Season)":
+            years = sorted(df_b_src["Date"].dt.year.unique().tolist(), reverse=True)
+            if not years: years = [datetime.date.today().year]
+            sel_year = st.selectbox("年度", years, key="rank_year_merged")
+            target_label_suffix = f" ({sel_year}年)"
+            df_b_filtered = df_b_src[df_b_src["Date"].dt.year == sel_year]
+            df_p_filtered = df_p_src[df_p_src["Date"].dt.year == sel_year]
             
-            c_r1, c_r2, c_r3 = st.columns(3)
-            with c_r1: show_top5("打率", r_df[r_df["is_ab"] >= min_ab_r], "AVG", "Display", "AVG", format_float=True)
-            with c_r2: show_top5("本塁打", r_df, "is_hr", "Display", "is_hr", suffix=" 本")
-            with c_r3: show_top5("打点", r_df, "打点", "Display", "打点", suffix=" 点")
+            # ▼▼▼ 年度別のデフォルト設定 (試合数×2.0 のまま維持) ▼▼▼
+            if not df_b_filtered.empty:
+                games_count = df_b_filtered["日付"].nunique()
             
-    else:
-        st.info("データがありません")
+            def_ab = int(games_count * 2.0)
+            def_inn = int(games_count)
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        elif period_mode == "月間 (Monthly)":
+            df_b_src["MonthStr"] = df_b_src["Date"].dt.strftime('%Y-%m')
+            months = sorted(df_b_src["MonthStr"].unique().tolist(), reverse=True)
+            if not months: sel_month = None
+            else: sel_month = st.selectbox("月", months, key="rank_month_merged")
+
+            if sel_month:
+                target_label_suffix = f" ({sel_month})"
+                df_b_filtered = df_b_src[df_b_src["MonthStr"] == sel_month]
+                df_p_src["MonthStr"] = df_p_src["Date"].dt.strftime('%Y-%m')
+                df_p_filtered = df_p_src[df_p_src["MonthStr"] == sel_month]
+                
+                # ▼▼▼ 月間は「試合数」をそのままデフォルト値にする ▼▼▼
+                if not df_b_filtered.empty:
+                    games_count = df_b_filtered["日付"].nunique()
+                
+                def_ab = int(games_count) # 試合数と同じ
+                def_inn = int(games_count)
+                # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+            else:
+                df_b_filtered = pd.DataFrame(); df_p_filtered = pd.DataFrame()
+                def_ab = 1; def_inn = 1
+
+        else: # 直近3試合
+            all_dates = sorted(df_b_src["Date"].dt.date.unique().tolist(), reverse=True)
+            target_dates = all_dates[:3] if all_dates else []
+            dates_str = ", ".join([d.strftime('%m/%d') for d in target_dates])
+            target_label_suffix = f" (直近: {dates_str})"
+            st.caption(f"対象日: {dates_str}")
+            df_b_filtered = df_b_src[df_b_src["Date"].dt.date.isin(target_dates)]
+            df_p_filtered = df_p_src[df_p_src["Date"].dt.date.isin(target_dates)]
+            
+            # ▼▼▼ 直近3試合は「3」をデフォルト値にする ▼▼▼
+            def_ab = 3
+            def_inn = 3
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        # 集計実行
+        if not df_b_filtered.empty:
+            df_bat_target = get_ranking_df(df_b_filtered, ["選手名"], agg_rules_b)
+            df_bat_target = calc_advanced_stats(df_bat_target)
+            df_bat_target["Display"] = df_bat_target["選手名"]
+        else: df_bat_target = pd.DataFrame()
+        
+        if not df_p_filtered.empty:
+            df_pit_target = get_ranking_df(df_p_filtered, ["投手名"], agg_rules_p)
+            df_pit_target["Innings"] = df_pit_target["アウト数"] / 3
+            df_pit_target["ERA"] = df_pit_target.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+            df_pit_target["WHIP"] = df_pit_target.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+            df_pit_target["Display"] = df_pit_target["投手名"]
+        else: df_pit_target = pd.DataFrame()
+
+        # 表示
+        c_fil1, c_fil2 = st.columns(2)
+        
+        safe_ab = max(1, def_ab)
+        safe_inn = max(1, def_inn)
+        
+        # ▼▼▼ 修正: keyに period_mode を含めることで、モード変更時にウィジェットをリセットさせる ▼▼▼
+        # これにより、新しいデフォルト値(safe_ab/safe_inn)が確実に反映されます。
+        mode_suffix = str(period_mode)
+        
+        min_ab = c_fil1.number_input("規定打席", value=safe_ab, min_value=1, key=f"rank_min_ab_{mode_suffix}")
+        min_inn = c_fil2.number_input("規定投球回", value=safe_inn, min_value=1, key=f"rank_min_inn_{mode_suffix}")
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        st.divider()
+        st.markdown(f"#####   ⚔️   打撃ランキング{target_label_suffix}")
+        if not df_bat_target.empty:
+            c1, c2, c3 = st.columns(3)
+            with c1: show_top5("打率", df_bat_target[df_bat_target["is_ab"] >= min_ab], "AVG", "Display", "AVG", suffix="", format_float=True)
+            with c2: show_top5("OPS", df_bat_target[df_bat_target["is_ab"] >= min_ab], "OPS", "Display", "OPS", suffix="", format_float=True)
+            with c3: show_top5("本塁打", df_bat_target, "is_hr", "Display", "is_hr", suffix=" 本")
+            st.write("")
+            c4, c5, c6 = st.columns(3)
+            with c4: show_top5("打点", df_bat_target, "打点", "Display", "打点", suffix=" 点")
+            with c5: show_top5("安打", df_bat_target, "is_hit", "Display", "is_hit", suffix=" 本")
+            with c6: show_top5("盗塁", df_bat_target, "盗塁", "Display", "盗塁", suffix=" 個")
+        else: st.info("データなし")
+
+        st.divider()
+        st.markdown(f"#####   🛡️   投手ランキング{target_label_suffix}")
+        if not df_pit_target.empty:
+            p1, p2, p3, p4 = st.columns(4)
+            with p1: show_top5("防御率", df_pit_target[df_pit_target["Innings"] >= min_inn], "ERA", "Display", "ERA", ascending=True, suffix="", format_float=True)
+            with p2: show_top5("WHIP", df_pit_target[df_pit_target["Innings"] >= min_inn], "WHIP", "Display", "WHIP", ascending=True, suffix="", format_float=True)
+            with p3: show_top5("勝利", df_pit_target, "is_win", "Display", "is_win", suffix=" 勝")
+            with p4: show_top5("奪三振", df_pit_target, "is_so", "Display", "is_so", suffix=" 個")
+        else: st.info("データなし")
+
+    # ----------------------------------------------------
+    # Tab 4: 歴代記録 (Career High / Lifetime)
+    # ----------------------------------------------------
+    with t_rec:
+        st.markdown("####  👑  歴代記録 (シーズン最高 & 通算)")
+        rec_type = st.radio("集計対象", ["歴代シーズン最高 (Season High)", "生涯通算 (Lifetime Total)"], horizontal=True)
+
+        if "Season" in rec_type:
+            df_bat_target = get_ranking_df(df_b_calc, ["Year", "選手名"], agg_rules_b)
+            df_bat_target = calc_advanced_stats(df_bat_target)
+            df_bat_target["Display"] = df_bat_target["選手名"] + " (" + df_bat_target["Year"] + ")"
+            
+            df_pit_target = get_ranking_df(df_p_calc, ["Year", "投手名"], agg_rules_p)
+            df_pit_target["Innings"] = df_pit_target["アウト数"] / 3
+            df_pit_target["ERA"] = df_pit_target.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+            df_pit_target["WHIP"] = df_pit_target.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+            df_pit_target["Display"] = df_pit_target["投手名"] + " (" + df_pit_target["Year"] + ")"
+            min_ab_r = 10; min_inn_r = 5
+        else:
+            df_bat_target = get_ranking_df(df_b_calc, ["選手名"], agg_rules_b)
+            df_bat_target = calc_advanced_stats(df_bat_target)
+            df_bat_target["Display"] = df_bat_target["選手名"]
+            
+            df_pit_target = get_ranking_df(df_p_calc, ["投手名"], agg_rules_p)
+            df_pit_target["Innings"] = df_pit_target["アウト数"] / 3
+            df_pit_target["ERA"] = df_pit_target.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+            # 生涯通算用のWHIP計算
+            df_pit_target["WHIP"] = df_pit_target.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+            df_pit_target["Display"] = df_pit_target["投手名"]
+            # ユーザーが画面で変更できるように入力欄を作成
+            c_r1, c_r2 = st.columns(2)
+            min_ab_r = c_r1.number_input("通算規定打席", value=20, min_value=1, key="career_min_ab")
+            min_inn_r = c_r2.number_input("通算規定投球回", value=10, min_value=1, key="career_min_inn")
+
+        st.divider()
+        st.markdown(f"#####  ⚔️  歴代打撃トップ5")
+        tc1, tc2, tc3 = st.columns(3)
+        with tc1: show_top5("打率", df_bat_target[df_bat_target["is_ab"] >= min_ab_r], "AVG", "Display", "AVG", suffix="", format_float=True)
+        with tc2: show_top5("OPS", df_bat_target[df_bat_target["is_ab"] >= min_ab_r], "OPS", "Display", "OPS", suffix="", format_float=True)
+        with tc3: show_top5("安打数", df_bat_target, "is_hit", "Display", "is_hit", suffix=" 本")
+        
+        st.write("")
+        tc4, tc5, tc6 = st.columns(3)
+        with tc4: show_top5("本塁打", df_bat_target, "is_hr", "Display", "is_hr", suffix=" 本")
+        with tc5: show_top5("打点", df_bat_target, "打点", "Display", "打点", suffix=" 点")
+        with tc6: show_top5("盗塁", df_bat_target, "盗塁", "Display", "盗塁", suffix=" 個")
+        
+        st.divider()
+        st.markdown(f"#####  🛡️  歴代投手トップ5")
+        tp1, tp2, tp3, tp4 = st.columns(4)
+        with tp1: show_top5("防御率", df_pit_target[df_pit_target["Innings"] >= min_inn_r], "ERA", "Display", "ERA", ascending=True, suffix="", format_float=True)
+        with tp2: show_top5("WHIP", df_pit_target[df_pit_target["Innings"] >= min_inn_r], "WHIP", "Display", "WHIP", ascending=True, suffix="", format_float=True)
+        with tp3: show_top5("勝利数", df_pit_target, "is_win", "Display", "is_win", suffix=" 勝")
+        with tp4: show_top5("奪三振", df_pit_target, "is_so", "Display", "is_so", suffix=" 個")
