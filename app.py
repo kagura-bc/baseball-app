@@ -392,7 +392,7 @@ selected_date_str = game_date.strftime('%Y-%m-%d')
 selected_ground_base = st.sidebar.selectbox("グラウンド", ground_list)
 ground_name = st.sidebar.text_input("グラウンド名入力", value="グラウンド") if selected_ground_base == "その他" else selected_ground_base
 opponents_list = ["ミッピーズ", "WISH", "NATSUME", "92ears", "球遊会", "プリティーボーイズ", "DREAM", "リベリオン", "KING STAR", "甲府市役所", "SQUAD", "CRAZY",
-    "桜華", "甲府ドラゴンズ", "南アルプス市役所", "風間自工", "凪" ,"その他"]
+    "桜華", "甲府ドラゴンズ", "南アルプス市役所", "風間自工", "凪" , "フェノーメノ", "その他"]
 selected_opp = st.sidebar.selectbox("相手チーム", opponents_list)
 opp_team = st.sidebar.text_input("相手名", value="相手チーム") if selected_opp == "その他" else selected_opp
 kagura_order = st.sidebar.radio(f"攻守", ["先攻 (表)", "後攻 (裏)"], horizontal=True)
