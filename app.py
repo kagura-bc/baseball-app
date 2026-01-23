@@ -410,7 +410,6 @@ today_pitching_df = df_pitching[df_pitching["日付"] == game_date]
 def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_first=True):
     """
     任意のデータフレームを受け取ってスコアボードを描画する関数
-    is_top_first: TrueならKAGURAが先攻(表)、Falseなら後攻(裏)
     """
     st.markdown(f"### 📅 {date_txt} ({m_type}) &nbsp;&nbsp; 🏟️ {g_name}")
     st.subheader(f"⚾ {my_team_fixed} vs {opp_name}")
@@ -422,20 +421,32 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     for i in range(1, 10):
         inn = f"{i}回"
         
-        # ▼▼▼ 修正箇所：得点が入っている列を「合計」するロジックに変更 ▼▼▼
-        # これにより、結果が本塁打でも盗塁でも、得点が1なら加算されます
         inn_bat_data = b_df[b_df["イニング"] == inn]
-        k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum())
+        inn_pit_data = p_df[p_df["イニング"] == inn]
+
+        # ▼▼▼ 修正: データ内に「結果: ✖」が含まれていれば、表示を "✖" にする ▼▼▼
+        if not inn_bat_data[inn_bat_data["結果"] == "✖"].empty:
+            k_disp = "✖"
+            k_runs = 0
+        else:
+            k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum())
+            k_disp = str(k_runs)
+        
+        if not inn_pit_data[inn_pit_data["結果"] == "✖"].empty:
+            opp_disp = "✖"
+            opp_runs = 0
+        else:
+            opp_runs = int(inn_pit_data["失点"].sum())
+            opp_disp = str(opp_runs)
         # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-        
-        opp_runs = int(p_df[p_df["イニング"] == inn]["失点"].sum())
-        
+
         # データが存在するイニングだけ数字を表示、なければ空文字
-        k_exists = not b_df[b_df["イニング"] == inn].empty
-        opp_exists = not p_df[p_df["イニング"] == inn].empty
+        k_exists = not inn_bat_data.empty
+        opp_exists = not inn_pit_data.empty
         
-        k_inning.append(str(k_runs) if k_exists else "")
-        opp_inning.append(str(opp_runs) if opp_exists else "")
+        # ▼▼▼ 修正: 計算した k_disp / opp_disp を使う ▼▼▼
+        k_inning.append(k_disp if k_exists else "")
+        opp_inning.append(opp_disp if opp_exists else "")
         
         total_k += k_runs
         total_opp += opp_runs
@@ -502,7 +513,7 @@ if page == " 🏠 打撃成績入力":
     
     st.divider()
 
-  # ---------------------------------------------------------
+    # ---------------------------------------------------------
     # A. スコアのみ登録モード (KAGURA得点＆相手失点 反映版)
     # ---------------------------------------------------------
     if input_mode == "スコアのみ登録 (詳細完全不明)":
@@ -511,9 +522,8 @@ if page == " 🏠 打撃成績入力":
         with st.form("score_board_form_dropdown"):
             st.write("### 🔢 イニングスコア入力")
             st.caption("※試合がなかった回は「-」を選択してください。")
-
-            # 選択肢リスト (先頭に "-" を追加)
-            score_opts = ["-"] + list(range(31))
+            # ▼▼▼ 修正: 選択肢に "✖" を追加 ▼▼▼
+            score_opts = ["-", "✖"] + list(range(31))
             
             # デフォルト値「0」のインデックス
             default_idx = score_opts.index(0)
@@ -572,7 +582,7 @@ if page == " 🏠 打撃成績入力":
             
             if submit_score:
                 # --- 値の変換処理 ---
-                def parse_val(v): return 0 if v == "-" else int(v)
+                def parse_val(v): return 0 if v in ["-", "✖"] else int(v)
                 # 合計計算
                 k_total = sum([parse_val(x) for x in k_innings])
                 o_total = sum([parse_val(x) for x in o_innings])
@@ -588,10 +598,23 @@ if page == " 🏠 打撃成績入力":
                 
                 # A. 得点の記録
                 for idx, val in enumerate(k_innings):
-                    if val == "-": continue
-                    run = int(val)
-                    inn_label = f"{idx + 1}回"
+                    if val == "-": continue # "-" はスキップ
                     
+                    inn_label = f"{idx + 1}回"
+
+                    # ▼▼▼ 修正: "✖" の場合の保存処理を追加 ▼▼▼
+                    if val == "✖":
+                        new_batting_records.append({
+                            "日付": selected_date_str, "グラウンド": ground_name, 
+                            "対戦相手": opp_team, "試合種別": match_type, 
+                            "イニング": inn_label, "選手名": "チーム記録", 
+                            "位置": kagura_order, "結果": "✖", "打点": 0, "得点": 0, "盗塁": 0, "種別": "打ち切り"
+                        })
+                        continue # 次のループへ
+                    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                    
+                    # 数値の場合の処理
+                    run = int(val)
                     if run > 0:
                         for _ in range(run):
                             new_batting_records.append({
@@ -641,10 +664,21 @@ if page == " 🏠 打撃成績入力":
                 
                 # A. 相手得点 (失点として記録)
                 for idx, val in enumerate(o_innings):
-                    if val == "-": continue
-                    run = int(val)
-                    inn_label = f"{idx + 1}回"
+                    if val == "-": continue # "-" はスキップ
                     
+                    inn_label = f"{idx + 1}回"
+
+                    # ▼▼▼ 修正: "✖" の場合の保存処理を追加 ▼▼▼
+                    if val == "✖":
+                        new_pitching_records.append({
+                            "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type, 
+                            "イニング": inn_label, "選手名": "チーム記録", 
+                            "結果": "✖", "失点": 0, "自責点": 0, "勝敗": "ー", "球数": 0, "種別": "打ち切り"
+                        })
+                        continue # 次のループへ
+                    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                    
+                    run = int(val)
                     if run > 0:
                         new_pitching_records.append({
                             "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type, 
@@ -2837,9 +2871,11 @@ elif page == " 📊 個人成績":
             st.markdown(f"##### ⚾ {sel_player} の投手成績")
             my_pit = df_p_calc[df_p_calc["投手名"] == sel_player].copy()
             if not my_pit.empty:
+                # ▼▼▼ 修正: 集計対象に「被安打」と「total_bb(与四球総数)」を追加 ▼▼▼
                 pit_hist = my_pit.groupby("Year").agg({
                     "日付": "nunique", "is_win": "sum", "is_lose": "sum",
-                    "アウト数": "sum", "自責点": "sum", "失点": "sum", "is_so": "sum"
+                    "アウト数": "sum", "自責点": "sum", "失点": "sum", "is_so": "sum",
+                    "被安打": "sum", "total_bb": "sum"
                 }).rename(columns={"日付": "登板", "is_win": "勝", "is_lose": "敗", "is_so": "奪三振"})
                 
                 pit_hist["回"] = pit_hist["アウト数"] // 3
@@ -2848,6 +2884,10 @@ elif page == " 📊 個人成績":
                 
                 pit_hist["InnFloat"] = pit_hist["アウト数"] / 3
                 pit_hist["防御率"] = pit_hist.apply(lambda x: (x["自責点"] * 7) / x["InnFloat"] if x["InnFloat"] > 0 else 0.00, axis=1)
+                
+                # ▼▼▼ 追加: WHIPの計算 ( (与四球 + 被安打) / 投球回 ) ▼▼▼
+                pit_hist["WHIP"] = pit_hist.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["InnFloat"] if x["InnFloat"] > 0 else 0.00, axis=1)
+                
                 pit_hist = pit_hist.sort_index(ascending=False)
                 
                 p_total = pit_hist.sum(numeric_only=True)
@@ -2855,13 +2895,23 @@ elif page == " 📊 個人成績":
                 p_total_inn_str = f"{int(p_total['アウト数']//3)}.{int(p_total['アウト数']%3)}"
                 p_era = (p_total["自責点"] * 7) / (p_total["アウト数"]/3) if p_total["アウト数"]>0 else 0.0
                 
+                # ▼▼▼ 追加: 通算WHIPの計算 ▼▼▼
+                p_whip = (p_total["total_bb"] + p_total["被安打"]) / (p_total["アウト数"]/3) if p_total["アウト数"]>0 else 0.0
+                
                 df_total_p = pd.DataFrame([p_total])
                 df_total_p["投球回"] = p_total_inn_str
                 df_total_p["防御率"] = p_era
+                df_total_p["WHIP"] = p_whip  # 追加
+                
                 pit_hist = pd.concat([pit_hist, df_total_p])
                 
-                disp_pit = pit_hist[["登板", "防御率", "勝", "敗", "投球回", "奪三振", "自責点", "失点"]].copy()
+                # ▼▼▼ 修正: 表示カラムにWHIPを追加 ▼▼▼
+                disp_pit = pit_hist[["登板", "防御率", "WHIP", "勝", "敗", "投球回", "奪三振", "自責点", "失点"]].copy()
+                
+                # フォーマット調整
                 disp_pit["防御率"] = disp_pit["防御率"].map(lambda x: f"{x:.2f}")
+                disp_pit["WHIP"] = disp_pit["WHIP"].map(lambda x: f"{x:.2f}")
+                
                 st.dataframe(disp_pit, use_container_width=True)
             else:
                 st.info("データなし")
