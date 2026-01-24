@@ -1,0 +1,13 @@
+# Pythonの一時ファイル（ゴミ）
+__pycache__/
+*.py[cod]
+
+# Streamlitの秘密情報（重要！）
+.streamlit/secrets.toml
+
+# 仮想環境（もしあれば）
+venv/
+env/
+
+# Macの不要ファイル（もしあれば）
+.DS_Store
