@@ -233,73 +233,158 @@ def show_personal_stats(df_batting, df_pitching):
             else: st.info("なし")
 
     # ----------------------------------------------------
-    # 2. 個人年度別
+    # 2. 個人年度別 + 通算
     # ----------------------------------------------------
     with t_year:
         sel_player = st.selectbox("選手選択", ALL_PLAYERS)
         if sel_player:
+            # =================================================
+            # ⚔️ 打撃成績 (年度別 + 通算)
+            # =================================================
             if not df_b_calc.empty:
                 my_b = df_b_calc[df_b_calc["選手名"] == sel_player]
                 if not my_b.empty:
+                    # 1. 年度別データの作成
                     hist = my_b.groupby("Year").agg(agg_rules_b).sort_index(ascending=False)
-                    # --- 1. 打率計算 ---
-                    hist["打率"] = hist.apply(lambda x: x["is_hit"]/x["is_ab"] if x["is_ab"]>0 else 0, axis=1)
                     
-                    # --- 2. OPS・長打率計算 ---
+                    # 2. 通算データの作成（全期間の合計を算出）
+                    total_s = my_b.agg(agg_rules_b) # Seriesとして合計を取得
+                    # 通算行をDataFrame化（indexを"通算"にする）
+                    hist_total = pd.DataFrame(total_s).T
+                    hist_total.index = ["通算"]
+
+                    # 3. 年度別と通算を結合してから、まとめて指標計算を行う
+                    #    (計算ロジックを1箇所にまとめるため)
+                    combined_hist = pd.concat([hist_total, hist])
+
+                    # --- 指標計算 (combined_histに対して一括実行) ---
+                    # 打率
+                    combined_hist["打率"] = combined_hist.apply(
+                        lambda x: x["is_hit"]/x["is_ab"] if x["is_ab"]>0 else 0, axis=1
+                    )
+                    
                     # 出塁率
-                    hist["出塁率"] = hist.apply(
+                    combined_hist["出塁率"] = combined_hist.apply(
                         lambda x: (x["is_hit"] + x["is_bb"]) / (x["is_ab"] + x["is_bb"]) 
-                        if (x["is_ab"] + x["is_bb"]) > 0 else 0, 
-                        axis=1
+                        if (x["is_ab"] + x["is_bb"]) > 0 else 0, axis=1
                     )
+
                     # 長打率
-                    hist["TotalBases"] = hist["is_1b"] + (hist["is_2b"] * 2) + (hist["is_3b"] * 3) + (hist["is_hr"] * 4)
-                    hist["長打率"] = hist.apply(
-                        lambda x: x["TotalBases"] / x["is_ab"] 
-                        if x["is_ab"] > 0 else 0, 
-                        axis=1
+                    # 塁打計算のために必要なカラムがあるか確認しつつ計算
+                    combined_hist["TotalBases"] = combined_hist["is_1b"] + (combined_hist["is_2b"] * 2) + (combined_hist["is_3b"] * 3) + (combined_hist["is_hr"] * 4)
+                    combined_hist["長打率"] = combined_hist.apply(
+                        lambda x: x["TotalBases"] / x["is_ab"] if x["is_ab"] > 0 else 0, axis=1
                     )
+
                     # OPS
-                    hist["OPS"] = hist["出塁率"] + hist["長打率"]
+                    combined_hist["OPS"] = combined_hist["出塁率"] + combined_hist["長打率"]
 
-                    # 整数型変換
+                    # 整数型変換 (表示用)
                     for col in ["is_hit", "is_ab", "is_hr", "打点", "盗塁"]: 
-                        hist[col] = hist[col].astype(int)
+                        combined_hist[col] = combined_hist[col].astype(int)
 
+                    # 表示用DataFrameの整形
                     disp_hist = pd.DataFrame()
-                    disp_hist["打率"] = hist["打率"]
-                    disp_hist["OPS"] = hist["OPS"]
-                    disp_hist["長打率"] = hist["長打率"]
-                    disp_hist["出塁率"] = hist["出塁率"]
-                    disp_hist["打数"] = hist["is_ab"]
-                    disp_hist["安打"] = hist["is_hit"]
-                    disp_hist["本塁打"] = hist["is_hr"]
-                    disp_hist["打点"] = hist["打点"]
-                    disp_hist["盗塁"] = hist["盗塁"]
-                    disp_hist.index = hist.index; disp_hist.index.name = "年度"
-                    st.markdown("##### ⚔️ 打撃成績推移")
-                    st.dataframe(disp_hist.style.format({"打率": "{:.3f}", "OPS": "{:.3f}", "長打率": "{:.3f}", "出塁率": "{:.3f}"}))
-                else: st.info("データなし")
-            
-            if not df_p_calc.empty:
-                my_p = df_p_calc[df_p_calc["選手名"] == sel_player]
-                if not my_p.empty:
-                    hist_p = my_p.groupby("Year").agg(agg_rules_p).sort_index(ascending=False)
-                    hist_p["TotalSO"] = hist_p["is_so"] + hist_p["奪三振"]
-                    hist_p["防御率"] = hist_p.apply(lambda x: (x["自責点"]*7)/(x["アウト数"]/3) if x["アウト数"]>0 else 0, axis=1)
-                    hist_p["回"] = hist_p["アウト数"].apply(lambda x: f"{int(x//3)}.{int(x%3)}")
-                    for col in ["is_win", "is_lose", "TotalSO"]: hist_p[col] = hist_p[col].astype(int)
+                    disp_hist["打率"] = combined_hist["打率"]
+                    disp_hist["OPS"] = combined_hist["OPS"]
+                    disp_hist["長打率"] = combined_hist["長打率"]
+                    disp_hist["出塁率"] = combined_hist["出塁率"]
+                    disp_hist["打数"] = combined_hist["is_ab"]
+                    disp_hist["安打"] = combined_hist["is_hit"]
+                    disp_hist["本塁打"] = combined_hist["is_hr"]
+                    disp_hist["打点"] = combined_hist["打点"]
+                    disp_hist["盗塁"] = combined_hist["盗塁"]
+                    disp_hist.index.name = "年度"
 
-                    disp_p_hist = pd.DataFrame()
-                    disp_p_hist["防御率"] = hist_p["防御率"]
-                    disp_p_hist["投球回"] = hist_p["回"]
-                    disp_p_hist["勝"] = hist_p["is_win"]
-                    disp_p_hist["敗"] = hist_p["is_lose"]
-                    disp_p_hist["奪三振"] = hist_p["TotalSO"]
-                    disp_p_hist.index = hist_p.index; disp_p_hist.index.name = "年度"
-                    st.markdown("##### 🛡️ 投手成績推移")
-                    st.dataframe(disp_p_hist.style.format({"防御率": "{:.2f}"}))
+                    st.markdown("##### ⚔️ 打撃成績推移")
+                    # スタイル適用して表示
+                    st.dataframe(
+                        disp_hist.style.format({
+                            "打率": "{:.3f}", "OPS": "{:.3f}", "長打率": "{:.3f}", "出塁率": "{:.3f}"
+                        }).applymap(
+                            # "通算"行だけ太字や色を変える（オプション）
+                            lambda x: "font-weight: bold; background-color: #f0f2f6;" if isinstance(x, str) else "", 
+                            subset=pd.IndexSlice[["通算"], :]
+                        )
+                    )
                 else: st.info("データなし")
+        
+        # =================================================
+        # 🛡️ 投手成績 (年度別 + 通算)
+        # =================================================
+        if not df_p_calc.empty:
+            my_p = df_p_calc[df_p_calc["選手名"] == sel_player]
+            if not my_p.empty:
+                # 1. 年度別
+                hist_p = my_p.groupby("Year").agg(agg_rules_p).sort_index(ascending=False)
+                
+                # 2. 通算
+                total_p_s = my_p.agg(agg_rules_p)
+                hist_p_total = pd.DataFrame(total_p_s).T
+                hist_p_total.index = ["通算"]
+
+                # 3. 結合
+                combined_p = pd.concat([hist_p_total, hist_p])
+
+                # --- 指標計算 ---
+                combined_p["TotalSO"] = combined_p["is_so"] + combined_p["奪三振"]
+                
+                # イニング数（計算用）
+                combined_p["Innings"] = combined_p["アウト数"] / 3
+
+                # 防御率 (7回制)
+                combined_p["防御率"] = combined_p.apply(
+                    lambda x: (x["自責点"]*7)/x["Innings"] if x["Innings"]>0 else 0, axis=1
+                )
+
+                # 勝率
+                combined_p["勝率"] = combined_p.apply(
+                    lambda x: x["is_win"] / (x["is_win"] + x["is_lose"]) 
+                    if (x["is_win"] + x["is_lose"]) > 0 else 0, axis=1
+                )
+
+                # 奪三振率 (7回制: K/7)
+                combined_p["奪三振率"] = combined_p.apply(
+                    lambda x: (x["TotalSO"] * 7) / x["Innings"] 
+                    if x["Innings"] > 0 else 0, axis=1
+                )
+
+                # WHIP
+                combined_p["WHIP"] = combined_p.apply(
+                    lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] 
+                    if x["Innings"] > 0 else 0, axis=1
+                )
+
+                # 表示用: 投球回 (整数.端数)
+                combined_p["回"] = combined_p["アウト数"].apply(lambda x: f"{int(x//3)}.{int(x%3)}")
+                
+                # 整数型変換
+                for col in ["is_win", "is_lose", "TotalSO"]: 
+                    combined_p[col] = combined_p[col].astype(int)
+
+                # 表示用整形
+                disp_p_hist = pd.DataFrame()
+                disp_p_hist["防御率"] = combined_p["防御率"]
+                disp_p_hist["勝率"] = combined_p["勝率"]
+                disp_p_hist["WHIP"] = combined_p["WHIP"]
+                disp_p_hist["奪三振率"] = combined_p["奪三振率"]
+                
+                disp_p_hist["投球回"] = combined_p["回"]
+                disp_p_hist["勝"] = combined_p["is_win"]
+                disp_p_hist["敗"] = combined_p["is_lose"]
+                disp_p_hist["奪三振"] = combined_p["TotalSO"]
+                disp_p_hist.index.name = "年度"
+
+                st.markdown("##### 🛡️ 投手成績推移")
+                st.dataframe(
+                    disp_p_hist.style.format({
+                        "防御率": "{:.2f}",
+                        "勝率": "{:.3f}",
+                        "WHIP": "{:.2f}",
+                        "奪三振率": "{:.2f}"
+                    })
+                )
+            else: st.info("データなし")
 
     # ----------------------------------------------------
     # 3. ランキング
