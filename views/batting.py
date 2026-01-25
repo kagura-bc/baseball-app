@@ -189,7 +189,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         # テンプレートデータ
         initial_data = []
         for i in range(1, 16):
-            initial_data.append([i, "", "他"] + [0]*13
+            initial_data.append([i, "", "他"] + [0]*13)
         
         input_cols = ["打順", "選手名", "守備", "打席数", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策出塁", "打点", "得点", "盗塁"]
         default_data = pd.DataFrame(initial_data, columns=input_cols)
