@@ -240,7 +240,7 @@ def show_team_stats(df_batting, df_pitching):
 
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
 
-                # ▼▼▼▼▼▼ 追加・修正箇所 (ここからスタメン表示ロジック) ▼▼▼▼▼▼
+                # ここからスタメン表示ロジック) 
                 st.divider()
                 st.markdown("#### 🏏  打撃成績")
                 personal_bat = match_bat[match_bat["選手名"] != "チーム記録"].copy()

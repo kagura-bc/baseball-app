@@ -100,7 +100,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
 
                 rec = {
                     "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
-                    "イニング": current_inn, "選手名": target_player, "投手名": target_player,
+                    "イニング": current_inn, "選手名": target_player, 
                     "結果": p_res, "失点": p_runs, "自責点": p_er, "勝敗": "ー", "球数": 0,
                     "被安打": add_hits, "アウト数": add_outs, "処理野手": saved_fielder_str,
                     "種別": f"詳細:{st.session_state['opp_batter_index']}番打者"
@@ -125,7 +125,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     if dec_p:
                         tp = dec_p.split(" (")[0]
                         val = {"勝利":"勝", "敗戦":"負", "セーブ":"S", "ホールド":"H"}[dec_t]
-                        rec = {"日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type, "イニング": "試合終了", "選手名": tp, "投手名": tp, "結果": "ー", "失点":0, "自責点":0, "勝敗": val, "球数":0, "種別": f"責任投手:{dec_t}"}
+                        rec = {"日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type, "イニング": "試合終了", "選手名": tp, "結果": "ー", "失点":0, "自責点":0, "勝敗": val, "球数":0, "種別": f"責任投手:{dec_t}"}
                         conn.update(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=pd.concat([df_pitching, pd.DataFrame([rec])], ignore_index=True))
                         st.cache_data.clear()
                         st.success("✅ 登録しました")
@@ -136,7 +136,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     # ---------------------------------------------------------
     elif input_mode_p == "選手別まとめ入力 (詳細不明・過去データ用)":
         st.info("複数の投手をまとめて入力します")
-        input_cols_p = ["投手名", "勝敗", "投球回(整数)", "投球回(端数)", "球数", "被安打", "被本塁打", "奪三振", "与四死球", "失点", "自責点"]
+        input_cols_p = ["選手名", "勝敗", "投球回(整数)", "投球回(端数)", "球数", "被安打", "被本塁打", "奪三振", "与四死球", "失点", "自責点"]
         default_df_p = pd.DataFrame([["", "ー", 0, 0, 0, 0, 0, 0, 0, 0, 0]] * 5, columns=input_cols_p)
 
         options_stats = [i for i in range(51)]
@@ -146,7 +146,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             edited_p = st.data_editor(
                 default_df_p, num_rows="dynamic", use_container_width=True,
                 column_config={
-                    "投手名": st.column_config.SelectboxColumn("投手名", options=[""] + [local_fmt(p) for p in ALL_PLAYERS]),
+                    "選手名": st.column_config.SelectboxColumn("選手名", options=[""] + [local_fmt(p) for p in ALL_PLAYERS]),
                     "勝敗": st.column_config.SelectboxColumn("勝敗", options=["ー", "勝", "負", "S", "H"]),
                     "投球回(整数)": st.column_config.SelectboxColumn("回", options=options_stats, width="small"),
                     "投球回(端数)": st.column_config.SelectboxColumn("端数", options=[0, 1, 2], help="0, 1/3, 2/3"),
@@ -162,14 +162,16 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             if st.form_submit_button("全データを登録"):
                 recs = []
                 for _, row in edited_p.iterrows():
-                    p_name = row["投手名"]
+                    p_name = row["選手名"]
+                    display_name = row["選手名"]
+                    p_name = display_name.split(" (")[0]
                     if not p_name: continue
                     i_int = int(row.get("投球回(整数)", 0))
                     i_frac = int(row.get("投球回(端数)", 0))
                     outs = (i_int * 3) + i_frac
                     
                     base_rec = {
-                        "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type, "イニング": "まとめ入力", "投手名": p_name, "選手名": p_name,
+                        "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type, "イニング": "まとめ入力", "選手名": p_name,
                         "結果": "まとめ", "勝敗": row.get("勝敗", "ー"), "アウト数": outs, 
                         "球数": int(row.get("球数", 0)), "失点": int(row.get("失点", 0)), "自責点": int(row.get("自責点", 0)),
                         "被安打": int(row.get("被安打", 0)), "被本塁打": int(row.get("被本塁打", 0)), "奪三振": int(row.get("奪三振", 0)), "与四球": int(row.get("与四死球", 0)),
