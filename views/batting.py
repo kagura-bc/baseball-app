@@ -177,13 +177,19 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ---------------------------------------------------------
     # B. 選手別まとめ入力モード
     # ---------------------------------------------------------
-    elif input_mode == "選手別まとめ入力 (詳細不明・過去データ用)":
+    elif input_mode == "選手別まとめ入力 (詳細不明・過去データ用)":                             
         st.info("複数の選手を表形式で入力します。")
-        
+        st.caption("※行を追加するには表の下（または右上）の「＋」を押してください。")
+
+        # --- 1. 選択肢の定義 ---
+        player_options = [fmt_player_name(p,PLAYER_NUMBERS) for p in ALL_PLAYERS]
+        number_options = [i for i in range(21)]
+        pos_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右", "指", "控", "他"]
+
         # テンプレートデータ
         initial_data = []
         for i in range(1, 16):
-            initial_data.append([i, "", "他"] + [0]*13)
+            initial_data.append([i, "", "他"] + [0]*13
         
         input_cols = ["打順", "選手名", "守備", "打席数", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策出塁", "打点", "得点", "盗塁"]
         default_data = pd.DataFrame(initial_data, columns=input_cols)
@@ -192,9 +198,21 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             edited_df = st.data_editor(
                 default_data, num_rows="dynamic", use_container_width=True,
                 column_config={
-                    "選手名": st.column_config.SelectboxColumn("選手名", options=[""] + [local_fmt(p) for p in ALL_PLAYERS]),
+                    "選手名": st.column_config.SelectboxColumn("選手名", options=[""] + [local_fmt(p) for p in ALL_PLAYERS], width="medium"),
                     "守備": st.column_config.SelectboxColumn("守備", options=["投", "捕", "一", "二", "三", "遊", "左", "中", "右", "指", "控", "他"]),
-                    "打席数": st.column_config.NumberColumn("打席", min_value=0, step=1)
+                    "打席数": st.column_config.SelectboxColumn("打席", options=number_options),
+                    "単打": st.column_config.SelectboxColumn("単", options=number_options),
+                    "二塁打": st.column_config.SelectboxColumn("二", options=number_options),
+                    "三塁打": st.column_config.SelectboxColumn("三", options=number_options),
+                    "本塁打": st.column_config.SelectboxColumn("本", options=number_options),
+                    "三振": st.column_config.SelectboxColumn("振", options=number_options),
+                    "四球": st.column_config.SelectboxColumn("四", options=number_options),
+                    "死球": st.column_config.SelectboxColumn("死", options=number_options),
+                    "犠打": st.column_config.SelectboxColumn("犠", options=number_options),
+                    "失策出塁": st.column_config.SelectboxColumn("失策", options=number_options),
+                    "打点": st.column_config.SelectboxColumn("点", options=number_options),
+                    "得点": st.column_config.SelectboxColumn("得", options=number_options),
+                    "盗塁": st.column_config.SelectboxColumn("盗", options=number_options),
                 }
             )
             

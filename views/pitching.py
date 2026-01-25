@@ -138,14 +138,25 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         st.info("複数の投手をまとめて入力します")
         input_cols_p = ["投手名", "勝敗", "投球回(整数)", "投球回(端数)", "球数", "被安打", "被本塁打", "奪三振", "与四死球", "失点", "自責点"]
         default_df_p = pd.DataFrame([["", "ー", 0, 0, 0, 0, 0, 0, 0, 0, 0]] * 5, columns=input_cols_p)
+
+        options_stats = [i for i in range(51)]
+        options_balls = [i for i in range(201)]
         
         with st.form("bulk_pitching_form"):
             edited_p = st.data_editor(
                 default_df_p, num_rows="dynamic", use_container_width=True,
                 column_config={
-                    "投手名": st.column_config.SelectboxColumn("投手名", options=[""] + ALL_PLAYERS),
+                    "投手名": st.column_config.SelectboxColumn("投手名", options=[""] + [local_fmt(p) for p in ALL_PLAYERS]),
                     "勝敗": st.column_config.SelectboxColumn("勝敗", options=["ー", "勝", "負", "S", "H"]),
-                    "投球回(端数)": st.column_config.SelectboxColumn("端数", options=[0, 1, 2], help="0, 1/3, 2/3")
+                    "投球回(整数)": st.column_config.SelectboxColumn("回", options=options_stats, width="small"),
+                    "投球回(端数)": st.column_config.SelectboxColumn("端数", options=[0, 1, 2], help="0, 1/3, 2/3"),
+                    "球数": st.column_config.SelectboxColumn("球数", options=options_balls, width="small"),
+                    "被安打": st.column_config.SelectboxColumn("被安", options=options_stats, width="small"),
+                    "被本塁打": st.column_config.SelectboxColumn("被本", options=options_stats, width="small"),
+                    "奪三振": st.column_config.SelectboxColumn("奪三", options=options_stats, width="small"),
+                    "与四死球": st.column_config.SelectboxColumn("四死", options=options_stats, width="small"),
+                    "失点": st.column_config.SelectboxColumn("失点", options=options_stats, width="small"),
+                    "自責点": st.column_config.SelectboxColumn("自責", options=options_stats, width="small"),
                 }
             )
             if st.form_submit_button("全データを登録"):
