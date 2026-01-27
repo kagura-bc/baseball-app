@@ -178,9 +178,6 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                         "種別": "まとめ"
                     }
                     recs.append(base_rec)
-                    # 奪三振数あわせのダミー
-                    for _ in range(int(row.get("奪三振", 0))):
-                        recs.append({**base_rec, "結果": "三振", "アウト数": 0, "失点":0, "自責点":0, "種別": "ダミー(三振)"})
                 
                 if recs:
                     conn.update(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=pd.concat([df_pitching, pd.DataFrame(recs)], ignore_index=True))
