@@ -13,7 +13,7 @@ df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
 # --- ページ切り替え ---
-page = st.sidebar.radio("表示", [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正"])
+page = st.sidebar.radio("表示", [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析"])
 
 # --- 画面表示 ---
 
@@ -25,6 +25,3 @@ elif page == " 📊 個人成績":
 
 elif page == " 📈 データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
-
-elif page == " 🔧 データ修正":
-    edit_data.show_edit_page(df_batting, df_pitching)
