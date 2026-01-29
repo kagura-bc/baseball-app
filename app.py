@@ -4,8 +4,7 @@ from config.settings import MY_TEAM, GROUND_LIST, OPPONENTS_LIST, OFFICIAL_GAME_
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
 # 各ページ（View）の読み込み
-from views import batting, pitching, team_stats, personal_stats, edit_data
-
+from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
 # --- ページ設定 ---
 st.set_page_config(page_title=f"{MY_TEAM} スコア管理システム", layout="wide")
 load_css() # CSS読み込み
@@ -35,7 +34,7 @@ opp_team = st.sidebar.text_input("相手名", value="相手チーム") if select
 kagura_order = st.sidebar.radio(f"攻守", ["先攻 (表)", "後攻 (裏)"], horizontal=True)
 
 # --- ページ切り替え ---
-page = st.sidebar.radio("表示", [" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🏆 チーム成績", " 📊 個人成績", " 🔧 データ修正"])
+page = st.sidebar.radio("表示", [" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正"])
 
 # --- 画面表示 ---
 if page == " 🏠 打撃成績入力":
@@ -55,6 +54,9 @@ elif page == " 🏆 チーム成績":
 
 elif page == " 📊 個人成績":
     personal_stats.show_personal_stats(df_batting, df_pitching)
+
+elif page == " 📈 データ分析":
+    analysis.show_analysis_page(df_batting, df_pitching)
 
 elif page == " 🔧 データ修正":
     edit_data.show_edit_page(df_batting, df_pitching)
