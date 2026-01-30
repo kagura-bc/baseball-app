@@ -17,6 +17,20 @@ def show_analysis_page(df_batting, df_pitching):
     # コピー作成
     df_b = df_batting.copy()
     df_p = df_pitching.copy()
+
+    # =========================================================
+    # 🚑 【緊急修正】 名前の強力クリーニング
+    # =========================================================
+    # 1. 強制的に文字列型にする
+    # 2. 全角スペース(　)を半角スペース( )に置換
+    # 3. 前後の空白を削除
+    # 4. (オプション) 氏名の間のスペースを完全に削除して詰めるなら .str.replace(" ", "") を追加
+    df_b["選手名"] = df_b["選手名"].astype(str).str.replace("　", " ").str.strip()
+    
+    # 除外リスト側も同じルールでクリーニングして比較しやすくする
+    def normalize_names(name_list):
+        return [str(n).replace("　", " ").strip() for n in name_list]
+    # =========================================================
     
     # 日付変換
     df_b["Date"] = pd.to_datetime(df_b["日付"])
@@ -374,108 +388,122 @@ def show_analysis_page(df_batting, df_pitching):
             st.dataframe(df_inn[["イニング", "得点", "失点"]].set_index("イニング").T, use_container_width=True)
 
     # =========================================================
-    # Tab 4: 理想オーダー (セイバーメトリクス簡易版)
+    # Tab 4: 理想オーダー 
     # =========================================================
     with tab4:
         st.markdown("### 🧠 統計データに基づく推奨オーダー")
         st.caption("過去の個人成績から、セイバーメトリクスの定石に基づいたオーダー案を提示します。")
 
-        # 個人成績集計
         if not df_b.empty:
-            # 必要なカラム計算
+            # -------------------------------------------------
+            # 1. データ準備 & 除外設定
+            # -------------------------------------------------
+            # ベースのデータを作成
             df_calc = df_b[df_b["選手名"] != "チーム記録"].copy()
+
+            # ★除外したい選手名
+            raw_exclude_list = ["助っ人1", "助っ人2", "依田裕樹"] 
             
-            # ヒット系
-            hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
-            df_calc["Hit"] = df_calc["結果"].isin(hit_cols).astype(int)
-            df_calc["BB"] = df_calc["結果"].isin(["四球", "死球"]).astype(int) # 出塁計算用
-            df_calc["AB"] = df_calc["結果"].isin(hit_cols + ["凡退", "三振", "失策", "併殺打", "野選"]).astype(int) # 打数
-            df_calc["PA"] = 1 # 打席数
-            
-            # 塁打
-            df_calc["TB"] = 0
-            df_calc.loc[df_calc["結果"]=="単打", "TB"] = 1
-            df_calc.loc[df_calc["結果"]=="二塁打", "TB"] = 2
-            df_calc.loc[df_calc["結果"]=="三塁打", "TB"] = 3
-            df_calc.loc[df_calc["結果"]=="本塁打", "TB"] = 4
-            
-            df_calc["SB"] = pd.to_numeric(df_calc["盗塁"], errors='coerce').fillna(0)
-            
-            # 集計
-            stats = df_calc.groupby("選手名").agg({
-                "PA": "sum", "AB": "sum", "Hit": "sum", "BB": "sum", "TB": "sum", "SB": "sum"
-            }).reset_index()
-            
-            # 最低打席数フィルタ
-            min_pa = st.slider("対象とする最低打席数", 1, 50, 25)
-            stats = stats[stats["PA"] >= min_pa]
+            # 名前のクリーニング（全角スペース除去など）
+            exclude_list = [str(n).replace("　", " ").strip() for n in raw_exclude_list]
 
-            if not stats.empty:
-                # 指標計算
-                # 出塁率(OBP) = (安打+四死球) / 打席 (※犠飛等は簡易化のため省略)
-                stats["OBP"] = (stats["Hit"] + stats["BB"]) / stats["PA"]
-                # 長打率(SLG) = 塁打 / 打数
-                stats["SLG"] = stats.apply(lambda x: x["TB"] / x["AB"] if x["AB"] > 0 else 0, axis=1)
-                # OPS
-                stats["OPS"] = stats["OBP"] + stats["SLG"]
-                # 打率
-                stats["AVG"] = stats.apply(lambda x: x["Hit"] / x["AB"] if x["AB"] > 0 else 0, axis=1)
-                # 三振率などを考慮する場合、元データで三振を集計する必要あり(今回は簡易版)
+            # ★除外を実行
+            df_calc = df_calc[~df_calc["選手名"].isin(exclude_list)]
 
-                # --- オーダーロジック ---
-                candidates = stats.copy()
-                lineup = []
-                used_players = []
-
-                def pick_player(df, sort_key, role_desc):
-                    # まだ選ばれていない選手から
-                    available = df[~df["選手名"].isin(used_players)].sort_values(sort_key, ascending=False)
-                    if not available.empty:
-                        p = available.iloc[0]
-                        lineup.append({
-                            "打順": len(lineup)+1, 
-                            "役割": role_desc, 
-                            "選手名": p["選手名"], 
-                            "主要指標": f"{sort_key}={p[sort_key]:.3f}",
-                            "OPS": f"{p['OPS']:.3f}",
-                            "出塁率": f"{p['OBP']:.3f}",
-                            "盗塁": int(p['SB'])
-                        })
-                        used_players.append(p["選手名"])
-
-                # 1番打者評価値の計算：出塁率(OBP) + (盗塁(SB) * 0.02)
-                candidates["LeadOffScore"] = candidates["OBP"] + (candidates["SB"] * 0.02)
-
-                # 1番: 出塁率が高く、足が使える
-                pick_player(candidates, "LeadOffScore", "チャンスメーカー (出塁+走塁)")
-
-                # 2番: 出塁率が高く、つなげる（現代野球型）
-                pick_player(candidates, "OBP", "繋ぎの強打者 (高出塁率)")
-
-                # 3番: チーム最高の打者 (OPS重視)
-                pick_player(candidates, "OPS", "最強打者 (高OPS)")
-
-                # 4番: チーム最高の長打力
-                pick_player(candidates, "SLG", "主砲 (長打力重視)")
-
-                # 5番: クリーンナップの残り
-                pick_player(candidates, "OPS", "ポイントゲッター")
-
-                # 6番〜9番: 残りをOPS順に
-                pick_player(candidates, "OPS", "裏クリーンナップ （実は長打力がある）")
-                pick_player(candidates, "OPS", "恐怖の伏兵")
-                pick_player(candidates, "OPS", "意外性の男")
-                pick_player(candidates, "OPS", "第2のリードオフ")
-
-                # 結果表示
-                st.table(pd.DataFrame(lineup).set_index("打順"))
-                
-                st.caption("※ ロジック: 1番(出塁+走塁), 2番(出塁), 3番(OPS), 4番(長打), 5番以降(OPS順) で自動選出しています。")
+            # データがあるか確認
+            if df_calc.empty:
+                st.warning("除外設定の結果、表示できるデータがなくなりました。")
             else:
-                st.warning(f"打席数が {min_pa} 以上の選手がいません。")
+                # -------------------------------------------------
+                # 2. 指標計算
+                # -------------------------------------------------
+                # ヒット系
+                hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
+                df_calc["Hit"] = df_calc["結果"].isin(hit_cols).astype(int)
+                df_calc["BB"] = df_calc["結果"].isin(["四球", "死球"]).astype(int)
+                df_calc["AB"] = df_calc["結果"].isin(hit_cols + ["凡退", "三振", "失策", "併殺打", "野選"]).astype(int)
+                df_calc["PA"] = 1 
+                
+                # 塁打
+                df_calc["TB"] = 0
+                df_calc.loc[df_calc["結果"]=="単打", "TB"] = 1
+                df_calc.loc[df_calc["結果"]=="二塁打", "TB"] = 2
+                df_calc.loc[df_calc["結果"]=="三塁打", "TB"] = 3
+                df_calc.loc[df_calc["結果"]=="本塁打", "TB"] = 4
+                
+                df_calc["SB"] = pd.to_numeric(df_calc["盗塁"], errors='coerce').fillna(0)
+                
+                # 個人ごとの集計
+                stats = df_calc.groupby("選手名").agg({
+                    "PA": "sum", "AB": "sum", "Hit": "sum", "BB": "sum", "TB": "sum", "SB": "sum"
+                }).reset_index()
+                
+                # 打席数フィルタ
+                max_pa = int(stats["PA"].max()) if not stats.empty else 0
+                default_pa = min(10, max_pa)
+                min_pa = st.slider("対象とする最低打席数", 0, max_pa, default_pa)
+                stats = stats[stats["PA"] >= min_pa]
 
+                if not stats.empty:
+                    # 指標計算
+                    stats["OBP"] = (stats["Hit"] + stats["BB"]) / stats["PA"]
+                    stats["SLG"] = stats.apply(lambda x: x["TB"] / x["AB"] if x["AB"] > 0 else 0, axis=1)
+                    stats["OPS"] = stats["OBP"] + stats["SLG"]
+                    
+                    # --- オーダー構築ロジック ---
+                    candidates = stats.copy()
+                    used_players = []
+
+                    def pick_player(df_source, sort_col, role_name, description):
+                        # まだ選ばれていない選手の中から選ぶ
+                        available = df_source[~df_source["選手名"].isin(used_players)].sort_values(sort_col, ascending=False)
+                        
+                        st.markdown(f"##### {len(used_players)+1}番: {role_name}")
+                        st.caption(description)
+                        
+                        if not available.empty:
+                            p = available.iloc[0]
+                            val = p[sort_col]
+                            # シンプルな縦表示
+                            st.success(f"**{p['選手名']}** ({sort_col}: {val:.3f})")
+                            used_players.append(p["選手名"])
+                        else:
+                            st.info("候補なし")
+                    
+                    st.divider()
+                    
+                    # 1番
+                    candidates["LeadOff"] = candidates["OBP"] + (candidates["SB"] * 0.01)
+                    pick_player(candidates, "LeadOff", "リードオフマン", "出塁率に加え、盗塁能力も考慮")
+                    
+                    # 2番
+                    pick_player(candidates, "OBP", "最強の繋ぎ役", "現代野球の定石。チーム内で高い出塁率を誇る選手")
+                    
+                    # 3番
+                    pick_player(candidates, "OPS", "ポイントゲッター", "総合的な打撃力（OPS）が最も高い選手")
+                    
+                    # 4番
+                    pick_player(candidates, "SLG", "主砲", "チームNo.1の長打力（SLG）を持つ選手")
+                    
+                    # 5番
+                    pick_player(candidates, "OPS", "クリーンナップ", "上位4人が返せなかった走者を返す勝負強さ")
+                    
+                    # 6番
+                    pick_player(candidates, "OPS", "下位打線の核", "上位打線に匹敵する打撃力")
+                    
+                    # 7番
+                    pick_player(candidates, "OPS", "伏兵", "下位からチャンスを作る")
+                    
+                    # 8番
+                    pick_player(candidates, "OPS", "伏兵", "意外性のある一打")
+                    
+                    # 9番
+                    pick_player(candidates, "LeadOff", "第2のリードオフマン", "上位に繋ぐため、足のある選手や出塁できる選手")
+
+                else:
+                    st.info("条件を満たす選手がいません。")
         else:
-            st.info("データがありません")
+            st.info("データがありません。")
 
     # =========================================================
     # Tab 5: チーム貢献度 (出席率 × 実力)
