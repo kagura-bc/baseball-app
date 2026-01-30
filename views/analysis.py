@@ -117,7 +117,7 @@ def show_analysis_page(df_batting, df_pitching):
     # ---------------------------------------------------------
     # タブ構成
     # ---------------------------------------------------------
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 チーム傾向", "🆚 対戦相手別", "⏱️ イニング・先制率", "🧠 理想オーダー"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 チーム傾向", "🆚 対戦相手別", "⏱️ イニング・先制率", "🧠 理想オーダー", "🤝 チーム貢献度"])
 
     # =========================================================
     # Tab 1: チーム傾向 (わくわくVer.)
@@ -476,3 +476,104 @@ def show_analysis_page(df_batting, df_pitching):
 
         else:
             st.info("データがありません")
+
+    # =========================================================
+    # Tab 5: チーム貢献度 (出席率 × 実力)
+    # =========================================================
+    with tab5:
+        st.markdown("### 🤝 チーム貢献度分析")
+        st.caption("「試合に参加すること」は最大の貢献です。出席率と成績をクロス分析し、チームの支柱を見つけます。")
+
+        if not df_b.empty and not df_games.empty:
+            # 1. データの準備
+            total_games_count = len(df_games) # フィルタリングされた期間の全試合数
+
+            # 個人成績の再集計（OPS計算用）
+            df_contrib = df_b[df_b["選手名"] != "チーム記録"].copy()
+            
+            # OPS計算に必要な指標
+            hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
+            df_contrib["Hit"] = df_contrib["結果"].isin(hit_cols).astype(int)
+            df_contrib["BB"] = df_contrib["結果"].isin(["四球", "死球"]).astype(int)
+            df_contrib["AB"] = df_contrib["結果"].isin(hit_cols + ["凡退", "三振", "失策", "併殺打", "野選"]).astype(int)
+            
+            # 塁打
+            df_contrib["TB"] = 0
+            df_contrib.loc[df_contrib["結果"]=="単打", "TB"] = 1
+            df_contrib.loc[df_contrib["結果"]=="二塁打", "TB"] = 2
+            df_contrib.loc[df_contrib["結果"]=="三塁打", "TB"] = 3
+            df_contrib.loc[df_contrib["結果"]=="本塁打", "TB"] = 4
+
+            # 選手ごとの集計
+            contrib_stats = df_contrib.groupby("選手名").agg({
+                "Date": "nunique", # ユニークな日付数＝出場試合数
+                "Hit": "sum", "BB": "sum", "AB": "sum", "TB": "sum"
+            }).rename(columns={"Date": "出場試合数"}).reset_index()
+
+            # 指標計算
+            contrib_stats["出席率"] = (contrib_stats["出場試合数"] / total_games_count) * 100
+            
+            # OPS計算 (簡易版: OBP + SLG)
+            contrib_stats["OBP"] = (contrib_stats["Hit"] + contrib_stats["BB"]) / (contrib_stats["AB"] + contrib_stats["BB"] + 1e-9) # ゼロ除算回避
+            contrib_stats["SLG"] = contrib_stats["TB"] / (contrib_stats["AB"] + 1e-9)
+            contrib_stats["OPS"] = contrib_stats["OBP"] + contrib_stats["SLG"]
+
+            # --- 2. 貢献度マトリクス (散布図) ---
+            st.markdown("#### 💎 貢献度マトリクス")
+            st.markdown("""
+            - **右下 (Grassroots Hero)**: 成績は発展途上だが、**高い出席率でチームを支える重要人物**。
+            - **右上 (Core Player)**: 実力もあり参加率も高い、チームの中心。
+            - **左上 (Helper)**: 参加は少ないが、来れば活躍する助っ人タイプ。
+            """)
+
+            # 散布図の作成
+            chart_contrib = alt.Chart(contrib_stats).mark_circle(size=150).encode(
+                x=alt.X("出席率", title="出席率 (%)", scale=alt.Scale(domain=[0, 105])),
+                y=alt.Y("OPS", title="OPS (打撃貢献度)"),
+                color=alt.condition(
+                    alt.datum.出席率 >= 50,
+                    alt.value("#e11d48"),  # 出席率50%以上は赤色で強調
+                    alt.value("#3b82f6")   # その他は青
+                ),
+                tooltip=["選手名", "出場試合数", alt.Tooltip("出席率", format=".1f"), alt.Tooltip("OPS", format=".3f")]
+            ).interactive()
+
+            # 平均線の追加
+            mean_att = contrib_stats["出席率"].mean()
+            mean_ops = contrib_stats["OPS"].mean()
+            
+            rule_x = alt.Chart(pd.DataFrame({'x': [mean_att]})).mark_rule(strokeDash=[3,3], color="gray").encode(x='x')
+            rule_y = alt.Chart(pd.DataFrame({'y': [mean_ops]})).mark_rule(strokeDash=[3,3], color="gray").encode(y='y')
+
+            st.altair_chart(chart_contrib + rule_x + rule_y, use_container_width=True)
+
+            # --- 3. 鉄人ランキング ---
+            st.divider()
+            c_rank1, c_rank2 = st.columns(2)
+
+            with c_rank1:
+                st.markdown("#### 🏅 鉄人ランキング (出席数)")
+                # 出場試合数順にソート
+                iron_men = contrib_stats.sort_values(["出場試合数", "OPS"], ascending=[False, False]).head(10)
+                
+                # 表示用データフレーム作成
+                display_df = iron_men[["選手名", "出場試合数", "出席率"]].copy()
+                display_df["出席率"] = display_df["出席率"].map("{:.1f}%".format)
+                
+                st.table(display_df.reset_index(drop=True))
+
+            with c_rank2:
+                # 分析コメント
+                top_player = iron_men.iloc[0]["選手名"]
+                high_attend_count = len(contrib_stats[contrib_stats["出席率"] >= 50])
+                
+                st.info(f"""
+                **📊 分析インサイト**
+                
+                今回の期間（全 {total_games_count} 試合）において、最もチームに貢献している鉄人は **{top_player}** 選手です。
+                
+                出席率が **50%** を超えている選手は **{high_attend_count}** 名います。
+                この選手たちがチームの活動維持の基盤となっています。
+                """)
+        else:
+            st.warning("分析に必要なデータが不足しています。")
