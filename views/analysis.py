@@ -475,28 +475,20 @@ def show_analysis_page(df_batting, df_pitching):
                     # 1番
                     candidates["LeadOff"] = candidates["OBP"] + (candidates["SB"] * 0.01)
                     pick_player(candidates, "LeadOff", "リードオフマン", "出塁率に加え、盗塁能力も考慮")
-                    
                     # 2番
                     pick_player(candidates, "OBP", "最強の繋ぎ役", "現代野球の定石。チーム内で高い出塁率を誇る選手")
-                    
                     # 3番
                     pick_player(candidates, "OPS", "ポイントゲッター", "総合的な打撃力（OPS）が最も高い選手")
-                    
                     # 4番
                     pick_player(candidates, "SLG", "主砲", "チームNo.1の長打力（SLG）を持つ選手")
-                    
                     # 5番
                     pick_player(candidates, "OPS", "クリーンナップ", "上位4人が返せなかった走者を返す勝負強さ")
-                    
                     # 6番
                     pick_player(candidates, "OPS", "下位打線の核", "上位打線に匹敵する打撃力")
-                    
                     # 7番
                     pick_player(candidates, "OPS", "伏兵", "下位からチャンスを作る")
-                    
                     # 8番
                     pick_player(candidates, "OPS", "伏兵", "意外性のある一打")
-                    
                     # 9番
                     pick_player(candidates, "LeadOff", "第2のリードオフマン", "上位に繋ぐため、足のある選手や出塁できる選手")
 
@@ -592,14 +584,11 @@ def show_analysis_page(df_batting, df_pitching):
 
             with c_rank2:
                 # 分析コメント
-                top_player = iron_men.iloc[0]["選手名"]
                 high_attend_count = len(contrib_stats[contrib_stats["出席率"] >= 50])
                 
                 st.info(f"""
                 **📊 分析インサイト**
-                
-                今回の期間（全 {total_games_count} 試合）において、最もチームに貢献している鉄人は **{top_player}** 選手です。
-                
+                        
                 出席率が **50%** を超えている選手は **{high_attend_count}** 名います。
                 この選手たちがチームの活動維持の基盤となっています。
                 """)
