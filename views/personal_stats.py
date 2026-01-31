@@ -405,7 +405,7 @@ def show_personal_stats(df_batting, df_pitching):
 
             df_b_sub = df_b_sub[df_b_sub["Date"].dt.year == sy]
             df_p_sub = df_p_sub[df_p_sub["Date"].dt.year == sy]
-            if not df_b_sub.empty: def_ab = int(df_b_sub["日付"].nunique() * 1.0); def_inn = int(df_b_sub["日付"].nunique() * 0.8)
+            if not df_b_sub.empty: def_ab = int(df_b_sub["日付"].nunique() * 3.0); def_inn = int(df_b_sub["日付"].nunique() * 0.8)
         
         elif period == "月間":
             df_b_sub["YM"] = df_b_sub["Date"].dt.strftime('%Y-%m')
