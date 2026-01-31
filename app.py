@@ -9,6 +9,17 @@ from views import batting, pitching, team_stats, personal_stats, edit_data, anal
 st.set_page_config(page_title=f"{MY_TEAM} スコア管理システム", layout="wide")
 load_css() # CSS読み込み
 
+def check_password():
+    """簡易ログイン機能"""
+    password = st.sidebar.text_input("🔑 合言葉を入力", type="password")
+    if password == "admin_kagura":  # ※入力用パスワード
+        return True
+    return False
+
+if not check_password():
+    st.sidebar.error("ログインが必要です")
+    st.stop() # ここで処理を強制終了
+
 # --- データ読み込み ---
 df_batting = load_batting_data()
 df_pitching = load_pitching_data()
