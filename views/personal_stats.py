@@ -391,36 +391,57 @@ def show_personal_stats(df_batting, df_pitching):
         period = st.radio("集計期間", ["年度別", "月間", "直近3試合"], horizontal=True)
         df_b_sub = df_b_calc.copy(); df_p_sub = df_p_calc.copy()
         df_b_sub["Date"] = pd.to_datetime(df_b_sub["日付"]); df_p_sub["Date"] = pd.to_datetime(df_p_sub["日付"])
+        
+        # デフォルト値と、ウィジェットをリセットするための識別子(key_suffix)を初期化
         def_ab = 1; def_inn = 1
+        key_suffix = ""  # ★ keyを一意にするための変数を追加
 
         if period == "年度別":
             ys = sorted(df_b_sub["Date"].dt.year.unique(), reverse=True)
             sy = st.selectbox("年度選択", ys) if len(ys)>0 else datetime.date.today().year
+            
+            # ★ 選択された年度をkeyに含めるため保存
+            key_suffix = str(sy) 
+
             df_b_sub = df_b_sub[df_b_sub["Date"].dt.year == sy]
             df_p_sub = df_p_sub[df_p_sub["Date"].dt.year == sy]
-            if not df_b_sub.empty: def_ab = int(df_b_sub["日付"].nunique() * 2.0); def_inn = int(df_b_sub["日付"].nunique())
+            if not df_b_sub.empty: def_ab = int(df_b_sub["日付"].nunique() * 1.0); def_inn = int(df_b_sub["日付"].nunique() * 0.8)
+        
         elif period == "月間":
             df_b_sub["YM"] = df_b_sub["Date"].dt.strftime('%Y-%m')
             ms = sorted(df_b_sub["YM"].unique(), reverse=True)
             sm = st.selectbox("月選択", ms) if len(ms)>0 else None
+            
             if sm:
+                # ★ 選択された月をkeyに含めるため保存
+                key_suffix = str(sm)
+
                 df_b_sub = df_b_sub[df_b_sub["YM"] == sm]
                 df_p_sub["YM"] = df_p_sub["Date"].dt.strftime('%Y-%m')
                 df_p_sub = df_p_sub[df_p_sub["YM"] == sm]
                 def_ab = int(df_b_sub["日付"].nunique()); def_inn = def_ab
             else: df_b_sub = pd.DataFrame(); df_p_sub = pd.DataFrame()
-        else:
+        
+        else: # 直近3試合
             dates = sorted(df_b_sub["Date"].unique(), reverse=True)[:3]
             df_b_sub = df_b_sub[df_b_sub["Date"].isin(dates)]; df_p_sub = df_p_sub[df_p_sub["Date"].isin(dates)]
             def_ab = 3; def_inn = 3
+            key_suffix = "recent" # ★ 固定文字
 
         c_f1, c_f2 = st.columns(2)
-        min_ab = c_f1.number_input("規定打席", value=max(1, def_ab), min_value=1, key=f"ab_{period}")
-        min_inn = c_f2.number_input("規定投球回", value=max(1, def_inn), min_value=1, key=f"inn_{period}")
+        
+        # ★ key に key_suffix を追加することで、年度や月が変わるたびに新しいウィジェットとして初期値が再設定される
+        min_ab = c_f1.number_input("規定打席", value=max(1, def_ab), min_value=1, key=f"ab_{period}_{key_suffix}")
+        min_inn = c_f2.number_input("規定投球回", value=max(1, def_inn), min_value=1, key=f"inn_{period}_{key_suffix}")
+        
         st.divider()
 
         if not df_b_sub.empty:
             rank_b = get_ranking_df(df_b_sub, ["選手名"], agg_rules_b)
+            
+            # 1. 本来の「打席数 (PA)」を計算する
+            # ※ データにある項目を全て足してください（犠打、犠飛、打撃妨害などがあればそれも）
+            rank_b["Total_PA"] = rank_b["is_ab"] + rank_b["is_bb"] 
             rank_b["AVG"] = rank_b.apply(lambda x: x["is_hit"]/x["is_ab"] if x["is_ab"]>0 else 0, axis=1)
             # OPS計算（四死球を含む出塁率を使用）
             rank_b["OBP"] = (rank_b["is_hit"] + rank_b["is_bb"]) / (rank_b["is_ab"] + rank_b["is_bb"]) 
@@ -429,7 +450,7 @@ def show_personal_stats(df_batting, df_pitching):
             
             st.markdown("##### ⚔️ 打撃部門")
             r1, r2, r3 = st.columns(3)
-            with r1: show_top5("打率", rank_b[rank_b["is_ab"]>=min_ab], "AVG", "選手名", "AVG", format_float=True)
+            with r1: show_top5("打率", rank_b[rank_b["Total_PA"]>=min_ab], "AVG", "選手名", "AVG", format_float=True)
             with r2: show_top5("本塁打", rank_b, "is_hr", "選手名", "is_hr", suffix="本")
             with r3: show_top5("打点", rank_b, "打点", "選手名", "打点", suffix="点")
             

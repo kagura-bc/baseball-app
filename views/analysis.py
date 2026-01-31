@@ -440,7 +440,7 @@ def show_analysis_page(df_batting, df_pitching):
                 
                 # 打席数フィルタ
                 max_pa = int(stats["PA"].max()) if not stats.empty else 0
-                default_pa = min(10, max_pa)
+                default_pa = min(20, max_pa)
                 min_pa = st.slider("対象とする最低打席数", 0, max_pa, default_pa)
                 stats = stats[stats["PA"] >= min_pa]
 
