@@ -12,7 +12,7 @@ load_css() # CSS読み込み
 def check_password():
     """簡易ログイン機能"""
     password = st.sidebar.text_input("🔑 合言葉を入力", type="password")
-    if password == "admin_kagura":  # ※入力用パスワード
+    if password == "kagura":  # ※入力用パスワード
         return True
     return False
 
