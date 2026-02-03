@@ -136,17 +136,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 dec_p = c_d1.selectbox("投手", [""] + [local_fmt(p) for p in ALL_PLAYERS])
                 dec_t = c_d2.selectbox("内容", ["勝利", "敗戦", "セーブ", "ホールド"])
                 
-                # ボタン配置用のカラム
-                c_btn1, c_btn2 = st.columns(2)
+                submit_dec = st.form_submit_button("🏆 勝敗・セーブを確定して保存", type="primary", use_container_width=True)
                 
-                with c_btn1:
-                    # 現場で馴染みのある「公式記録」という表現に
-                    submit_dec = st.form_submit_button("🏆 公式記録を確定", use_container_width=True)
-                
-                with c_btn2:
-                    # LINE Notify終了に伴い、コピー用のレポートを生成するボタンに変更
-                    send_report = st.form_submit_button("📋 共有用レポートを作成", type="primary", use_container_width=True)
-
                 # --- A. 責任投手登録のロジック ---
                 if submit_dec:
                     if not dec_p:
@@ -161,41 +152,6 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             st.success(f"✅ {target_player} 選手の記録を「{dec_t}」で確定しました")
                         else:
                             st.warning("本日の登板記録が見つかりません。先に詳細入力を完了させてください。")
-
-            # --- B. レポート表示ロジック (Formの外に出すことでコピーしやすく) ---
-            if send_report:
-                if today_pitching_df.empty:
-                    st.error("本日の登板データがありません")
-                else:
-                    # 投手成績の集計
-                    p_summary = today_pitching_df.groupby("選手名").agg({
-                        "アウト数": "sum",
-                        "被安打": "sum",
-                        "失点": "sum",
-                        "自責点": "sum",
-                        "結果": lambda x: (x == "三振").sum() 
-                    }).reset_index()
-
-                    # メッセージ構築
-                    msg = f"【試合終了レポート】\n"
-                    msg += f"対戦: {opp_team}\n"
-                    msg += f"球場: {ground_name}\n"
-                    msg += "--------------------\n"
-                    msg += "◆投手成績\n"
-                    
-                    for _, row in p_summary.iterrows():
-                        inn_int = row['アウト数'] // 3
-                        inn_frac = row['アウト数'] % 3
-                        inn_str = f"{inn_int}.{inn_frac}" if inn_frac > 0 else f"{inn_int}"
-                        msg += f"・{row['選手名']}: {inn_str}回 被安{row['被安打']} 奪三{row['結果']} 失{row['失点']}\n"
-                    
-                    msg += "--------------------\n"
-                    msg += "※この内容をコピーしてLINEグループへ貼り付けてください。"
-
-                    # 画面に表示
-                    st.info("👇 下の枠内のテキストをコピーしてください")
-                    st.text_area("LINE共有用テキスト", value=msg, height=250)
-                    st.balloons() # 試合終了のお祝い演出
                     
         # ★★★ 新規追加: イニング別打席結果表示エリア ★★★
         st.write("")

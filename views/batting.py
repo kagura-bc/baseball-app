@@ -33,6 +33,13 @@ def local_fmt(name):
 # ==========================================
 def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order):
     conn = st.connection("gsheets", type=GSheetsConnection)
+    
+    # --- 【ここに追加】セッションステートの初期化 ---
+    if "saved_lineup" not in st.session_state:
+        st.session_state["saved_lineup"] = {}
+    if "persistent_bench" not in st.session_state:
+        st.session_state["persistent_bench"] = []
+    # ----------------------------------------------
     is_kagura_top = (kagura_order == "先攻 (表)")
 
     # フィルタリング (スコアボード表示用)
@@ -172,85 +179,98 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     st.error(f"保存エラー: {e}")
 
     # ---------------------------------------------------------
-    # B. 選手別まとめ入力モード
+    # B. まとめ入力モード (詳細不明・過去データ用)
     # ---------------------------------------------------------
-    elif input_mode == "選手別まとめ入力 (詳細不明・過去データ用)":                             
-        st.info("複数の選手を表形式で入力します。")
-        st.caption("※行を追加するには表の下（または右上）の「＋」を押してください。")
-
-        # --- 1. 選択肢の定義 ---
-        number_options = [i for i in range(21)]
+    elif input_mode == "選手別まとめ入力 (詳細不明・過去データ用)":
+        st.info("複数の選手を表形式で一括登録します。数値はプルダウンから選択してください。")
         
         input_cols = ["打順", "選手名", "守備", "打席数", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策出塁", "打点", "得点", "盗塁"]
-        initial_data = []
-        for i in range(1, 16):
-            initial_data.append([i, "", "他"] + [0]*13)
-        default_data = pd.DataFrame(initial_data, columns=input_cols)
+        number_options = list(range(21)) # 0〜20の選択肢
+        small_options = list(range(5))   # 0〜4の選択肢
+
+        if "bulk_df_state" not in st.session_state:
+            initial_data = [[i, "", "他"] + [0]*13 for i in range(1, 16)]
+            st.session_state["bulk_df_state"] = pd.DataFrame(initial_data, columns=input_cols)
         
         with st.form("bulk_batting_form"):
+            submitted_bulk = st.form_submit_button("🏆 全データを一括登録", type="primary", use_container_width=True)
+            
             edited_df = st.data_editor(
-                default_data, num_rows="dynamic", use_container_width=True,
+                st.session_state["bulk_df_state"], 
+                num_rows="dynamic", 
+                use_container_width=True,
                 column_config={
                     "選手名": st.column_config.SelectboxColumn("選手名", options=[""] + [local_fmt(p) for p in ALL_PLAYERS], width="medium"),
                     "守備": st.column_config.SelectboxColumn("守備", options=["投", "捕", "一", "二", "三", "遊", "左", "中", "右", "指", "控", "他"]),
+                    # 数値項目をプルダウン方式に設定
                     "打席数": st.column_config.SelectboxColumn("打席", options=number_options),
-                    "単打": st.column_config.SelectboxColumn("単", options=number_options),
-                    # ... (省略: 他のカラム設定は元のまま)
+                    "単打": st.column_config.SelectboxColumn("単", options=small_options),
+                    "二塁打": st.column_config.SelectboxColumn("二", options=small_options),
+                    "三塁打": st.column_config.SelectboxColumn("三", options=small_options),
+                    "本塁打": st.column_config.SelectboxColumn("本", options=small_options),
+                    "三振": st.column_config.SelectboxColumn("振", options=small_options),
+                    "四球": st.column_config.SelectboxColumn("四", options=small_options),
+                    "死球": st.column_config.SelectboxColumn("死", options=small_options),
+                    "犠打": st.column_config.SelectboxColumn("犠", options=small_options),
+                    "失策出塁": st.column_config.SelectboxColumn("失", options=small_options),
+                    "打点": st.column_config.SelectboxColumn("点", options=number_options),
+                    "得点": st.column_config.SelectboxColumn("得", options=small_options),
+                    "盗塁": st.column_config.SelectboxColumn("盗", options=small_options),
                 }
             )
-            
             bench_selection = st.multiselect("ベンチ入りメンバー", ALL_PLAYERS, format_func=local_fmt)
-            submitted_bulk = st.form_submit_button("全データを登録")
 
+            # --- まとめ入力の登録ロジック ---
             if submitted_bulk:
-                # (簡易化のためロジック省略: Bモードの登録処理は変更なし)
-                st.success("✅ データ登録完了")
-                st.rerun()
+                recs = []
+                # ベンチメンバーの登録
+                for b_raw in bench_selection:
+                    b_name = b_raw.split(" (")[0]
+                    recs.append({
+                        "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                        "イニング": "ベンチ", "選手名": b_name, "位置": "控", "結果": "ベンチ", "種別": "ベンチ"
+                    })
+                
+                # エディタの内容を1行ずつ処理
+                for _, row in edited_df.iterrows():
+                    raw_name = row["選手名"]
+                    if not raw_name: continue
+                    p_name = raw_name.split(" (")[0]
+                    
+                    base_rec = {
+                        "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                        "イニング": "まとめ入力", "選手名": p_name, "位置": row["守備"], "打順": row["打順"],
+                        "結果": "まとめ", "打点": row["打点"], "得点": row["得点"], "盗塁": row["盗塁"], "種別": "まとめ"
+                    }
+                    # その他の内訳カラムも追加
+                    for col in ["打席数", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策出塁"]:
+                        base_rec[col] = row[col]
+                    recs.append(base_rec)
+
+                if recs:
+                    try:
+                        updated_df = pd.concat([df_batting, pd.DataFrame(recs)], ignore_index=True)
+                        conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
+                        st.cache_data.clear()
+                        st.success(f"✅ {len(recs)}件のまとめデータを保存しました")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"保存エラー: {e}")
 
     # ---------------------------------------------------------
-    # C. 詳細入力モード (メイン機能)
+    # C. 詳細入力モード
     # ---------------------------------------------------------
     else:
-        # --- 0. セッションステートの初期化 ---
-        if "saved_lineup" not in st.session_state:
-            st.session_state["saved_lineup"] = {}
-        if "persistent_bench" not in st.session_state:
-            st.session_state["persistent_bench"] = []
-
-        # ★★★ 新規追加: スタメンから投手を検知してセッションに保存 ★★★
-        # saved_lineup (sp0, sp1...) または現在のWidget State (sp0, sp1...) を走査
-        detected_pitcher = None
-        for i in range(15):
-            # Widgetの値がまだsession_stateに入っていない初回描画時等はsaved_lineupを見る
-            pos_key = f"sp{i}"
-            name_key = f"sn{i}"
-            
-            # Widgetの現在の値があればそれを、なければ保存値を参照
-            p_pos = st.session_state.get(pos_key) or st.session_state["saved_lineup"].get(f"pos_{i}")
-            p_name = st.session_state.get(name_key) or st.session_state["saved_lineup"].get(f"name_{i}")
-            
-            if p_pos == "投" and p_name and p_name in ALL_PLAYERS:
-                detected_pitcher = p_name
-                break # 最初に見つかった投手を優先
-        
-        if detected_pitcher:
-            st.session_state["shared_starting_pitcher"] = detected_pitcher
-
-        # --- 1. データの前処理 ---
-        current_season_stats = {}
-        today_batting_df = pd.DataFrame()
-        
-        if not df_batting.empty:
-            df_batting_proc = df_batting.copy()
-            df_batting_proc["standard_date"] = pd.to_datetime(df_batting_proc["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
-            today_batting_df = df_batting_proc[df_batting_proc["standard_date"] == selected_date_str].copy()
-            
-            # (省略: 通算成績計算ロジック)
-
-        # --- 2. 統合登録ロジック ---
+        # (詳細入力モードの logic 部分)
         def submit_everything():
+            if "sn0" not in st.session_state: return # Guard
+
             new_records = []
             has_homerun = False
+            
+            # ステート更新
             st.session_state["persistent_bench"] = st.session_state.get("bench_selection_widget", [])
             for i in range(15):
                 st.session_state["saved_lineup"][f"pos_{i}"] = st.session_state.get(f"sp{i}")
@@ -265,10 +285,23 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 p_rbi = int(st.session_state.get(f"si{i}", 0))
 
                 if p_name:
-                    if is_play_mode:
-                        if p_res != "---":
-                            pass
-                    else:
+                    if is_play_mode and p_res != "---":
+                        # 打席結果の数値計算
+                        rbi_val = p_rbi
+                        run_val = 1 if p_res == "得点" else 0
+                        sb_val = 1 if p_res == "盗塁" else 0
+                        if p_res == "本塁打":
+                            has_homerun = True
+                            rbi_val += 1
+                            run_val = 1
+                        
+                        new_records.append({
+                            "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                            "イニング": st.session_state.get("current_inn_key", "1回"), "選手名": p_name, "位置": p_pos, "打順": i+1,
+                            "結果": p_res, "打点": rbi_val, "得点": run_val, "盗塁": sb_val, "種別": "打席"
+                        })
+                    elif not is_play_mode:
+                        # スタメン保存
                         new_records.append({
                             "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                             "イニング": "試合開始", "選手名": p_name, "位置": p_pos, "打順": i+1,
@@ -277,7 +310,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             if new_records:
                 try:
-                    conn.update(spreadsheet=SPREADSHEET_URL, data=pd.concat([df_batting, pd.DataFrame(new_records)], ignore_index=True))
+                    updated_df = pd.concat([df_batting, pd.DataFrame(new_records)], ignore_index=True)
+                    conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
                     st.cache_data.clear()
                     for i in range(15):
                         st.session_state[f"sr{i}"] = "---"
@@ -285,7 +319,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     if has_homerun: st.session_state["show_homerun_flg"] = True
                     st.success(f"✅ {len(new_records)}件のデータを保存しました")
                     import time
-                    time.sleep(1.0)
+                    time.sleep(1)
                     st.rerun()
                 except Exception as e:
                     st.error(f"保存エラー: {e}")
