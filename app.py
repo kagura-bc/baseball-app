@@ -13,7 +13,7 @@ ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static
 # ブラウザのタブ用（これは今のままでOKですが、URL指定も可能です）
 st.set_page_config(
     page_title="KAGURA 成績管理",
-    page_icon="static/icon-192.png",
+    page_icon=ICON_URL,
     layout="wide"
 )
 
