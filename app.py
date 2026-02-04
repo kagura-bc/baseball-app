@@ -20,12 +20,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-# --- ページ設定 ---
-st.set_page_config(
-    page_title="KAGUSTA", 
-    page_icon="kagusuta.png", # フォルダ名なしでファイル名だけにします
-    layout="wide"
-)
+
 load_css() # CSS読み込み
 
 def check_password():
