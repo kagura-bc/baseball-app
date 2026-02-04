@@ -5,6 +5,21 @@ from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
 # 各ページ（View）の読み込み
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
+# ブラウザのタブ用アイコン（favicon）の設定
+st.set_page_config(
+    page_title="KAGURA 成績管理",
+    page_icon="static/icon-192.png", # ここにアイコン画像を指定
+    layout="wide"
+)
+
+# ホーム画面アイコン用のHTMLを埋め込む
+st.markdown(
+    f"""
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    """,
+    unsafe_allow_html=True
+)
 # --- ページ設定 ---
 st.set_page_config(
     page_title="KAGUSTA", 
