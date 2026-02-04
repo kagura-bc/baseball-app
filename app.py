@@ -21,16 +21,7 @@ st.set_page_config(
 )
 
 # 3. HTMLインジェクションを「上書き」ではなく「新規追加」の形式にする
-st.markdown(
-    f"""
-    <head>
-        <link rel="apple-touch-icon" sizes="192x192" href="{ICON_URL}">
-        <link rel="icon" type="image/png" sizes="192x192" href="{ICON_URL}">
-        <link rel="shortcut icon" href="{ICON_URL}">
-    </head>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_html=True)
 
 load_css() # CSS読み込み
 
