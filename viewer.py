@@ -36,6 +36,7 @@ df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
 # --- ページ切り替え ---
+st.sidebar.image(ICON_URL, use_container_width=True)
 page = st.sidebar.radio("表示", [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析"])
 
 # --- 画面表示 ---
