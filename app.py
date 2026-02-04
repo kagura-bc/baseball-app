@@ -21,14 +21,10 @@ st.set_page_config(
 # manifest.jsonはパスを通すのが難しいため、まずはapple-touch-iconで強制指定します
 st.markdown(
     f"""
-    <style>
-    /* iOS/Androidのホーム画面用アイコン指定 */
-    link[rel="apple-touch-icon"] {{
-        content: url({ICON_URL});
-    }}
-    </style>
-    <link rel="apple-touch-icon" href="{ICON_URL}">
-    <link rel="icon" href="{ICON_URL}">
+    <head>
+        <link rel="icon" href="{ICON_URL}">
+        <link rel="apple-touch-icon" href="{ICON_URL}">
+    </head>
     """,
     unsafe_allow_html=True
 )
