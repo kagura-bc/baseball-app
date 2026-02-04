@@ -6,16 +6,12 @@ from utils.ui import load_css
 # 各ページ（View）の読み込み
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
 
-# GitHubのRaw URL（ご自身のリポジトリのものに書き換えてください）
-# 例: "https://raw.githubusercontent.com/your-name/your-repo/main/static/icon-192.png"
-# --- app.py の修正箇所 ---
-
 # 1. 新しいファイル名に変更し、末尾に ?v=2 をつける
 ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/kagura-logo.png?v=2"
 
 # 2. set_page_config の page_icon を URL にする
 st.set_page_config(
-    page_title="KAGURA 成績管理",
+    page_title="KAGUSTA",
     page_icon=ICON_URL,
     layout="wide"
 )

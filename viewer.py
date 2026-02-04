@@ -5,8 +5,20 @@ from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
 # 各ページ（View）の読み込み
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
+
 # --- ページ設定 ---
-st.set_page_config(page_title=f"{MY_TEAM} スコア管理システム", layout="wide")
+# 1. 新しいファイル名に変更し、末尾に ?v=2 をつける
+ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/kagura-logo.png?v=2"
+
+# 2. set_page_config の page_icon を URL にする
+st.set_page_config(
+    page_title="KAGUSTA",
+    page_icon=ICON_URL,
+    layout="wide"
+)
+
+# 3. HTMLインジェクションを「上書き」ではなく「新規追加」の形式にする
+st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_html=True)
 load_css() # CSS読み込み
 
 def check_password():
