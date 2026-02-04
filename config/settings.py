@@ -4,7 +4,7 @@
 MY_TEAM = "KAGURA"
 
 # スプレッドシート情報 (Secretsを使う場合は変更推奨)
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Dt74KFYNrdjTlQsMwjM0XsvepBnWHG3iBHQjOaE_t5E/edit?usp=sharing"
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Dt74KFYNrdjTlQsMwjM0XsvepBnWHG3iBHQjOaE_t5E/export?format=csv"
 
 # 選手データ (背番号マッピング)
 PLAYER_NUMBERS = {

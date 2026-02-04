@@ -44,7 +44,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     # フィルタリング (スコアボード表示用)
     today_batting_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
-    st.write("現在の列名一覧:", df_pitching.columns.tolist())
     today_pitching_df = df_pitching[df_pitching["日付"].astype(str) == selected_date_str]
 
     # 1. モード選択
