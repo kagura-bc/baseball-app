@@ -51,6 +51,8 @@ df_pitching = load_pitching_data()
 
 # --- サイドバー設定 (共通) ---
 st.sidebar.image(ICON_URL, use_container_width=True)
+st.sidebar.markdown("<h2 style='text-align: center;'>KAGURA</h2>", unsafe_allow_html=True)
+st.sidebar.divider() # 区切り線を入れてスッキリさせる
 st.sidebar.header("⚙️ 試合設定")
 
 match_category = st.sidebar.radio("試合区分", ["公式戦", "練習試合", "その他"], horizontal=True)
