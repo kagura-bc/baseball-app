@@ -5,18 +5,30 @@ from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
 # 各ページ（View）の読み込み
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
-# ブラウザのタブ用アイコン（favicon）の設定
+
+# GitHubのRaw URL（ご自身のリポジトリのものに書き換えてください）
+# 例: "https://raw.githubusercontent.com/your-name/your-repo/main/static/icon-192.png"
+ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/icon-192.png"
+
+# ブラウザのタブ用（これは今のままでOKですが、URL指定も可能です）
 st.set_page_config(
     page_title="KAGURA 成績管理",
-    page_icon="static/icon-192.png", # ここにアイコン画像を指定
+    page_icon="static/icon-192.png",
     layout="wide"
 )
 
 # ホーム画面アイコン用のHTMLを埋め込む
+# manifest.jsonはパスを通すのが難しいため、まずはapple-touch-iconで強制指定します
 st.markdown(
     f"""
-    <link rel="manifest" href="/manifest.json">
-    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <style>
+    /* iOS/Androidのホーム画面用アイコン指定 */
+    link[rel="apple-touch-icon"] {{
+        content: url({ICON_URL});
+    }}
+    </style>
+    <link rel="apple-touch-icon" href="{ICON_URL}">
+    <link rel="icon" href="{ICON_URL}">
     """,
     unsafe_allow_html=True
 )
