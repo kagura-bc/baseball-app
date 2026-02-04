@@ -8,22 +8,25 @@ from views import batting, pitching, team_stats, personal_stats, edit_data, anal
 
 # GitHubのRaw URL（ご自身のリポジトリのものに書き換えてください）
 # 例: "https://raw.githubusercontent.com/your-name/your-repo/main/static/icon-192.png"
-ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/icon-192.png"
+# --- app.py の修正箇所 ---
 
-# ブラウザのタブ用（これは今のままでOKですが、URL指定も可能です）
+# 1. 新しいファイル名に変更し、末尾に ?v=2 をつける
+ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/kagura-logo.png?v=2"
+
+# 2. set_page_config の page_icon を URL にする
 st.set_page_config(
     page_title="KAGURA 成績管理",
     page_icon=ICON_URL,
     layout="wide"
 )
 
-# ホーム画面アイコン用のHTMLを埋め込む
-# manifest.jsonはパスを通すのが難しいため、まずはapple-touch-iconで強制指定します
+# 3. HTMLインジェクションを「上書き」ではなく「新規追加」の形式にする
 st.markdown(
     f"""
     <head>
-        <link rel="icon" href="{ICON_URL}">
-        <link rel="apple-touch-icon" href="{ICON_URL}">
+        <link rel="apple-touch-icon" sizes="192x192" href="{ICON_URL}">
+        <link rel="icon" type="image/png" sizes="192x192" href="{ICON_URL}">
+        <link rel="shortcut icon" href="{ICON_URL}">
     </head>
     """,
     unsafe_allow_html=True
