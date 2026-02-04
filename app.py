@@ -6,7 +6,11 @@ from utils.ui import load_css
 # 各ページ（View）の読み込み
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
 # --- ページ設定 ---
-st.set_page_config(page_title=f"{MY_TEAM} スコア管理システム", layout="wide")
+st.set_page_config(
+    page_title="KAGUSTA", 
+    page_icon="kagusuta.png", # フォルダ名なしでファイル名だけにします
+    layout="wide"
+)
 load_css() # CSS読み込み
 
 def check_password():
