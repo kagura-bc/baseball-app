@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 4. Apple用アイコンの設定
+# 3. Apple用アイコンの設定
 st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_html=True)
 
 load_css() # CSS読み込み
