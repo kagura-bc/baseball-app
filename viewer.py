@@ -90,11 +90,19 @@ if not st.session_state["is_logged_in"]:
     show_login_screen()
     st.stop()
 
+# --- データ読み込み ---
 df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
-# --- ページ切り替え ---
+# --- サイドバー設定 (共通) ---
 st.sidebar.image(ICON_URL, use_container_width=True)
+
+# ログアウトボタン
+if st.sidebar.button("ログアウト", key="logout_btn"):
+    st.session_state["is_logged_in"] = False
+    st.rerun()
+
+# --- ページ切り替え ---
 page = st.sidebar.radio("表示", [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析"])
 
 # --- 画面表示 ---
