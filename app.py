@@ -66,13 +66,10 @@ def show_login_screen():
             border-right: 16px solid #333;
         "></div>
         ようこそ KAGUSTA へ！<br>
-        今日はどの成績を見ますか？
+        おーい！合言葉を忘れちまったか？
     </div>
 </div>
 """, unsafe_allow_html=True)
-        # ▲▲▲ 修正箇所終わり ▲▲▲
-
-        st.info("合言葉を入力して入場してください")
 
         # フォーム (keyをユニークなものに変更してエラー回避)
         with st.form("login_form_v3"):
