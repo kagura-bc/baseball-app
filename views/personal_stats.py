@@ -123,6 +123,12 @@ def show_personal_stats(df_batting, df_pitching):
     # ----------------------------------------------------
     with t_total:
         st.markdown("#### 📊 通算成績リスト")
+        
+        # 非表示にしたい選手名をリストで定義 
+        # ここに表示したくない選手名を入力してください
+        HIDDEN_PLAYERS_TOTAL = ["助っ人1", "助っ人2", "依田裕樹", "清水さん", "知見寺明司", "鮫田叶夢", "前島和貴", "濱瑠晟", 
+                                "にまさん", "中村卓歳", "小林高知", "堤はるか", "藤本隆之輔"] 
+
         years = sorted(list(set(df_batting["Year"].unique()) | set(df_pitching["Year"].unique())), reverse=True) if not df_batting.empty else []
         
         c1, c2 = st.columns(2)
@@ -131,6 +137,17 @@ def show_personal_stats(df_batting, df_pitching):
 
         df_b_tg = df_b_calc.copy()
         df_p_tg = df_p_calc.copy()
+
+        # ここでフィルタリング処理を実行 
+        if not df_b_tg.empty:
+            df_b_tg = df_b_tg[~df_b_tg["選手名"].isin(HIDDEN_PLAYERS_TOTAL)]
+        
+        if not df_p_tg.empty:
+            df_p_tg = df_p_tg[~df_p_tg["選手名"].isin(HIDDEN_PLAYERS_TOTAL)]
+
+        if target_year != "通算":
+            df_b_tg = df_b_tg[df_b_tg["Year"] == target_year]
+            df_p_tg = df_p_tg[df_p_tg["Year"] == target_year]
 
         if target_year != "通算":
             df_b_tg = df_b_tg[df_b_tg["Year"] == target_year]
