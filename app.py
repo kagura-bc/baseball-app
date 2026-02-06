@@ -9,7 +9,7 @@ from views import batting, pitching, team_stats, personal_stats, edit_data, anal
 # 1. GitHub上の実際のファイル名 (logo-192.png) に合わせる
 ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/logo-192.png?v=3"
 
-# 2. set_page_config の設定
+# 2. set_page_config の設定 (必ず一番最初に記述)
 st.set_page_config(
     page_title="KAGUSTA",
     page_icon=ICON_URL,
@@ -21,16 +21,51 @@ st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_htm
 
 load_css() # CSS読み込み
 
-def check_password():
-    """簡易ログイン機能"""
-    password = st.sidebar.text_input("🔑 合言葉を入力", type="password")
-    if password == "kagura":  # ※入力用パスワード
-        return True
-    return False
+# ==========================================
+# 🔐 ログイン機能の実装
+# ==========================================
 
-if not check_password():
-    st.sidebar.error("ログインが必要です")
-    st.stop() # ここで処理を強制終了
+# セッションステートの初期化（ログイン状態を管理）
+if "is_logged_in" not in st.session_state:
+    st.session_state["is_logged_in"] = False
+
+def show_login_screen():
+    """メイン画面を使った大きなログイン画面"""
+    # スマホで見やすいよう、左右に少し余白を設けて中央寄せにする
+    _, center, _ = st.columns([1, 8, 1])
+
+    with center:
+        st.write("") 
+        st.write("") 
+        
+        # マスコット画像（アイコン）を大きく表示
+        st.image(ICON_URL, width=180)
+        
+        st.markdown("### 選手専用ページ")
+        st.info("合言葉を入力して入場してください")
+
+        # フォームを使用（スマホで「Enter」キー送信ができるようになります）
+        with st.form("login_form"):
+            password = st.text_input("🔑 合言葉", type="password")
+            submitted = st.form_submit_button("入場する", use_container_width=True)
+            
+            if submitted:
+                if password == "kagura":  # ※パスワード判定
+                    st.session_state["is_logged_in"] = True
+                    st.success("ログイン成功！")
+                    st.rerun()  # 画面をリロードしてメインアプリへ
+                else:
+                    st.error("合言葉が違います")
+
+# --- ログイン判定 ---
+if not st.session_state["is_logged_in"]:
+    # 未ログイン時はログイン画面を表示して終了
+    show_login_screen()
+    st.stop()
+
+# ==========================================
+# 📱 ここから下がログイン後のメインアプリ
+# ==========================================
 
 # --- データ読み込み ---
 df_batting = load_batting_data()
@@ -38,6 +73,12 @@ df_pitching = load_pitching_data()
 
 # --- サイドバー設定 (共通) ---
 st.sidebar.image(ICON_URL, use_container_width=True)
+
+# ログアウトボタン（任意で追加）
+if st.sidebar.button("ログアウト", key="logout_btn"):
+    st.session_state["is_logged_in"] = False
+    st.rerun()
+
 st.sidebar.header("⚙️ 試合設定")
 
 match_category = st.sidebar.radio("試合区分", ["公式戦", "練習試合", "その他"], horizontal=True)
