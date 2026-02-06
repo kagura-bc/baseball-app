@@ -86,7 +86,7 @@ def show_login_screen():
 
 # --- ログイン判定 ---
 if not st.session_state["is_logged_in"]:
-    # 未ログイン時はログイン画面を表示して終了
+# 未ログイン時はログイン画面を表示して終了
     show_login_screen()
     st.stop()
 
