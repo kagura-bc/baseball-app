@@ -39,7 +39,7 @@ def show_login_screen():
         st.write("")
         st.write("")
         
-        # ▼▼▼ 修正箇所: HTMLを左端に詰めて記述します ▼▼▼
+        # HTMLを左端に詰めて記述します 
         # コードの見栄えは悪いですが、こうしないとコードブロックとして認識されてしまいます
         st.markdown(f"""
 <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
