@@ -30,30 +30,60 @@ if "is_logged_in" not in st.session_state:
     st.session_state["is_logged_in"] = False
 
 def show_login_screen():
-    """メイン画面を使った大きなログイン画面"""
-    # スマホで見やすいよう、左右に少し余白を設けて中央寄せにする
-    _, center, _ = st.columns([1, 8, 1])
+    """メイン画面を使った大きなログイン画面（吹き出し付き）"""
+    
+    # 画面中央寄せのためのカラム作成
+    _, center, _ = st.columns([1, 10, 1])
 
     with center:
-        st.write("") 
-        st.write("") 
+        st.write("")
+        st.write("")
         
-        # マスコット画像（アイコン）を大きく表示
-        st.image(ICON_URL, width=180)
-        
-        st.markdown("### 選手専用ページ")
+        # ▼▼▼ 修正箇所: HTMLを左端に詰めて記述します ▼▼▼
+        # コードの見栄えは悪いですが、こうしないとコードブロックとして認識されてしまいます
+        st.markdown(f"""
+<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+    <img src="{ICON_URL}" style="width: 100px; height: 100px; object-fit: contain; margin-right: 15px;">
+    <div style="
+        position: relative;
+        background: #ffffff;
+        border: 3px solid #333;
+        border-radius: 15px;
+        padding: 15px;
+        color: #333;
+        font-weight: bold;
+        box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+        max-width: 250px;
+    ">
+        <div style="
+            position: absolute;
+            left: -16px;
+            top: 25px;
+            width: 0;
+            height: 0;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent; 
+            border-right: 16px solid #333;
+        "></div>
+        ようこそ KAGUSTA へ！<br>
+        今日はどの成績を見ますか？
+    </div>
+</div>
+""", unsafe_allow_html=True)
+        # ▲▲▲ 修正箇所終わり ▲▲▲
+
         st.info("合言葉を入力して入場してください")
 
-        # フォームを使用（スマホで「Enter」キー送信ができるようになります）
-        with st.form("login_form"):
+        # フォーム (keyをユニークなものに変更してエラー回避)
+        with st.form("login_form_v3"):
             password = st.text_input("🔑 合言葉", type="password")
             submitted = st.form_submit_button("入場する", use_container_width=True)
             
             if submitted:
-                if password == "kagura":  # ※パスワード判定
+                if password == "kagura":
                     st.session_state["is_logged_in"] = True
                     st.success("ログイン成功！")
-                    st.rerun()  # 画面をリロードしてメインアプリへ
+                    st.rerun()
                 else:
                     st.error("合言葉が違います")
 
@@ -74,7 +104,7 @@ df_pitching = load_pitching_data()
 # --- サイドバー設定 (共通) ---
 st.sidebar.image(ICON_URL, use_container_width=True)
 
-# ログアウトボタン（任意で追加）
+# ログアウトボタン
 if st.sidebar.button("ログアウト", key="logout_btn"):
     st.session_state["is_logged_in"] = False
     st.rerun()
