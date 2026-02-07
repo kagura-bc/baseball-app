@@ -182,7 +182,7 @@ def show_team_stats(df_batting, df_pitching):
     m4.metric("引分", f"{draws}")
     m5.metric("勝率", f"{win_pct:.3f}")
 
-    st.markdown("#####   ⚾   攻撃スタッツ")
+    st.markdown("#####   ⚔️   攻撃スタッツ")
     a1, a2, a3, a4 = st.columns(4)
     a1.metric("チーム打率", f"{team_avg:.3f}")
     a2.metric("平均得点", f"{runs_per_game:.2f}", delta=f"総: {int(total_score)}")
