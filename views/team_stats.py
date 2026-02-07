@@ -182,7 +182,7 @@ def show_team_stats(df_batting, df_pitching):
     m4.metric("引分", f"{draws}")
     m5.metric("勝率", f"{win_pct:.3f}")
 
-    st.markdown("---")
+    st.markdown("#####   ⚾   攻撃スタッツ")
     a1, a2, a3, a4 = st.columns(4)
     a1.metric("チーム打率", f"{team_avg:.3f}")
     a2.metric("平均得点", f"{runs_per_game:.2f}", delta=f"総: {int(total_score)}")
@@ -190,7 +190,7 @@ def show_team_stats(df_batting, df_pitching):
     a4.metric("盗塁数", f"{int(total_sb)} 個")
 
     st.markdown("#####   🛡️   守備スタッツ")
-    d1, d2, d3 = st.columns(3)
+    d1, d2, d3 = st.columns(3)ｓ
     d1.metric("チーム防御率", f"{team_era:.2f}")
     d2.metric("平均失点", f"{runs_allowed_per_game:.2f}", delta=f"総: {int(total_lost)}", delta_color="inverse")
     d3.metric("得失点差", f"{int(total_score - total_lost):+d}")

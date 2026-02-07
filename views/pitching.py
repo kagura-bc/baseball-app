@@ -177,12 +177,16 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             b_idx = row.get("打順")
                             if pd.isna(b_idx) and ":" in str(row["種別"]):
                                 b_idx = row["種別"].split(":")[1].replace("番", "")
+
+                            # ★★★ ここで余計な文字（打者、番）を消して数字だけにする ★★★
+                            b_idx_str = str(b_idx) # 文字列に変換
+                            b_idx_clean = b_idx_str.replace("打者", "").replace("番", "")
                             
                             p_name = local_fmt(row["選手名"])
                             res_text = f"{row['結果']}({row['処理野手']})" if row['処理野手'] else row['結果']
                             
                             display_items.append({
-                                "打順": f"{b_idx}番",
+                                "打順": f"{b_idx_clean}番打者", # ← 作成した「b_idx_clean」を使ってください
                                 "投手": p_name,
                                 "結果": res_text
                             })
