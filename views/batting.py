@@ -95,7 +95,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     # その打順の最初のデータを取得
                     first_row = rows.iloc[0]
                     saved_name = first_row["選手名"]
-                    saved_pos = first_row.get("守備", "") # カラムがない場合に備えてget
+                    saved_pos = first_row.get("位置", "") # カラムがない場合に備えてget
                     
                     # 画面の入力欄(session_state)にセット
                     st.session_state[f"sn{i}"] = saved_name
