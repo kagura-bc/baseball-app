@@ -33,45 +33,85 @@ def local_fmt(name):
 # ==========================================
 def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order):
     conn = st.connection("gsheets", type=GSheetsConnection)
+
+    # ==========================================
+    # 1. 日付変更時のリセット処理 & 初期化
+    # ==========================================
     
-    # --- 【ここに追加】セッションステートの初期化 ---
+    # 初回アクセス時またはリロード時のための初期値設定
+    if "last_selected_date" not in st.session_state:
+        # まだ記録がない場合は、現在の選択日付をセット（リセットは走らせない）
+        st.session_state["last_selected_date"] = selected_date_str
+    
+    # 日付が変更されたかどうかを判定
+    date_changed = (st.session_state["last_selected_date"] != selected_date_str)
+    
+    if date_changed:
+        # 日付が変わった場合のみ、入力欄と一時保存データをクリア
+        keys_to_clear = [f"sn{i}" for i in range(15)] + \
+                        [f"sp{i}" for i in range(15)] + \
+                        ["shared_starting_pitcher"]
+        
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        
+        # 保存用変数もリセット
+        st.session_state["saved_lineup"] = {}
+        st.session_state["persistent_bench"] = []
+        
+        # 最後に「現在の日付」を記憶
+        st.session_state["last_selected_date"] = selected_date_str
+        # ※ここでは st.rerun() をせず、そのまま下の読み込み処理へ進みます
+
+    # セッションステート変数の初期化（未定義の場合）
     if "saved_lineup" not in st.session_state:
         st.session_state["saved_lineup"] = {}
     if "persistent_bench" not in st.session_state:
         st.session_state["persistent_bench"] = []
-    # ----------------------------------------------
-    is_kagura_top = (kagura_order == "先攻 (表)")
 
-    # フィルタリング (スコアボード表示用)
+    # ==========================================
+    # 2. データのフィルタリング & 読み込み
+    # ==========================================
+    
+    is_kagura_top = (kagura_order == "先攻 (表)")
+    
+    # 選択された日付のデータを取得
     today_batting_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
     today_pitching_df = df_pitching[df_pitching["日付"].astype(str) == selected_date_str]
 
+    # ★★★ 自動読み込み処理 ★★★
+    # 「入力欄が空(sn0なし)」かつ「その日のデータが存在する」場合にデータを復元
+    # ※日付変更直後は上でクリアされているため、ここが実行されます
     if "sn0" not in st.session_state and not today_batting_df.empty:
         try:
-            # 1番〜15番までループ
             for i in range(15):
                 target_order = i + 1
-                # その打順のデータが含まれる行を抽出
-                rows = today_batting_df[today_batting_df["打順"] == target_order]
+                # 打順(数値)でデータを検索
+                # errors='coerce'で数値変換できないものはNaNにして無視して比較
+                rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
                 
                 if not rows.empty:
-                    # その打順で一番最初に記録された行を「スタメン」とみなして取得
+                    # その打順の最初のデータを取得
                     first_row = rows.iloc[0]
-                    
                     saved_name = first_row["選手名"]
-                    saved_pos = first_row["守備"] 
+                    saved_pos = first_row.get("守備", "") # カラムがない場合に備えてget
                     
-                    # セッションステートに値をセット
+                    # 画面の入力欄(session_state)にセット
                     st.session_state[f"sn{i}"] = saved_name
                     st.session_state[f"sp{i}"] = saved_pos
                     
-                    # 投手の共有設定も復元
-                    if saved_pos == "投":
+                    # 投手の連携用データもセット
+                    if saved_pos == "投" and saved_name:
                          st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
                          
         except Exception as e:
-            # エラーが出てもアプリが止まらないようにする
-            print(f"復元エラー: {e}")
+            # エラー時はコンソールにのみ出力し、アプリは止めない
+            print(f"Data Loading Error: {e}")
+
+    # ==========================================
+    # 3. 画面表示 (モード選択など)
+    # ==========================================
 
     # 1. モード選択
     st.markdown("### 📝 入力モード")
