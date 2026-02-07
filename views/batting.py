@@ -46,6 +46,33 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     today_batting_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
     today_pitching_df = df_pitching[df_pitching["日付"].astype(str) == selected_date_str]
 
+    if "sn0" not in st.session_state and not today_batting_df.empty:
+        try:
+            # 1番〜15番までループ
+            for i in range(15):
+                target_order = i + 1
+                # その打順のデータが含まれる行を抽出
+                rows = today_batting_df[today_batting_df["打順"] == target_order]
+                
+                if not rows.empty:
+                    # その打順で一番最初に記録された行を「スタメン」とみなして取得
+                    first_row = rows.iloc[0]
+                    
+                    saved_name = first_row["選手名"]
+                    saved_pos = first_row["守備"] 
+                    
+                    # セッションステートに値をセット
+                    st.session_state[f"sn{i}"] = saved_name
+                    st.session_state[f"sp{i}"] = saved_pos
+                    
+                    # 投手の共有設定も復元
+                    if saved_pos == "投":
+                         st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
+                         
+        except Exception as e:
+            # エラーが出てもアプリが止まらないようにする
+            print(f"復元エラー: {e}")
+
     # 1. モード選択
     st.markdown("### 📝 入力モード")
     input_mode = st.radio(
@@ -281,7 +308,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     # 名前のみを抽出 (例: "山田 (11)" -> "山田") 
                     # ※受け取り側のpitching.pyが部分一致("in")で判定しているため、そのままでも動きますが、念のため
                     st.session_state["shared_starting_pitcher"] = name_chk.split(" (")[0]
-                    
+
             for i in range(15):
                 st.session_state["saved_lineup"][f"pos_{i}"] = st.session_state.get(f"sp{i}")
                 st.session_state["saved_lineup"][f"name_{i}"] = st.session_state.get(f"sn{i}")
