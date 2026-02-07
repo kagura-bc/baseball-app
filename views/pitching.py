@@ -188,7 +188,13 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             })
                         
                         # 横長のエクセル風テーブルに変換
-                        res_df = pd.DataFrame(display_items).set_index("打順").T
+                        # set_indexを行わず、そのまま転置(.T)して重複エラーを回避します
+                        res_df = pd.DataFrame(display_items).T
+                        
+                        # カラム名を「1人目」「2人目」...のように連番にして整えます
+                        if not res_df.empty:
+                            res_df.columns = [f"{i+1}人目" for i in range(len(res_df.columns))]
+                        
                         st.dataframe(res_df, use_container_width=True)
             else:
                 st.caption("詳細データはまだありません。")
