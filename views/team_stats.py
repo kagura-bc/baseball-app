@@ -190,7 +190,7 @@ def show_team_stats(df_batting, df_pitching):
     a4.metric("盗塁数", f"{int(total_sb)} 個")
 
     st.markdown("#####   🛡️   守備スタッツ")
-    d1, d2, d3 = st.columns(3)ｓ
+    d1, d2, d3 = st.columns(3)
     d1.metric("チーム防御率", f"{team_era:.2f}")
     d2.metric("平均失点", f"{runs_allowed_per_game:.2f}", delta=f"総: {int(total_lost)}", delta_color="inverse")
     d3.metric("得失点差", f"{int(total_score - total_lost):+d}")
