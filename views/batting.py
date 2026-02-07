@@ -272,6 +272,16 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             # ステート更新
             st.session_state["persistent_bench"] = st.session_state.get("bench_selection_widget", [])
+
+            # スタメンの中から「投」を探して共有用ステートに保存
+            for i in range(15):
+                pos_chk = st.session_state.get(f"sp{i}")
+                name_chk = st.session_state.get(f"sn{i}")
+                if pos_chk == "投" and name_chk:
+                    # 名前のみを抽出 (例: "山田 (11)" -> "山田") 
+                    # ※受け取り側のpitching.pyが部分一致("in")で判定しているため、そのままでも動きますが、念のため
+                    st.session_state["shared_starting_pitcher"] = name_chk.split(" (")[0]
+                    
             for i in range(15):
                 st.session_state["saved_lineup"][f"pos_{i}"] = st.session_state.get(f"sp{i}")
                 st.session_state["saved_lineup"][f"name_{i}"] = st.session_state.get(f"sn{i}")
