@@ -491,6 +491,7 @@ def show_personal_stats(df_batting, df_pitching):
             rank_p["WHIP"] = rank_p.apply(lambda x: (x["total_bb"]+x["被安打"])/x["Innings"] if x["Innings"]>0 else 99.99, axis=1)
 
             st.markdown("##### 🛡️ 投手部門")
+            st.caption("※ WHIP: (被安打 + 与四死球) ÷ 投球回。1イニングあたりに出した走者の数。一般に1.20未満ならエース級、1.00未満なら驚異的と言われます。")
             p1, p2, p3, p4 = st.columns(4)
             with p1: show_top5("防御率", rank_p[rank_p["Innings"]>=min_inn], "ERA", "選手名", "ERA", ascending=True, format_float=True)
             with p2: show_top5("WHIP", rank_p[rank_p["Innings"]>=min_inn], "WHIP", "選手名", "WHIP", ascending=True, format_float=True)
