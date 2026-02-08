@@ -40,29 +40,33 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     # 初回アクセス時またはリロード時のための初期値設定
     if "last_selected_date" not in st.session_state:
-        # まだ記録がない場合は、現在の選択日付をセット（リセットは走らせない）
         st.session_state["last_selected_date"] = selected_date_str
     
     # 日付が変更されたかどうかを判定
     date_changed = (st.session_state["last_selected_date"] != selected_date_str)
     
     if date_changed:
-        # 日付が変わった場合のみ、入力欄と一時保存データをクリア
-        keys_to_clear = [f"sn{i}" for i in range(15)] + \
-                        [f"sp{i}" for i in range(15)] + \
-                        ["shared_starting_pitcher"]
-        
-        for key in keys_to_clear:
-            if key in st.session_state:
+        # 1. まず現在のセッション状態を完全にクリア
+        all_keys = list(st.session_state.keys())
+        target_prefixes = ["sn", "sp", "sr", "si"]
+        for key in all_keys:
+            if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
         
-        # 保存用変数もリセット
-        st.session_state["saved_lineup"] = {}
-        st.session_state["persistent_bench"] = []
+        # 2. 選択された日付のデータをチェック
+        temp_today_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
         
-        # 最後に「現在の日付」を記憶
+        # 3. データが「存在しない」場合のみ、明示的に空をセットして残像を防ぐ
+        if temp_today_df.empty:
+            for i in range(15):
+                st.session_state[f"sn{i}"] = ""
+                st.session_state[f"sp{i}"] = "他"
+            st.session_state["saved_lineup"] = {}
+            st.session_state["persistent_bench"] = []
+        
+        # 4. 管理フラグを更新してリラン
         st.session_state["last_selected_date"] = selected_date_str
-        # ※ここでは st.rerun() をせず、そのまま下の読み込み処理へ進みます
+        st.rerun()
 
     # セッションステート変数の初期化（未定義の場合）
     if "saved_lineup" not in st.session_state:
@@ -82,20 +86,18 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     # ★★★ 自動読み込み処理 ★★★
     # 「入力欄が空(sn0なし)」かつ「その日のデータが存在する」場合にデータを復元
-    # ※日付変更直後は上でクリアされているため、ここが実行されます
+    # ※日付変更直後は上でクリアされているため、データがあればここが実行されます
     if "sn0" not in st.session_state and not today_batting_df.empty:
         try:
             for i in range(15):
                 target_order = i + 1
-                # 打順(数値)でデータを検索
-                # errors='coerce'で数値変換できないものはNaNにして無視して比較
                 rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
                 
                 if not rows.empty:
                     # その打順の最初のデータを取得
                     first_row = rows.iloc[0]
                     saved_name = first_row["選手名"]
-                    saved_pos = first_row.get("位置", "") # カラムがない場合に備えてget
+                    saved_pos = first_row.get("位置", "")
                     
                     # 画面の入力欄(session_state)にセット
                     st.session_state[f"sn{i}"] = saved_name
@@ -106,7 +108,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                          st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
                          
         except Exception as e:
-            # エラー時はコンソールにのみ出力し、アプリは止めない
             print(f"Data Loading Error: {e}")
 
     # ==========================================
