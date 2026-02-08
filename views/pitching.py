@@ -122,8 +122,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             # --- 下段：具体的な成績入力 ---
             st.divider()
 
-            # カラム定義：打球方向（c_pos）を追加し、合計5カラムにします
-            c_res, target_fielder_pos, c_np, c_run, c_er = st.columns([2, 1.2, 1, 1, 1])
+            # カラム定義：打球方向（c_pos）を追加し、合計4カラムにします
+            c_res, target_fielder_pos, c_run, c_er = st.columns(4)
             
             with c_res:
                 p_res = st.selectbox("結果", ["凡退", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", "失策", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"], key="p_det_res")
@@ -132,8 +132,6 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 # 🟡 ここで target_fielder_pos を定義します
                 target_fielder_pos = st.selectbox("打球方向", ["", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="p_det_pos")
                 
-            with c_np:
-                p_np = st.number_input("球数", 0, 20, 1, key="p_det_np")
             with c_run:
                 p_run = st.number_input("失点", 0, 4, 0, key="p_det_run")
             with c_er:
@@ -152,7 +150,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
 ・打撃妨害での出塁
 ・「エラーがなければ3アウトでチェンジだった」後の失点"""
                 )
-
+            
             submit_detail = st.form_submit_button("登録実行", type="primary", use_container_width=True)
 
         # 4. 登録実行処理
