@@ -22,7 +22,6 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     
     scoreboard_df = today_batting_df[today_batting_df["イニング"] != "まとめ入力"] if not today_batting_df.empty else today_batting_df
     render_scoreboard(scoreboard_df, today_pitching_df, selected_date_str, match_type, ground_name, opp_team, is_kagura_top)
-    st.divider()
 
     # ---------------------------------------------------------
     # A. 詳細入力モード
@@ -38,6 +37,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             for k in keys_to_reset:
                 if k in st.session_state: del st.session_state[k]
             st.session_state["last_p_date"] = selected_date_str
+
 
         # 1. セッションステートの初期化
         if "opp_batter_index" not in st.session_state: st.session_state["opp_batter_index"] = 1
@@ -123,36 +123,35 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             # --- 下段：具体的な成績入力 ---
             st.divider()
 
-            # カラム定義（c_er をここで定義するので NameError を防げます）
-            c_res, c_np, c_run, c_er = st.columns([2, 1, 1, 1])
+            # カラム定義：打球方向（c_pos）を追加し、合計5カラムにします
+            c_res, c_pos, c_np, c_run, c_er = st.columns([2, 1.2, 1, 1, 1])
             
             with c_res:
                 p_res = st.selectbox("結果", ["三振", "凡退", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", "失策", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"], key="p_det_res")
+            
+            with c_pos:
+                # 🟡 ここで target_fielder_pos を定義します
+                target_fielder_pos = st.selectbox("打球方向", ["", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="p_det_pos")
+                
             with c_np:
                 p_np = st.number_input("球数", 0, 20, 1, key="p_det_np")
             with c_run:
                 p_run = st.number_input("失点", 0, 4, 0, key="p_det_run")
             with c_er:
-                # 解説をすべて help（ポップアップ）に移動
                 p_er = st.number_input(
-                    "自責", 
-                    0, 4, 0, 
-                    key="p_det_er", 
+                    "自責", 0, 4, 0, key="p_det_er", 
                     help="""【自責点(ER)の判定ガイド】
-        ミスがないと仮定して、投手の責任で取られた点数か判断します。
+ミスがないと仮定して、投手の責任で取られた点数か判断します。
 
-        ✅ 自責点になる (YES)
-        ・安打、四死球での出塁
-        ・盗塁、暴投（WP）での進塁
-        ・ミスがなければ生還していた場合
+✅ 自責点になる (YES)
+・安打、四死球での出塁
+・盗塁、暴投（WP）での進塁
+・ミスがなければ生還していた場合
 
-        ❌ 自責にならない (NO)
-        ・エラー（失策）、パスボール（PB）
-        ・打撃妨害での出塁
-        ・「エラーがなければ3アウトでチェンジだった」後の失点
-
-        💡 判定のコツ：
-        「野手のミスが1つもなかったら、このランナーはホームに帰れたか？」で考えます。"""
+❌ 自責にならない (NO)
+・エラー（失策）、パスボール（PB）
+・打撃妨害での出塁
+・「エラーがなければ3アウトでチェンジだった」後の失点"""
                 )
 
             submit_detail = st.form_submit_button("登録実行", type="primary", use_container_width=True)
@@ -162,8 +161,10 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             input_name = target_pitcher_disp if target_pitcher_disp else st.session_state.get("shared_starting_pitcher", "")
             if not input_name: 
                 st.error("⚠️ 投手を選択してください")
-            elif p_res == "本塁打" and p_runs == 0: 
+            # 🟡 p_runs を p_run に修正
+            elif p_res == "本塁打" and p_run == 0: 
                 st.error("⚠️ 本塁打は失点1以上必須")
+            # 🟡 target_fielder_pos のチェックがこれで通るようになります
             elif p_res in ["凡退", "失策", "併殺打", "犠打", "野選"] and target_fielder_pos == "": 
                 st.error("⚠️ 打球方向を選択してください")
             else:
@@ -180,13 +181,13 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             break
 
                 add_outs = 2 if p_res == "併殺打" else (1 if p_res in ["三振", "凡退", "犠打", "犠飛", "野選"] else 0)
-                add_hits = 1 if p_res in ["安打", "本塁打"] else 0
+                add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0
                 batter_idx_str = f"{st.session_state['opp_batter_index']}"
 
                 rec = {
                     "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                     "イニング": current_inn, "選手名": target_player, "位置": target_pos, "結果": p_res, 
-                    "失点": p_runs, "自責点": p_er, "勝敗": "ー", "球数": 0, "被安打": add_hits, 
+                    "失点": p_run, "自責点": p_er, "勝敗": "ー", "球数": p_np, "被安打": add_hits, 
                     "アウト数": add_outs, "処理野手": fielder_display, "種別": f"詳細:{batter_idx_str}番打者"
                 }
                 
