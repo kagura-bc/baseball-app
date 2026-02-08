@@ -81,6 +81,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
 
         # 3. 入力フォームエリア
         with st.form(key='score_input_form', clear_on_submit=True):
+            # --- 上段：イニングとアウトカウント表示 ---
             c_top1, c_top2 = st.columns([1, 1])
             with c_top1:
                 inn_options = [f"{i}回" for i in range(1, 10)] + ["延長"]
@@ -97,6 +98,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     current_outs_db = (outs_1 + outs_2) % 3
                 st.markdown(render_out_indicator_3(current_outs_db), unsafe_allow_html=True)
 
+            # --- 中段：打順と投手選択 ---
             c_mid1, c_mid2, c_mid3 = st.columns([1.2, 1.2, 2.5])
             with c_mid1: 
                 st.session_state["opp_batter_count"] = st.number_input("相手打順人数", 1, 20, value=st.session_state["opp_batter_count"])
@@ -114,15 +116,44 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             break
                 target_pitcher_disp = st.selectbox("登板投手", pitcher_list_opts, index=default_pitcher_idx)
                 
-                if target_pitcher_disp in current_season_pitching:
+                # 投手成績のクイック表示
+                if "current_season_pitching" in locals() and target_pitcher_disp in current_season_pitching:
                     st.markdown(f"<div style='font-size:14px; color:#1e3a8a;'>{current_season_pitching[target_pitcher_disp]}</div>", unsafe_allow_html=True)
 
+            # --- 下段：具体的な成績入力 ---
             st.divider()
-            c_res, c_fld, c_run, c_er = st.columns([1.5, 1.2, 0.8, 0.8])
-            p_res = c_res.selectbox("打席結果", ["凡退", "三振", "安打", "本塁打", "四球", "死球", "犠打", "失策", "併殺打", "野選"], key="p_det_res")
-            target_fielder_pos = c_fld.selectbox("打球方向 / 処理野手", [""] + ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="p_det_fielder")
-            p_runs = c_run.number_input("失点", min_value=0, step=1, key="p_det_r")
-            p_er = c_er.number_input("自責", min_value=0, step=1, key="p_det_er")
+
+            # カラム定義（c_er をここで定義するので NameError を防げます）
+            c_res, c_np, c_run, c_er = st.columns([2, 1, 1, 1])
+            
+            with c_res:
+                p_res = st.selectbox("結果", ["三振", "凡退", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", "失策", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"], key="p_det_res")
+            with c_np:
+                p_np = st.number_input("球数", 0, 20, 1, key="p_det_np")
+            with c_run:
+                p_run = st.number_input("失点", 0, 4, 0, key="p_det_run")
+            with c_er:
+                # 解説をすべて help（ポップアップ）に移動
+                p_er = st.number_input(
+                    "自責", 
+                    0, 4, 0, 
+                    key="p_det_er", 
+                    help="""【自責点(ER)の判定ガイド】
+        ミスがないと仮定して、投手の責任で取られた点数か判断します。
+
+        ✅ 自責点になる (YES)
+        ・安打、四死球での出塁
+        ・盗塁、暴投（WP）での進塁
+        ・ミスがなければ生還していた場合
+
+        ❌ 自責にならない (NO)
+        ・エラー（失策）、パスボール（PB）
+        ・打撃妨害での出塁
+        ・「エラーがなければ3アウトでチェンジだった」後の失点
+
+        💡 判定のコツ：
+        「野手のミスが1つもなかったら、このランナーはホームに帰れたか？」で考えます。"""
+                )
 
             submit_detail = st.form_submit_button("登録実行", type="primary", use_container_width=True)
 
