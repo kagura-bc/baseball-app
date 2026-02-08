@@ -93,9 +93,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 current_outs_db = 0
                 if not today_pitching_df.empty:
                     p_inn_df = today_pitching_df[today_pitching_df["イニング"] == current_inn]
-                    outs_1 = len(p_inn_df[p_inn_df["結果"].isin(["三振", "凡退", "犠打", "犠飛", "凡打"])])
-                    outs_2 = len(p_inn_df[p_inn_df["結果"] == "併殺打"]) * 2
-                    current_outs_db = (outs_1 + outs_2) % 3
+                    outs = len(p_inn_df[p_inn_df["結果"].isin(["三振", "凡退", "犠打", "犠飛", "併殺打"])])
+                    current_outs_db = (outs) % 3
                 st.markdown(render_out_indicator_3(current_outs_db), unsafe_allow_html=True)
 
             # --- 中段：打順と投手選択 ---
@@ -124,12 +123,12 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             st.divider()
 
             # カラム定義：打球方向（c_pos）を追加し、合計5カラムにします
-            c_res, c_pos, c_np, c_run, c_er = st.columns([2, 1.2, 1, 1, 1])
+            c_res, target_fielder_pos, c_np, c_run, c_er = st.columns([2, 1.2, 1, 1, 1])
             
             with c_res:
-                p_res = st.selectbox("結果", ["三振", "凡退", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", "失策", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"], key="p_det_res")
+                p_res = st.selectbox("結果", ["凡退", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", "失策", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"], key="p_det_res")
             
-            with c_pos:
+            with target_fielder_pos:
                 # 🟡 ここで target_fielder_pos を定義します
                 target_fielder_pos = st.selectbox("打球方向", ["", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="p_det_pos")
                 
