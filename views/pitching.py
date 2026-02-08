@@ -61,7 +61,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 st.session_state["opp_batter_index"] = 1
             st.session_state[sync_key] = True
 
-        # --- 成績計算ロジック (既存) ---
+        # --- 成績計算ロジック ---
         current_season_pitching = {}
         if not df_pitching.empty:
             target_year = str(pd.to_datetime(selected_date_str).year)
