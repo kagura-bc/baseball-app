@@ -100,30 +100,67 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             submit_detail = st.form_submit_button("登録実行", type="primary", use_container_width=True)
 
         if submit_detail:
-            if not target_pitcher_disp: st.error("⚠️ 投手を選択してください")
-            elif p_res == "本塁打" and p_runs == 0: st.error("⚠️ 本塁打は失点1以上必須")
-            elif p_res in ["凡退", "失策", "併殺打", "犠打", "野選"] and target_fielder_pos == "": st.error("⚠️ 打球方向を選択してください")
+            # 1. 投手名の決定 (入力がなければスタメン情報から補完)
+            input_name = st.session_state.get("p_det_name", "")
+            if not input_name:
+                input_name = st.session_state.get("shared_starting_pitcher", "")
+            
+            if not input_name: 
+                st.error("⚠️ 投手を選択するか、打撃画面でスタメンを設定してください")
+            elif p_res == "本塁打" and p_runs == 0: 
+                st.error("⚠️ 本塁打は失点1以上必須")
+            elif p_res in ["凡退", "失策", "併殺打", "犠打", "野選"] and target_fielder_pos == "": 
+                st.error("⚠️ 打球方向を選択してください")
             else:
-                target_player = target_pitcher_disp.split(" (")[0]
+                # 2. 「選手名」と「位置」を確定
+                target_player = str(input_name).split(" (")[0].strip()
+                target_pos = "投" # 投手成績なので「投」を固定
+
+                # 3. 処理野手（守備成績用）の名前をスタメンから特定する
+                # 個人成績ページが「名前 (位置)」形式を期待しているため、それに合わせる
+                fielder_display = f"({target_fielder_pos})" # デフォルト
+                if target_fielder_pos:
+                    # スタメンからそのポジションを守っている選手名を探す
+                    lineup = st.session_state.get("saved_lineup", {})
+                    for i in range(15):
+                        if lineup.get(f"pos_{i}") == target_fielder_pos:
+                            f_name = lineup.get(f"name_{i}", "").split(" (")[0]
+                            if f_name:
+                                fielder_display = f"{f_name} ({target_fielder_pos})"
+                            break
+
+                # 成績計算
                 add_outs = 2 if p_res == "併殺打" else (1 if p_res in ["三振", "凡退", "犠打", "犠飛", "野選"] else 0)
                 add_hits = 1 if p_res in ["安打", "本塁打"] else 0
-                saved_fielder_str = f"({target_fielder_pos})" if target_fielder_pos else ""
-                
-                # 種別に詳細情報を埋め込む
                 batter_idx_str = f"{st.session_state['opp_batter_index']}"
 
+                # 4. レコード作成
                 rec = {
-                    "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
-                    "イニング": current_inn, "選手名": target_player, 
-                    "結果": p_res, "失点": p_runs, "自責点": p_er, "勝敗": "ー", "球数": 0,
-                    "被安打": add_hits, "アウト数": add_outs, "処理野手": saved_fielder_str,
-                    "種別": f"詳細:{batter_idx_str}番打者" # 打順をここに記録
+                    "日付": selected_date_str, 
+                    "グラウンド": ground_name, 
+                    "対戦相手": opp_team, 
+                    "試合種別": match_type,
+                    "イニング": current_inn, 
+                    "選手名": target_player,  # 投手名（個人成績の集計用）
+                    "位置": target_pos,      # 守備位置カラム
+                    "結果": p_res, 
+                    "失点": p_runs, 
+                    "自責点": p_er, 
+                    "勝敗": "ー", 
+                    "球数": 0,
+                    "被安打": add_hits, 
+                    "アウト数": add_outs, 
+                    "処理野手": fielder_display, # 個人成績の守備率計算用 (名前 (位置) 形式)
+                    "種別": f"詳細:{batter_idx_str}番打者"
                 }
+                
+                # 5. 保存
                 conn.update(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=pd.concat([df_pitching, pd.DataFrame([rec])], ignore_index=True))
                 st.cache_data.clear()
                 
+                # 完了処理
                 st.session_state["opp_batter_index"] = (st.session_state["opp_batter_index"] % st.session_state["opp_batter_count"]) + 1
-                st.success(f"✅ {p_res} を登録")
+                st.success(f"✅ {target_player}投手の記録を保存しました")
                 import time
                 time.sleep(0.5)
                 st.rerun()
