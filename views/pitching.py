@@ -158,10 +158,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             input_name = target_pitcher_disp if target_pitcher_disp else st.session_state.get("shared_starting_pitcher", "")
             if not input_name: 
                 st.error("⚠️ 投手を選択してください")
-            # 🟡 p_runs を p_run に修正
             elif p_res == "本塁打" and p_run == 0: 
                 st.error("⚠️ 本塁打は失点1以上必須")
-            # 🟡 target_fielder_pos のチェックがこれで通るようになります
             elif p_res in ["凡退", "失策", "併殺打", "犠打", "野選"] and target_fielder_pos == "": 
                 st.error("⚠️ 打球方向を選択してください")
             else:
@@ -184,7 +182,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 rec = {
                     "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                     "イニング": current_inn, "選手名": target_player, "位置": target_pos, "結果": p_res, 
-                    "失点": p_run, "自責点": p_er, "勝敗": "ー", "球数": p_np, "被安打": add_hits, 
+                    "失点": p_run, "自責点": p_er, "勝敗": "ー", "被安打": add_hits, 
                     "アウト数": add_outs, "処理野手": fielder_display, "種別": f"詳細:{batter_idx_str}番打者"
                 }
                 
