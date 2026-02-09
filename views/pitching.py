@@ -166,8 +166,12 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 target_player = str(input_name).split(" (")[0].strip()
                 target_pos = "投"
                 
-                fielder_display = f"({target_fielder_pos})"
+                # 変更点1：最初は「空文字」で定義しておく
+                fielder_display = "" 
+                # 変更点2：ポジションが指定されている場合だけ中身を作る
                 if target_fielder_pos:
+                    # まずは「(中)」のような形をデフォルトとしてセット
+                    fielder_display = f"({target_fielder_pos})"
                     lineup = st.session_state.get("saved_lineup", {})
                     for i in range(15):
                         if lineup.get(f"pos_{i}") == target_fielder_pos:
@@ -175,7 +179,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             if f_name: fielder_display = f"{f_name} ({target_fielder_pos})"
                             break
 
-                add_outs = 2 if p_res == "併殺打" else (1 if p_res in ["三振", "凡退", "犠打", "犠飛", "野選"] else 0)
+                add_outs = 1 if p_res in ["三振", "凡退", "犠打", "犠飛", "併殺打", "野選"] else 0
                 add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0
                 batter_idx_str = f"{st.session_state['opp_batter_index']}"
 
