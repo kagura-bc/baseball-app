@@ -233,37 +233,73 @@ def show_personal_stats(df_batting, df_pitching):
             else: st.info("データなし")
 
         with st_fld:
-            # 守備データ（変更なし）
-            if not df_p_tg.empty:
-                fld_data = df_p_tg[df_p_tg["処理野手"] != ""].copy()
-                fld_data = fld_data[fld_data["処理野手"].notna()]
+            # 守備データ (修正版)
+            # df_p_tg はフィルタリング済みの投手データフレーム
+            if not df_p_tg.empty and "処理野手" in df_p_tg.columns and "位置" in df_p_tg.columns:
+                # 処理野手が空でないデータのみ抽出
+                fld_data = df_p_tg[df_p_tg["処理野手"].notna() & (df_p_tg["処理野手"] != "")].copy()
+                
                 if not fld_data.empty:
-                    stats_f = pd.crosstab(fld_data["処理野手"], fld_data["結果"])
-                    for col in ["凡退", "犠打", "失策", "走塁死", "牽制死", "盗塁死", "併殺打"]:
-                        if col not in stats_f.columns: stats_f[col] = 0
-                    out_cols = [c for c in stats_f.columns if c != "失策"]
-                    stats_f["刺殺・補殺"] = stats_f[out_cols].sum(axis=1)
-                    stats_f["守備機会"] = stats_f["刺殺・補殺"] + stats_f["失策"]
-                    stats_f["守備率"] = stats_f.apply(lambda row: (row["守備機会"] - row["失策"]) / row["守備機会"] if row["守備機会"] > 0 else 0.000, axis=1)
-                    stats_f = stats_f.reset_index()
-                    display_rows = []
-                    pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                    for _, row in stats_f.iterrows():
-                        raw = row["処理野手"]; nm = raw; pos = "-"
-                        if "(" in raw:
-                            try: nm, pos = raw.split(" ("); pos = pos.replace(")", "")
-                            except: pass
-                        try: sk = pos_order.index(pos)
-                        except: sk = 99
-                        display_rows.append({"SortKey": sk, "位置": pos, "選手名": nm, "守備機会": int(row["守備機会"]), "失策": int(row["失策"]), "守備率": row["守備率"]})
+                    # 文字列型にしておく
+                    fld_data["処理野手"] = fld_data["処理野手"].astype(str)
+                    fld_data["位置"] = fld_data["位置"].astype(str)
+
+                    # 1. 併殺などで複数人いる場合 ("選手A-選手B", "位置A-位置B") を分解するための準備
+                    # それぞれをリストに変換して、ペアとして扱えるようにZIPする
+                    fld_data["zipped"] = fld_data.apply(
+                        lambda x: list(zip(str(x["処理野手"]).split("-"), str(x["位置"]).split("-"))), 
+                        axis=1
+                    )
                     
-                    if display_rows:
-                        df_disp = pd.DataFrame(display_rows).sort_values(["SortKey", "守備機会"], ascending=[True, False])
-                        df_disp["守備率"] = df_disp["守備率"].map(lambda x: f"{x:.3f}")
-                        st.dataframe(df_disp[["位置", "選手名", "守備機会", "失策", "守備率"]], use_container_width=True, hide_index=True)
-                    else: st.info("なし")
-                else: st.info("なし")
-            else: st.info("なし")
+                    # 1行を複数行に展開 (explode)
+                    fld_expanded = fld_data.explode("zipped")
+                    
+                    # 展開したタプル (名前, 位置) を別々のカラムに戻す
+                    # インデックスが重複するため、一旦リセットしてから処理
+                    fld_expanded = fld_expanded.reset_index(drop=True)
+                    if not fld_expanded.empty:
+                        fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
+                    else:
+                        fld_expanded["FielderName"] = ""
+                        fld_expanded["FielderPos"] = ""
+
+                    # 2. 集計
+                    # 守備機会 = レコード数
+                    # 失策 = 結果が「失策」の数
+                    stats_f = fld_expanded.groupby(["FielderName", "FielderPos"]).agg(
+                        守備機会=("結果", "count"),
+                        失策数=("結果", lambda x: (x == "失策").sum())
+                    ).reset_index()
+                    
+                    # 守備率計算
+                    stats_f["守備率"] = stats_f.apply(
+                        lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, 
+                        axis=1
+                    )
+                    
+                    # 3. 表示用整形
+                    pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                    stats_f["SortKey"] = stats_f["FielderPos"].apply(
+                        lambda x: pos_order.index(x) if x in pos_order else 99
+                    )
+                    
+                    # 並び替え（ポジション順 > 守備機会順）
+                    stats_f = stats_f.sort_values(["SortKey", "守備機会"], ascending=[True, False])
+                    
+                    # カラム名変更とフォーマット
+                    disp_df = stats_f[["FielderPos", "FielderName", "守備機会", "失策数", "守備率"]].copy()
+                    disp_df.columns = ["位置", "選手名", "守備機会", "失策", "守備率"]
+                    disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
+                    
+                    # 選手名が不明なものを除外（空文字や"不明"など）
+                    disp_df = disp_df[disp_df["選手名"] != ""]
+                    
+                    st.dataframe(disp_df, use_container_width=True, hide_index=True)
+
+                else:
+                    st.info("守備記録なし")
+            else:
+                st.info("データなし")
 
     # ----------------------------------------------------
     # 2. 個人年度別 + 通算
