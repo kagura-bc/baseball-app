@@ -184,56 +184,36 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             elif p_res in ["凡退", "失策", "併殺打", "犠打", "野選"] and not target_fielder_pos_list: 
                 st.error("⚠️ 打球方向を選択してください")
             else:
+                # 投手名の整形（例: "和田 (21)" -> "和田"）
                 target_pitcher_name = str(input_name).split(" (")[0].strip()
                 
-                # --- 位置情報の作成 ---
+                # --- 【ここが修正の核心】位置と名前を完全に分離する ---
+                
+                # 1. 位置情報の作成（カラム「位置」用）
+                # リスト ["遊", "二"] を "遊-二" という文字列にする
                 target_fielder_pos_str = "-".join(target_fielder_pos_list)
 
-                # --- 野手名の特定ロジック (強化版) ---
+                # 2. 野手名の作成（カラム「処理野手」用）
                 fielder_display = ""
                 if target_fielder_pos_list:
-                    
-                    # 1. まずメモリ上のスタメン情報を探す
                     lineup = st.session_state.get("saved_lineup", {})
-                    
-                    # 2. もしメモリになければ、今日の打撃データからスタメンを復元する (バックアップ)
-                    if not lineup and not today_batting_df.empty:
-                        # 今日のデータで、守備位置ごとの最新の選手を探す
-                        temp_lineup = {}
-                        # 守備位置カラムがあるデータのみ対象
-                        if "守備位置" in today_batting_df.columns:
-                            for _, row in today_batting_df.iterrows():
-                                pos_val = str(row["守備位置"])
-                                p_name = str(row["選手名"]).split(" (")[0]
-                                if pos_val and p_name:
-                                    temp_lineup[pos_val] = p_name
-                        lineup = temp_lineup
-
                     name_parts = []
                     
                     for pos in target_fielder_pos_list:
                         found_name = ""
+                        # オーダー情報から名前を探す
+                        for i in range(20):
+                            if lineup.get(f"pos_{i}") == pos:
+                                # 名前が見つかったら "(遊)" などのポジション表記を削除して「名前のみ」にする
+                                found_name = lineup.get(f"name_{i}", "").split(" (")[0]
+                                break
                         
-                        # (A) ポジションが「投」なら投手名
-                        if pos == "投":
-                            found_name = target_pitcher_name
-                        
-                        # (B) メモリ上のスタメン情報 (keyが "pos_0" 等の形式) から検索
-                        elif any(k.startswith("pos_") for k in lineup.keys()):
-                             for i in range(20):
-                                if lineup.get(f"pos_{i}") == pos:
-                                    found_name = lineup.get(f"name_{i}", "").split(" (")[0]
-                                    break
-                        
-                        # (C) 打撃データから復元したスタメン情報 (keyが "遊" 等の形式) から検索
-                        elif pos in lineup:
-                            found_name = lineup[pos]
-                            
                         if found_name:
-                            name_parts.append(found_name)
+                            name_parts.append(found_name) # 例: "今宮"
                         else:
-                            name_parts.append(f"({pos})") # どうしても見つからない場合
+                            name_parts.append(f"({pos})") # 見つからない場合は "(遊)" とする
 
+                    # リスト ["今宮", "牧原"] を "今宮-牧原" という文字列にする
                     fielder_display = "-".join(name_parts)
                 
                 # --- アウト数・被安打の計算 ---
@@ -246,16 +226,18 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0
                 batter_idx_str = f"{st.session_state['opp_batter_index']}"
 
-                # --- データの作成 ---
+                # --- データの作成（ご要望通りにマッピング） ---
                 rec = {
                     "日付": selected_date_str, 
                     "グラウンド": ground_name, 
                     "対戦相手": opp_team, 
                     "試合種別": match_type,
                     "イニング": current_inn, 
-                    "選手名": target_pitcher_name,
-                    "位置": target_fielder_pos_str,
-                    "処理野手": fielder_display,
+                    
+                    "選手名": target_pitcher_name,   # ⚠️ここは「投手名」です（和田）
+                    "位置": target_fielder_pos_str,  # ✅要望: 位置欄に「守備位置」（遊）
+                    "処理野手": fielder_display,     # ✅要望: 処理野手欄に「選手名」（今宮）
+                    
                     "結果": p_res, 
                     "失点": p_run, 
                     "自責点": p_er, 
@@ -265,12 +247,14 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     "種別": f"詳細:{batter_idx_str}番打者"
                 }
                 
+                # スプレッドシートへ保存
                 conn.update(
                     spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=pd.concat([df_pitching, pd.DataFrame([rec])], 
                     ignore_index=True)
                 )
                 st.cache_data.clear()
 
+                # --- 保存完了フラグを立てる ---
                 st.session_state["needs_form_clear"] = True
                 
                 # --- 3アウトチェンジ判定 ---
