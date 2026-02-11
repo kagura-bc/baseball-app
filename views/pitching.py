@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import requests
 from streamlit_gsheets import GSheetsConnection
 from config.settings import ALL_PLAYERS, SPREADSHEET_URL, PLAYER_NUMBERS, MY_TEAM
 from utils.ui import render_scoreboard, render_out_indicator_3, fmt_player_name
@@ -83,7 +82,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         
         # --- 【修正】フォームのリセット処理（再読み込み直後、ウィジェット描画前に実行） ---
         if st.session_state.get("needs_form_clear"):
-            st.session_state["p_det_res"] = "凡退"
+            st.session_state["p_det_res"] = ("凡退(ゴロ)", "凡退(フライ)")
             st.session_state["p_det_pos_list"] = []
             st.session_state["p_det_run"] = 0
             st.session_state["p_det_er"] = 0
@@ -104,7 +103,11 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 if not today_pitching_df.empty:
                     p_inn_df = today_pitching_df[today_pitching_df["イニング"] == current_inn]
                     # 1アウトの結果
-                    single_outs = len(p_inn_df[p_inn_df["結果"].isin(["三振", "凡退", "犠打", "犠飛", "野選", "振り逃げ三振"])])
+                    # 「凡退(ゴロ)(遊)」なども「凡退(ゴロ)」で始まればアウトとみなす
+                    out_keywords = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛"]
+                    # 結果列の各行に対して、out_keywordsのいずれかで始まるか判定
+                    is_out = p_inn_df["結果"].apply(lambda x: any(str(x).startswith(k) for k in out_keywords))
+                    single_outs = len(p_inn_df[is_out])
                     # 2アウトの結果（併殺打）
                     double_outs = len(p_inn_df[p_inn_df["結果"] == "併殺打"]) * 2
                     current_outs_db = (single_outs + double_outs) % 3
@@ -139,7 +142,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             c_res, c_pos, c_run, c_er = st.columns(4)
             
             with c_res:
-                p_res = st.selectbox("結果", ["凡退", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", 
+                p_res = st.selectbox("結果", ["凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", 
                                             "失策", "振り逃げ三振", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"], key="p_det_res")
             
             with c_pos:
@@ -181,7 +184,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 st.error("⚠️ 投手を選択してください")
             elif p_res == "本塁打" and p_run == 0: 
                 st.error("⚠️ 本塁打は失点1以上必須")
-            elif p_res in ["凡退", "失策", "併殺打", "犠打", "野選"] and not target_fielder_pos_list: 
+            elif p_res in ["凡退(ゴロ)", "凡退(フライ)", "失策", "併殺打", "犠打", "野選"] and not target_fielder_pos_list: 
                 st.error("⚠️ 打球方向を選択してください")
             else:
                 # 投手名の整形（例: "和田 (21)" -> "和田"）
@@ -225,7 +228,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 add_outs = 0
                 if p_res == "併殺打":
                     add_outs = 2
-                elif p_res in ["三振", "凡退", "犠打", "犠飛", "野選", "振り逃げ三振"]:
+                elif p_res in ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛"]:
                     add_outs = 1
                 
                 add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0
@@ -264,7 +267,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 
                 # --- 3アウトチェンジ判定 ---
                 p_inn_df = today_pitching_df[today_pitching_df["イニング"] == current_inn]
-                existing_single_outs = len(p_inn_df[p_inn_df["結果"].isin(["三振", "凡退", "犠打", "犠飛", "野選", "振り逃げ三振"])])
+                existing_single_outs = len(p_inn_df[p_inn_df["結果"].isin(["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛"])])
                 existing_double_outs = len(p_inn_df[p_inn_df["結果"] == "併殺打"]) * 2
                 total_outs_after = existing_single_outs + existing_double_outs + add_outs
                 
