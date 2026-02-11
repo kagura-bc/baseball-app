@@ -187,13 +187,12 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 # 投手名の整形（例: "和田 (21)" -> "和田"）
                 target_pitcher_name = str(input_name).split(" (")[0].strip()
                 
-                # --- 【ここが修正の核心】位置と名前を完全に分離する ---
+                # --- 【修正の核心】表示用とデータ保存用の切り分け ---
                 
-                # 1. 位置情報の作成（カラム「位置」用）
-                # リスト ["遊", "二"] を "遊-二" という文字列にする
+                # 1. 位置情報の作成（例: "遊-二"）
                 target_fielder_pos_str = "-".join(target_fielder_pos_list)
 
-                # 2. 野手名の作成（カラム「処理野手」用）
+                # 2. 処理野手名の作成（個人成績集計用：名前を取得）
                 fielder_display = ""
                 if target_fielder_pos_list:
                     lineup = st.session_state.get("saved_lineup", {})
@@ -201,20 +200,26 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     
                     for pos in target_fielder_pos_list:
                         found_name = ""
-                        # オーダー情報から名前を探す
+                        # オーダー情報からそのポジションを守っている選手名を探す
                         for i in range(20):
                             if lineup.get(f"pos_{i}") == pos:
-                                # 名前が見つかったら "(遊)" などのポジション表記を削除して「名前のみ」にする
-                                found_name = lineup.get(f"name_{i}", "").split(" (")[0]
+                                # 名前から "(右)" などの付加情報を除いて純粋な名前のみ取得
+                                found_name = lineup.get(f"name_{i}", "").split(" (")[0].strip()
                                 break
                         
                         if found_name:
-                            name_parts.append(found_name) # 例: "今宮"
+                            name_parts.append(found_name) # 例: "久保田剛志"
                         else:
-                            name_parts.append(f"({pos})") # 見つからない場合は "(遊)" とする
-
-                    # リスト ["今宮", "牧原"] を "今宮-牧原" という文字列にする
+                            name_parts.append(f"({pos})") # 見つからない場合は位置を表示
+                    
                     fielder_display = "-".join(name_parts)
+
+                # 3. 画面表示用の結果テキスト作成（例: "凡退(捕)"）
+                # 履歴テーブルで見たい形式をここで作ります
+                if target_fielder_pos_str:
+                    display_result = f"{p_res}({target_fielder_pos_str})"
+                else:
+                    display_result = p_res
                 
                 # --- アウト数・被安打の計算 ---
                 add_outs = 0
@@ -226,7 +231,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0
                 batter_idx_str = f"{st.session_state['opp_batter_index']}"
 
-                # --- データの作成（ご要望通りにマッピング） ---
+                # --- データの作成 ---
                 rec = {
                     "日付": selected_date_str, 
                     "グラウンド": ground_name, 
@@ -234,11 +239,11 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     "試合種別": match_type,
                     "イニング": current_inn, 
                     
-                    "選手名": target_pitcher_name,   # ⚠️ここは「投手名」です（和田）
-                    "位置": target_fielder_pos_str,  # ✅要望: 位置欄に「守備位置」（遊）
-                    "処理野手": fielder_display,     # ✅要望: 処理野手欄に「選手名」（今宮）
+                    "選手名": target_pitcher_name,   # 投手成績用
+                    "守備位置": target_fielder_pos_str,  # ポジション（捕）
+                    "処理野手": fielder_display,     # 個人成績用（久保田剛志）
                     
-                    "結果": p_res, 
+                    "結果": display_result,          # ⚠️ここを「凡退(捕)」に変更
                     "失点": p_run, 
                     "自責点": p_er, 
                     "勝敗": "ー", 

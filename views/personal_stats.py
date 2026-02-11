@@ -235,19 +235,19 @@ def show_personal_stats(df_batting, df_pitching):
         with st_fld:
             # 守備データ (修正版)
             # df_p_tg はフィルタリング済みの投手データフレーム
-            if not df_p_tg.empty and "処理野手" in df_p_tg.columns and "位置" in df_p_tg.columns:
+            if not df_p_tg.empty and "処理野手" in df_p_tg.columns and "守備位置" in df_p_tg.columns:
                 # 処理野手が空でないデータのみ抽出
                 fld_data = df_p_tg[df_p_tg["処理野手"].notna() & (df_p_tg["処理野手"] != "")].copy()
                 
                 if not fld_data.empty:
                     # 文字列型にしておく
                     fld_data["処理野手"] = fld_data["処理野手"].astype(str)
-                    fld_data["位置"] = fld_data["位置"].astype(str)
+                    fld_data["守備位置"] = fld_data["守備位置"].astype(str)
 
                     # 1. 併殺などで複数人いる場合 ("選手A-選手B", "位置A-位置B") を分解するための準備
                     # それぞれをリストに変換して、ペアとして扱えるようにZIPする
                     fld_data["zipped"] = fld_data.apply(
-                        lambda x: list(zip(str(x["処理野手"]).split("-"), str(x["位置"]).split("-"))), 
+                        lambda x: list(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-"))), 
                         axis=1
                     )
                     
@@ -288,7 +288,7 @@ def show_personal_stats(df_batting, df_pitching):
                     
                     # カラム名変更とフォーマット
                     disp_df = stats_f[["FielderPos", "FielderName", "守備機会", "失策数", "守備率"]].copy()
-                    disp_df.columns = ["位置", "選手名", "守備機会", "失策", "守備率"]
+                    disp_df.columns = ["守備位置", "選手名", "守備機会", "失策", "守備率"]
                     disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
                     
                     # 選手名が不明なものを除外（空文字や"不明"など）
