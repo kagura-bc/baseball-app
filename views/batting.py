@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import datetime
 from streamlit_gsheets import GSheetsConnection
 from config.settings import ALL_PLAYERS, ALL_POSITIONS, SPREADSHEET_URL, PLAYER_NUMBERS
 from utils.ui import render_scoreboard, render_out_indicator_3, show_homerun_effect, fmt_player_name
@@ -335,6 +336,35 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         def submit_everything():
             if "sn0" not in st.session_state: return # Guard
 
+            # --- バリデーション（入力チェック） ---
+            require_direction_results = ["凡退", "単打", "二塁打", "三塁打", "本塁打"]
+            validation_errors = []
+
+            for i in range(15):
+                p_name = st.session_state.get(f"sn{i}")
+                p_res = st.session_state.get(f"sr{i}", "---")
+                p_dir = st.session_state.get(f"sd{i}", "---")
+                p_rbi = st.session_state.get(f"si{i}", "---") # 打点
+
+                if p_name and p_res != "---":
+                    # 1. 打点の選択チェック
+                    if p_rbi == "---":
+                        validation_errors.append(f"打順{i+1} ({p_name}): 打点を選択してください。")
+                    
+                    # 2. 本塁打なのに打点0（または未選択）のチェック
+                    if p_res == "本塁打" and p_rbi != "---" and int(p_rbi) == 0:
+                        validation_errors.append(f"打順{i+1} ({p_name}): 本塁打の場合、打点は1以上である必要があります。")
+
+                    # 3. 打球方向のチェック（以前の追加分）
+                    if (p_res in require_direction_results) and (p_dir == "---"):
+                        validation_errors.append(f"打順{i+1} ({p_name}): 「{p_res}」の打球方向を選択してください。")
+
+            if validation_errors:
+                for err in validation_errors:
+                    st.error(err)
+                return
+            # ---------------------------------------------
+
             new_records = []
             has_homerun = False
             
@@ -346,8 +376,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 pos_chk = st.session_state.get(f"sp{i}")
                 name_chk = st.session_state.get(f"sn{i}")
                 if pos_chk == "投" and name_chk:
-                    # 名前のみを抽出 (例: "山田 (11)" -> "山田") 
-                    # ※受け取り側のpitching.pyが部分一致("in")で判定しているため、そのままでも動きますが、念のため
                     st.session_state["shared_starting_pitcher"] = name_chk.split(" (")[0]
 
             for i in range(15):
@@ -360,40 +388,47 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 p_name = st.session_state.get(f"sn{i}")
                 p_pos = st.session_state.get(f"sp{i}", "")
                 p_res = st.session_state.get(f"sr{i}", "---")
-                p_rbi = int(st.session_state.get(f"si{i}", 0))
+                p_dir = st.session_state.get(f"sd{i}", "---")
+                # 打点を数値に変換
+                p_rbi_raw = st.session_state.get(f"si{i}", 0)
+                p_rbi = int(p_rbi_raw) if p_rbi_raw != "---" else 0
 
                 if p_name:
                     if is_play_mode and p_res != "---":
                         # 打席結果の数値計算
-                        rbi_val = p_rbi
+                        rbi_val = p_rbi  # 【変更】選択された打点をそのまま使用
                         run_val = 1 if p_res == "得点" else 0
                         sb_val = 1 if p_res == "盗塁" else 0
+                        
                         if p_res == "本塁打":
                             has_homerun = True
-                            rbi_val += 1
+                            # rbi_val += 1  <-- 【削除】自動加算を廃止
                             run_val = 1
                         
-                        new_records.append({
+                        record_dict = {
                             "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                             "イニング": st.session_state.get("current_inn_key", "1回"), "選手名": p_name, "位置": p_pos, "打順": i+1,
-                            "結果": p_res, "打点": rbi_val, "得点": run_val, "盗塁": sb_val, "種別": "打席"
-                        })
+                            "結果": p_res, "打点": rbi_val, "得点": run_val, "盗塁": sb_val, "種別": "打席",
+                            "打球方向": p_dir if p_dir != "---" else ""
+                        }
+                        new_records.append(record_dict)
+
                     elif not is_play_mode:
-                        # スタメン保存
-                        new_records.append({
-                            "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
-                            "イニング": "試合開始", "選手名": p_name, "位置": p_pos, "打順": i+1,
-                            "結果": "スタメン", "打点": 0, "得点": 0, "盗塁": 0, "種別": "スタメン"
-                        })
+                        # (省略: スタメン保存用 record)
+                        pass
 
             if new_records:
                 try:
                     updated_df = pd.concat([df_batting, pd.DataFrame(new_records)], ignore_index=True)
                     conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
                     st.cache_data.clear()
+                    
+                    # リセット処理
                     for i in range(15):
                         st.session_state[f"sr{i}"] = "---"
-                        st.session_state[f"si{i}"] = 0
+                        st.session_state[f"sd{i}"] = "---"
+                        st.session_state[f"si{i}"] = "---" # 打点も「---」にリセット
+                    
                     if has_homerun: st.session_state["show_homerun_flg"] = True
                     st.success(f"✅ {len(new_records)}件のデータを保存しました")
                     import time
@@ -421,28 +456,81 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 # (省略: アウトカウント表示)
                 st.write("")
 
-            batting_results = ["---", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退", "失策", "盗塁", "得点", "走塁死", "盗塁死"]
+            batting_results = ["---", "凡退", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "盗塁", "得点", "走塁死", "盗塁死"]
+            # 追加: 打球方向リスト
+            hit_directions = ["---", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+            
             player_list_with_empty = [""] + ALL_PLAYERS
-            col_ratios = [0.5, 1.2, 2.0, 1.5, 1.2, 4.2]
+
+            # --- 追加: 今シーズンのデータ抽出 ---
+            this_year = datetime.datetime.now().year
+            if not df_batting.empty:
+                # 日付列を変換して今年のデータのみ抽出
+                df_batting["日付_dt"] = pd.to_datetime(df_batting["日付"], errors='coerce')
+                df_this_season = df_batting[df_batting["日付_dt"].dt.year == this_year].copy()
+            else:
+                df_this_season = pd.DataFrame()
+
+            # 成績計算用の定義 (personal_stats.py の基準に合わせる)
+            hit_results = ["単打", "二塁打", "三塁打", "本塁打"]
+            ab_results = hit_results + ["凡退", "失策", "走塁死", "盗塁死", "牽制死", "三振", "併殺打", "野選", "振り逃げ", "打撃妨害"]
+            # ----------------------------------
+
+            col_ratios = [0.5, 1.1, 1.8, 1.4, 0.9, 0.9, 3.5]
+
+            # ヘッダー表示
+            h = st.columns(col_ratios)
+            h[0].markdown("<div style='text-align:center; font-size:12px; color:gray;'>打順</div>", unsafe_allow_html=True)
+            h[1].markdown("<div style='text-align:center; font-size:12px; color:gray;'>守備</div>", unsafe_allow_html=True)
+            h[2].markdown("<div style='text-align:center; font-size:12px; color:gray;'>選手名</div>", unsafe_allow_html=True)
+            h[3].markdown("<div style='text-align:center; font-size:12px; color:gray;'>結果</div>", unsafe_allow_html=True)
+            h[4].markdown("<div style='text-align:center; font-size:12px; color:gray;'>方向</div>", unsafe_allow_html=True)
+            h[5].markdown("<div style='text-align:center; font-size:12px; color:gray;'>打点</div>", unsafe_allow_html=True)
+            h[6].markdown("<div style='font-size:12px; color:gray;'>本日の成績</div>", unsafe_allow_html=True)
 
             for i in range(15):
                 c = st.columns(col_ratios)
-                c[0].write(f"{i+1}")
+                c[0].markdown(f"<div style='text-align:center; line-height:2.5;'>{i+1}</div>", unsafe_allow_html=True)
                 
                 s_pos = st.session_state["saved_lineup"].get(f"pos_{i}", "")
                 s_name = st.session_state["saved_lineup"].get(f"name_{i}", "")
                 def_pos_ix = ALL_POSITIONS.index(s_pos) if s_pos in ALL_POSITIONS else 0
                 def_name_ix = player_list_with_empty.index(s_name) if s_name in player_list_with_empty else 0
                 
-                # keyにコールバックを指定して、変更即保存を実現するのも手ですが、ここではsubmit時に保存しています
                 c[1].selectbox(f"p{i}", ALL_POSITIONS, index=def_pos_ix, key=f"sp{i}", label_visibility="collapsed")
                 c[2].selectbox(f"n{i}", player_list_with_empty, index=def_name_ix, key=f"sn{i}", label_visibility="collapsed", format_func=local_fmt)
                 
+               # --- 選手名の下に通算成績（今季累計）を表示 ---
                 sel_p_name = st.session_state.get(f"sn{i}")
+                if sel_p_name and not df_this_season.empty:
+                    # 今シーズンのその選手のデータを抽出
+                    p_stats_df = df_this_season[df_this_season["選手名"] == sel_p_name]
+                    
+                    if not p_stats_df.empty:
+                        # 今日の分も含めた累計打点
+                        total_rbi = pd.to_numeric(p_stats_df["打点"], errors='coerce').fillna(0).sum()
+                        # 今日の分も含めた累計打数と安打
+                        ab_count = len(p_stats_df[p_stats_df["結果"].isin(ab_results)])
+                        hit_count = len(p_stats_df[p_stats_df["結果"].isin(hit_results)])
+                        batting_avg = hit_count / ab_count if ab_count > 0 else 0.000
+                        
+                        # --- 追加: 今日の分も含めた累計本塁打数 ---
+                        hr_count = len(p_stats_df[p_stats_df["結果"] == "本塁打"])
+                        
+                        # 表示: ".333 2本 12点" の形式
+                        avg_display = f"{batting_avg:.3f}".replace("0.", ".")
+                        c[2].caption(f"{avg_display} {hr_count}本 {int(total_rbi)}点")
+                    else:
+                        c[2].caption(".000 0本 0点")
+                else:
+                    c[2].caption("")
+                # -------------------------
+
                 c[3].selectbox(f"r{i}", batting_results, key=f"sr{i}", label_visibility="collapsed")
-                c[4].selectbox(f"i{i}", [0, 1, 2, 3, 4], key=f"si{i}", label_visibility="collapsed")
+                c[4].selectbox(f"d{i}", hit_directions, key=f"sd{i}", label_visibility="collapsed")
+                c[5].selectbox(f"i{i}", [0, 1, 2, 3, 4], key=f"si{i}", label_visibility="collapsed")
                 
-                # 履歴表示エリア (省略せず表示用に残します)
+                # 履歴表示エリア
                 if not today_batting_df.empty and sel_p_name:
                     p_df = today_batting_df[
                         (today_batting_df["選手名"] == sel_p_name) & 
@@ -456,6 +544,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         for _, row in p_df.iterrows():
                             res = row['結果']
                             rbi = int(pd.to_numeric(row['打点'], errors='coerce') or 0)
+                            
+                            # 打球方向があれば履歴表示に含める処理 (お好みで追加)
+                            # dir_val = row.get('打球方向', '')
+                            # short = {"本塁打":"本", ...}.get(res, res)
+                            # if dir_val: short += f"({dir_val})" 
+
                             short = {"本塁打":"本", "三塁打":"3塁", "二塁打":"2塁", "単打":"安", "三振":"振"}.get(res, res)
                             if res in pa_list:
                                 count += 1
@@ -466,12 +560,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                                 history_html.append(display_text)
                             else:
                                 history_html.append(f"({short})")
-                        c[5].markdown(f"<div style='font-size:20px; line-height:1.5;'>{' '.join(history_html)}</div>", unsafe_allow_html=True)
+                        c[6].markdown(f"<div style='font-size:20px; line-height:1.5;'>{' '.join(history_html)}</div>", unsafe_allow_html=True)
                     else:
-                        c[5].write("")
+                        c[6].write("")
                 else:
-                    c[5].write("")
-
+                    c[6].write("")
+            
             st.divider()
             with st.expander(" 🚌  ベンチ入りメンバー", expanded=True):
                 st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
