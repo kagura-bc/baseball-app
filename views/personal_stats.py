@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import unicodedata
 from config.settings import ALL_PLAYERS, PLAYER_NUMBERS, OFFICIAL_GAME_TYPES
 
 def show_personal_stats(df_batting, df_pitching):
@@ -141,12 +142,74 @@ def show_personal_stats(df_batting, df_pitching):
         df_b_tg = df_b_calc.copy()
         df_p_tg = df_p_calc.copy()
 
-        # ここでフィルタリング処理を実行 
+        # ==========================================
+        # 1. データの読み込みと正規化関数の定義
+        # ==========================================
+
+        def normalize_name(text):
+            """
+            名前の表記ゆれを吸収する関数:
+            - 全角英数・記号を半角に統一
+            - 前後の空白を削除
+            - 姓名間の空白を削除
+            - 末尾の「さん」を削除
+            """
+            if not isinstance(text, str) or not text:
+                return ""
+            # 全角・半角の統一（NFKC正規化）
+            text = unicodedata.normalize('NFKC', text)
+            # 空白の除去と「さん」の除去
+            return text.strip().replace(" ", "").replace("　", "").replace("さん", "")
+
+        # .secrets.toml からリストを取得。取得できない場合はコード内のリストをデフォルトにする
+        hidden_list_raw = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [
+            "助っ人1", "助っ人2", "依田裕樹", "清水さん", "知見寺明司", 
+            "鮫田叶夢", "前島和貴", "濱瑠晟", "にまさん", "中村卓歳", 
+            "小林高知", "堤はるか", "藤本隆之輔"
+        ])
+
+        # 除外リストをクレンジング（比較用に「さん」などを抜いた状態にする）
+        clean_hidden_list = [normalize_name(n) for n in hidden_list_raw]
+
+        # ==========================================
+        # 2. フィルタリング処理の実行
+        # ==========================================
+
+        # --- 打撃データの処理 ---
         if not df_b_tg.empty:
-            df_b_tg = df_b_tg[~df_b_tg["選手名"].isin(HIDDEN_PLAYERS_TOTAL)]
-        
+            # 比較用のテンポラリカラムを作成
+            df_b_tg["_match_name"] = df_b_tg["選手名"].apply(normalize_name)
+            
+            # フィルタリング（除外リストに含まれない人だけ残す）
+            df_b_tg = df_b_tg[~df_b_tg["_match_name"].isin(clean_hidden_list)]
+            
+            # 最後にテンポラリカラムを消去
+            df_b_tg = df_b_tg.drop(columns=["_match_name"])
+
+        # --- 投手データの処理 ---
         if not df_p_tg.empty:
-            df_p_tg = df_p_tg[~df_p_tg["選手名"].isin(HIDDEN_PLAYERS_TOTAL)]
+            df_p_tg["_match_name"] = df_p_tg["選手名"].apply(normalize_name)
+            
+            # フィルタリング
+            df_p_tg = df_p_tg[~df_p_tg["_match_name"].isin(clean_hidden_list)]
+            
+            # 最後にテンポラリカラムを消去
+            df_p_tg = df_p_tg.drop(columns=["_match_name"])
+
+        # --- その他の条件フィルタ（年度・試合種別） ---
+        if target_year != "通算":
+            df_b_tg = df_b_tg[df_b_tg["Year"] == target_year]
+            df_p_tg = df_p_tg[df_p_tg["Year"] == target_year]
+
+        if target_type == "公式戦 (トータル)":
+            df_b_tg = df_b_tg[df_b_tg["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+            df_p_tg = df_p_tg[df_p_tg["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+        elif target_type == "練習試合":
+            df_b_tg = df_b_tg[df_b_tg["試合種別"] == "練習試合"]
+            df_p_tg = df_p_tg[df_p_tg["試合種別"] == "練習試合"]
+
+        # 最後にタブを表示
+        st_bat, st_pit, st_fld = st.tabs(["打撃", "投手", "守備"])
 
         if target_year != "通算":
             df_b_tg = df_b_tg[df_b_tg["Year"] == target_year]
