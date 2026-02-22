@@ -34,46 +34,23 @@ def show_login_screen():
     with center:
         st.write("")
         st.write("")
+        # ロゴのみを中央配置
         st.markdown(f"""
-<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
-    <img src="{ICON_URL}" style="width: 100px; height: 100px; object-fit: contain; margin-right: 15px;">
-    <div style="
-        position: relative;
-        background: #ffffff;
-        border: 3px solid #333;
-        border-radius: 15px;
-        padding: 15px;
-        color: #333;
-        font-weight: bold;
-        box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
-        max-width: 250px;
-    ">
-        <div style="
-            position: absolute;
-            left: -16px;
-            top: 25px;
-            width: 0;
-            height: 0;
-            border-top: 8px solid transparent;
-            border-bottom: 8px solid transparent; 
-            border-right: 16px solid #333;
-        "></div>
-        ようこそ KAGUSTA へ！<br>
-        おーい！合言葉を忘れちまったか？
-    </div>
+<div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px;">
+    <img src="{ICON_URL}" style="width: 300px; height: 300px; object-fit: contain;">
 </div>
 """, unsafe_allow_html=True)
 
         with st.form("login_form_v3"):
-            password = st.text_input("🔑 合言葉", type="password")
-            submitted = st.form_submit_button("入場する", use_container_width=True)
+            password = st.text_input("🔑 パスワード", type="password")
+            submitted = st.form_submit_button("ログイン", use_container_width=True)
             if submitted:
                 if password == "kagura":
                     st.session_state["is_logged_in"] = True
                     st.success("ログイン成功！")
                     st.rerun()
                 else:
-                    st.error("合言葉が違います")
+                    st.error("パスワードが違います")
 
 if not st.session_state["is_logged_in"]:
     show_login_screen()
