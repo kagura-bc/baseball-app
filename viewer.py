@@ -97,7 +97,7 @@ with col_center:
     st.markdown(
         f"""
         <div style="display: flex; justify-content: center;">
-            <img src="{ICON_URL}" width="300">
+            <img src="{ICON_URL}" width="350">
         </div>
         """,
         unsafe_allow_html=True
