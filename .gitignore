@@ -4,6 +4,7 @@ __pycache__/
 
 # Streamlitの秘密情報（重要！）
 .streamlit/secrets.toml
+secrets.toml
 
 # 仮想環境（もしあれば）
 venv/
