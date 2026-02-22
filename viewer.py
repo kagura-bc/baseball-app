@@ -84,28 +84,12 @@ df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
 # ==========================================
-# ✨ ヘッダーエリア（中央ロゴ仕様）
+# ✨ ヘッダーエリア
 # ==========================================
-# 3つのカラムを作成（比率を 1:2:1 にして中央を広く取る）
-col_left, col_center, col_right = st.columns([1, 2, 1])
-
-with col_left:
-    st.empty() # 左側は空っぽにする
-
-with col_center:
-    # ロゴをHTMLを使って完全に中央寄せにする
-    st.markdown(
-        f"""
-        <div style="display: flex; justify-content: center;">
-            <img src="{ICON_URL}" width="280">
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with col_right:
-    # ログアウトボタンを右側に配置（位置が低ければ st.write("") で調整）
-    st.write("") 
+col_logo, col_space, col_logout = st.columns([1, 2, 1])
+with col_logo:
+    st.image(ICON_URL, width=350) 
+with col_logout:
     st.write("") 
     if st.button("ログアウト", key="logout_btn", use_container_width=True):
         st.session_state["is_logged_in"] = False
