@@ -547,7 +547,7 @@ def show_personal_stats(df_batting, df_pitching):
         # =================================================
         # 【設定】ここへ除外したい選手名を記述してください
         # =================================================
-        FIXED_EXCLUDE_LIST = ["助っ人1", "助っ人2", "依田裕樹", "小峠海晴"]
+        FIXED_EXCLUDE_LIST = st.secrets.get("FIXED_EXCLUDE_LIST", [])
 
         # データの準備 & フィルタリング
         df_b_target = df_b_calc[~df_b_calc["選手名"].isin(FIXED_EXCLUDE_LIST)].copy()
