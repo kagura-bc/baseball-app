@@ -3,6 +3,10 @@ import datetime
 from config.settings import MY_TEAM, GROUND_LIST, OPPONENTS_LIST, OFFICIAL_GAME_TYPES
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
+
+# --- ここを追加（必ず必要です） ---
+from streamlit_option_menu import option_menu
+
 # 各ページ（View）の読み込み
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
 
@@ -39,8 +43,6 @@ def show_login_screen():
         st.write("")
         st.write("")
         
-        # HTMLを左端に詰めて記述します 
-        # コードの見栄えは悪いですが、こうしないとコードブロックとして認識されてしまいます
         st.markdown(f"""
 <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
     <img src="{ICON_URL}" style="width: 100px; height: 100px; object-fit: contain; margin-right: 15px;">
@@ -71,7 +73,7 @@ def show_login_screen():
 </div>
 """, unsafe_allow_html=True)
 
-        # フォーム (keyをユニークなものに変更してエラー回避)
+        # フォーム 
         with st.form("login_form_v3"):
             password = st.text_input("🔑 合言葉", type="password")
             submitted = st.form_submit_button("入場する", use_container_width=True)
@@ -86,7 +88,6 @@ def show_login_screen():
 
 # --- ログイン判定 ---
 if not st.session_state["is_logged_in"]:
-# 未ログイン時はログイン画面を表示して終了
     show_login_screen()
     st.stop()
 
@@ -102,16 +103,29 @@ if st.sidebar.button("ログアウト", key="logout_btn"):
     st.session_state["is_logged_in"] = False
     st.rerun()
 
-# --- ページ切り替え ---
-page = st.sidebar.radio("表示", [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析"])
+# ==========================================
+# 変更箇所：ページ切り替えメニュー（横並びタブ）
+# ==========================================
+page = option_menu(
+    menu_title=None,  
+    options=["チーム成績", "個人成績", "データ分析"], 
+    icons=["trophy", "person-lines-fill", "graph-up"], 
+    default_index=0,  
+    orientation="horizontal",  
+    styles={
+        "container": {"padding": "0!important", "background-color": "#fafafa", "border-radius": "10px"},
+        "icon": {"color": "black", "font-size": "20px"}, 
+        "nav-link": {"font-size": "16px", "text-align": "center", "margin":"0px", "--hover-color": "#eee"},
+        "nav-link-selected": {"background-color": "#ff4b4b", "color": "white"},
+    }
+)
 
 # --- 画面表示 ---
-
-if page == " 🏆 チーム成績":
+if page == "チーム成績":
     team_stats.show_team_stats(df_batting, df_pitching)
 
-elif page == " 📊 個人成績":
+elif page == "個人成績":
     personal_stats.show_personal_stats(df_batting, df_pitching)
 
-elif page == " 📈 データ分析":
+elif page == "データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
