@@ -26,20 +26,14 @@ load_css() # CSS読み込み
 # ==========================================
 # 🔐 ログイン機能の実装
 # ==========================================
-
-# セッションステートの初期化（ログイン状態を管理）
 if "is_logged_in" not in st.session_state:
     st.session_state["is_logged_in"] = False
 
 def show_login_screen():
-    """メイン画面を使った大きなログイン画面（吹き出し付き）"""
-    
     _, center, _ = st.columns([1, 10, 1])
-
     with center:
         st.write("")
         st.write("")
-        
         st.markdown(f"""
 <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
     <img src="{ICON_URL}" style="width: 100px; height: 100px; object-fit: contain; margin-right: 15px;">
@@ -73,7 +67,6 @@ def show_login_screen():
         with st.form("login_form_v3"):
             password = st.text_input("🔑 合言葉", type="password")
             submitted = st.form_submit_button("入場する", use_container_width=True)
-            
             if submitted:
                 if password == "kagura":
                     st.session_state["is_logged_in"] = True
@@ -82,7 +75,6 @@ def show_login_screen():
                 else:
                     st.error("合言葉が違います")
 
-# --- ログイン判定 ---
 if not st.session_state["is_logged_in"]:
     show_login_screen()
     st.stop()
@@ -92,17 +84,13 @@ df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
 # ==========================================
-# ✨ ヘッダーエリア（サイドバーの代わり）
+# ✨ ヘッダーエリア
 # ==========================================
-# 画面を3つのカラムに分けて、左にロゴ、右にログアウトボタンを配置します
 col_logo, col_space, col_logout = st.columns([1, 2, 1])
-
 with col_logo:
-    # PCでもスマホでも丁度いいサイズに指定
     st.image(ICON_URL, width=200) 
-
 with col_logout:
-    st.write("") # ボタンの縦位置をロゴと合わせるための微調整
+    st.write("") 
     if st.button("ログアウト", key="logout_btn", use_container_width=True):
         st.session_state["is_logged_in"] = False
         st.rerun()
@@ -127,9 +115,7 @@ page = option_menu(
 # --- 画面表示 ---
 if page == "チーム成績":
     team_stats.show_team_stats(df_batting, df_pitching)
-
 elif page == "個人成績":
     personal_stats.show_personal_stats(df_batting, df_pitching)
-
 elif page == "データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
