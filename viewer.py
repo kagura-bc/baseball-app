@@ -3,8 +3,6 @@ import datetime
 from config.settings import MY_TEAM, GROUND_LIST, OPPONENTS_LIST, OFFICIAL_GAME_TYPES
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
-
-# --- ここを追加（必ず必要です） ---
 from streamlit_option_menu import option_menu
 
 # 各ページ（View）の読み込み
@@ -36,7 +34,6 @@ if "is_logged_in" not in st.session_state:
 def show_login_screen():
     """メイン画面を使った大きなログイン画面（吹き出し付き）"""
     
-    # 画面中央寄せのためのカラム作成
     _, center, _ = st.columns([1, 10, 1])
 
     with center:
@@ -73,7 +70,6 @@ def show_login_screen():
 </div>
 """, unsafe_allow_html=True)
 
-        # フォーム 
         with st.form("login_form_v3"):
             password = st.text_input("🔑 合言葉", type="password")
             submitted = st.form_submit_button("入場する", use_container_width=True)
@@ -95,16 +91,24 @@ if not st.session_state["is_logged_in"]:
 df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
-# --- サイドバー設定 (共通) ---
-st.sidebar.image(ICON_URL, use_container_width=True)
+# ==========================================
+# ✨ ヘッダーエリア（サイドバーの代わり）
+# ==========================================
+# 画面を3つのカラムに分けて、左にロゴ、右にログアウトボタンを配置します
+col_logo, col_space, col_logout = st.columns([1, 2, 1])
 
-# ログアウトボタン
-if st.sidebar.button("ログアウト", key="logout_btn"):
-    st.session_state["is_logged_in"] = False
-    st.rerun()
+with col_logo:
+    # PCでもスマホでも丁度いいサイズ（幅80px）に指定
+    st.image(ICON_URL, width=80) 
+
+with col_logout:
+    st.write("") # ボタンの縦位置をロゴと合わせるための微調整
+    if st.button("ログアウト", key="logout_btn", use_container_width=True):
+        st.session_state["is_logged_in"] = False
+        st.rerun()
 
 # ==========================================
-# 変更箇所：ページ切り替えメニュー（横並びタブ）
+# ページ切り替えメニュー（横並びタブ）
 # ==========================================
 page = option_menu(
     menu_title=None,  
