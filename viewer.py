@@ -88,7 +88,7 @@ df_pitching = load_pitching_data()
 # ==========================================
 col_logo, col_space, col_logout = st.columns([1, 2, 1])
 with col_logo:
-    st.image(ICON_URL, width=200) 
+    st.image(ICON_URL, width=300) 
 with col_logout:
     st.write("") 
     if st.button("ログアウト", key="logout_btn", use_container_width=True):
