@@ -98,8 +98,8 @@ df_pitching = load_pitching_data()
 col_logo, col_space, col_logout = st.columns([1, 2, 1])
 
 with col_logo:
-    # PCでもスマホでも丁度いいサイズ（幅80px）に指定
-    st.image(ICON_URL, width=150) 
+    # PCでもスマホでも丁度いいサイズに指定
+    st.image(ICON_URL, width=200) 
 
 with col_logout:
     st.write("") # ボタンの縦位置をロゴと合わせるための微調整
