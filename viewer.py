@@ -37,7 +37,7 @@ def show_login_screen():
         # ロゴのみを中央配置
         st.markdown(f"""
 <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px;">
-    <img src="{ICON_URL}" style="width: 300px; height: 300px; object-fit: contain;">
+    <img src="{ICON_URL}" style="width: 350px; height: 350px; object-fit: contain;">
 </div>
 """, unsafe_allow_html=True)
 
