@@ -354,10 +354,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             has_homerun = False
             current_inn = st.session_state.get("current_inn_key", "1回")
             current_scorer = st.session_state.get("scorer_name", "") # スコアラー名を取得
+            
+            # ★ 追加：スコアラー名と選手名の画面状態を永続保存（ページ遷移対策）
+            st.session_state["persistent_scorer"] = current_scorer
+            if "saved_lineup" not in st.session_state:
+                st.session_state["saved_lineup"] = {}
 
             for i in range(15):
-                p_name = st.session_state.get(f"sn{i}")
+                p_name = st.session_state.get(f"sn{i}", "")
                 p_pos = st.session_state.get(f"sp{i}", "")
+                
+                # ★ 追加：スタメン（選手名・守備）を保持用の辞書にコピー
+                st.session_state["saved_lineup"][f"name_{i}"] = p_name
+                st.session_state["saved_lineup"][f"pos_{i}"] = p_pos
+                
+                # ★ 追加：守備位置が「投」の選手を投手ページ用に保存
+                if p_pos == "投" and p_name != "":
+                    st.session_state["saved_pitcher_name"] = p_name
+                
                 p_res = st.session_state.get(f"sr{i}", "---")
                 p_dir = st.session_state.get(f"sd{i}", "---")
                 
@@ -374,6 +388,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     if rbi_val == 0: rbi_val = 1
                     has_homerun = True
 
+                # 結果が「---」以外、または得点が1以上の時のみDB保存対象にする
                 if p_name and (p_res != "---" or run_val > 0):
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
@@ -385,6 +400,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
                     new_records.append(record_dict)
 
+            # 打席の入力があった場合はデータベースへ保存
             if new_records:
                 try:
                     new_df = pd.DataFrame(new_records)
@@ -407,16 +423,23 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                                 st.toast(f"3アウト交代！次イニングへ。")
                         except: pass
 
+                    # 打席結果部分だけリセット
                     for i in range(15):
                         for k in [f"sr{i}", f"sd{i}", f"si{i}", f"st{i}"]: st.session_state[k] = "---"
                     
                     if has_homerun: st.session_state["show_homerun_flg"] = True
-                    st.success(f"✅ 保存しました")
+                    st.success(f"✅ 打席結果を保存しました")
                     import time
                     time.sleep(1)
                     st.rerun() 
                 except Exception as e:
                     st.error(f"保存エラー: {e}")
+            else:
+                # 選手やスコアラーのセットのみで打席結果が入力されていない場合
+                st.success("✅ スタメンとスコアラーの表示を保持しました（※打席結果は未入力です）")
+                import time
+                time.sleep(1)
+                st.rerun()
 
         # --- 今シーズンのデータ抽出 ---
         this_year = datetime.datetime.now().year
@@ -447,7 +470,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
             with c_scorer: # スコアラー入力欄を追加
                 p_list = [""] + ALL_PLAYERS
-                st.selectbox("スコアラー", p_list, key="scorer_name", format_func=local_fmt)
+                saved_scorer = st.session_state.get("persistent_scorer", "")
+                def_scorer_ix = p_list.index(saved_scorer) if saved_scorer in p_list else 0
+                st.selectbox("スコアラー", p_list, index=def_scorer_ix, key="scorer_name", format_func=local_fmt)
 
             batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "盗塁", "得点", "走塁死", "盗塁死"]
             

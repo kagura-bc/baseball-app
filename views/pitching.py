@@ -165,10 +165,11 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             with c_mid3:
                 pitcher_list_opts = [""] + [local_fmt(p) for p in ALL_PLAYERS]
                 default_pitcher_idx = 0
-                shared_pitcher = st.session_state.get("shared_starting_pitcher")
-                if shared_pitcher:
+                # ★変更: batting.pyで保存した "saved_pitcher_name" を読み込む
+                saved_pitcher = st.session_state.get("saved_pitcher_name")
+                if saved_pitcher:
                     for i, p_opt in enumerate(pitcher_list_opts):
-                        if shared_pitcher in p_opt:
+                        if saved_pitcher in p_opt:
                             default_pitcher_idx = i
                             break
                 target_pitcher_disp = st.selectbox("登板投手", pitcher_list_opts, index=default_pitcher_idx)
@@ -220,7 +221,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
 
         # 4. 登録実行処理
         if submit_detail:
-            input_name = target_pitcher_disp if target_pitcher_disp else st.session_state.get("shared_starting_pitcher", "")
+            input_name = target_pitcher_disp if target_pitcher_disp else st.session_state.get("saved_pitcher_name", "")
             
             if not input_name: 
                 st.error("⚠️ 投手を選択してください")
