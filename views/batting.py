@@ -353,6 +353,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             new_records = []
             has_homerun = False
             current_inn = st.session_state.get("current_inn_key", "1回")
+            current_scorer = st.session_state.get("scorer_name", "") # スコアラー名を取得
 
             for i in range(15):
                 p_name = st.session_state.get(f"sn{i}")
@@ -379,7 +380,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
                         "結果": p_res if p_res != "---" else "得点",
                         "打点": rbi_val, "得点": run_val, "盗塁": (1 if p_res == "盗塁" else 0), 
-                        "種別": "打席", "打球方向": p_dir if p_dir != "---" else ""
+                        "種別": "打席", "打球方向": p_dir if p_dir != "---" else "",
+                        "スコアラー": current_scorer # 辞書にスコアラー情報を追加
                     }
                     new_records.append(record_dict)
 
@@ -432,7 +434,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True):
                 submit_everything()
 
-            c_inn, c_outs, _ = st.columns([1.5, 2.5, 3.5])
+            c_inn, c_outs, c_scorer = st.columns([1.5, 2.5, 3.5]) # '_' を 'c_scorer' に変更
             with c_inn:
                 curr_inn = st.selectbox("イニング", [f"{i}回" for i in range(1, 10)] + ["延長"], key="current_inn_key")
             with c_outs:
@@ -443,6 +445,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     d_outs = len(inn_df[inn_df["結果"] == "併殺打"]) * 2
                     disp_outs = (s_outs + d_outs) % 3
                 st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
+            with c_scorer: # スコアラー入力欄を追加
+                st.text_input("スコアラー", key="scorer_name")
 
             batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "盗塁", "得点", "走塁死", "盗塁死"]
             
