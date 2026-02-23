@@ -221,8 +221,6 @@ def show_personal_stats(df_batting, df_pitching):
         elif target_type == "練習試合":
             df_b_tg = df_b_tg[df_b_tg["試合種別"] == "練習試合"]
             df_p_tg = df_p_tg[df_p_tg["試合種別"] == "練習試合"]
-
-        st_bat, st_pit, st_fld = st.tabs(["打撃", "投手", "守備"])
         
         with st_bat:
             if not df_b_tg.empty:
