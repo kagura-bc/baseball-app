@@ -40,7 +40,7 @@ def show_team_stats(df_batting, df_pitching):
             total_hr = hr
             total_sb = pd.to_numeric(individuals["盗塁"], errors='coerce').fillna(0).sum()
             
-            ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退", "失策", "併殺打", "野選", "振り逃げ"]
+            ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
             total_ab = len(individuals[individuals["結果"].isin(ab_results)])
 
         gr = group["グラウンド"].iloc[0] if not group.empty else ""
@@ -258,13 +258,13 @@ def show_team_stats(df_batting, df_pitching):
                             df_group["打点"] = pd.to_numeric(df_group["打点"], errors='coerce').fillna(0)
                             df_group["盗塁"] = pd.to_numeric(df_group["盗塁"], errors='coerce').fillna(0)
                             
-                            pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退", "失策", "併殺打", "野選", "振り逃げ", "打撃妨害"]
+                            pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             tpa = df_group[df_group["結果"].isin(pa_list)].shape[0]
 
                             hits = df_group[df_group["結果"].isin(["単打", "二塁打", "三塁打", "本塁打"])].shape[0]
                             hr = df_group[df_group["結果"] == "本塁打"].shape[0]
                             rbi = int(df_group["打点"].sum())
-                            so = df_group[df_group["結果"].isin(["三振", "振り逃げ"])].shape[0]
+                            so = df_group[df_group["結果"].isin(["三振", "振り逃げ三振"])].shape[0]
                             bb = df_group[df_group["結果"].isin(["四球", "死球"])].shape[0]
                             sb = int(df_group["盗塁"].sum())
                             run = int(pd.to_numeric(df_group["得点"], errors='coerce').fillna(0).sum())
@@ -341,7 +341,7 @@ def show_team_stats(df_batting, df_pitching):
                             elif "ダミー" in r_type: continue
                             else:
                                 if res in ["安打", "単打", "二塁打", "三塁打", "本塁打"]: total_hits += 1
-                                elif res in ["三振", "振り逃げ"]: total_so += 1
+                                elif res in ["三振", "振り逃げ三振"]: total_so += 1
                                 elif res in ["四球", "死球"]: total_bb += 1
                         
                         total_outs = 0

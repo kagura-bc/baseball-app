@@ -275,6 +275,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     add_outs = 1
                 
                 add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0
+                add_strikeouts = 1 if p_res in ["三振", "振り逃げ三振"] else 0 # ★三振と振り逃げ三振をカウント
                 batter_idx_str = f"{st.session_state['opp_batter_index']}"
 
                 # --- データの作成 ---
@@ -294,6 +295,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     "自責点": p_er, 
                     "勝敗": "ー", 
                     "被安打": add_hits, 
+                    "奪三振": add_strikeouts,        # ★辞書データに奪三振の数を追加
                     "アウト数": add_outs, 
                     "種別": f"詳細:{batter_idx_str}番打者"
                 }

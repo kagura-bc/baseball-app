@@ -450,7 +450,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             df_this_season = pd.DataFrame()
 
         hit_results = ["単打", "二塁打", "三塁打", "本塁打"]
-        ab_results = hit_results + ["凡退(ゴロ)", "凡退(フライ)", "失策", "走塁死", "盗塁死", "三振", "併殺打", "野選", "振り逃げ", "打撃妨害"]
+        ab_results = hit_results + ["凡退(ゴロ)", "凡退(フライ)", "失策", "走塁死", "盗塁死", "三振", "併殺打", "野選", "振り逃げ三振"]
 
         # --- UI構築 ---
         with st.form(key='batting_form', clear_on_submit=False):
@@ -474,7 +474,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 def_scorer_ix = p_list.index(saved_scorer) if saved_scorer in p_list else 0
                 st.selectbox("スコアラー", p_list, index=def_scorer_ix, key="scorer_name", format_func=local_fmt)
 
-            batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "盗塁", "得点", "走塁死", "盗塁死"]
+            batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
             
             col_ratios = [0.5, 1.1, 1.8, 1.4, 0.9, 0.8, 0.8, 3.5]
             h = st.columns(col_ratios)
@@ -530,7 +530,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     ]
                     if not p_df.empty:
                         history_html = []
-                        pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "併殺打"]
+                        pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "併殺打", "振り逃げ三振", "打撃妨害"]
                         count = 0
                         total_runs = 0
                         for _, row in p_df.iterrows():
@@ -542,7 +542,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             
                             res_short = {
                                 "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 
-                                "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打":"犠"
+                                "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打":"犠", "振り逃げ三振":"逃", "打撃妨害":"妨"
                             }.get(res, res[:1])
                             
                             if res in pa_list_for_history:
