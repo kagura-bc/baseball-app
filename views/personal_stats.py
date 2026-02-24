@@ -632,6 +632,10 @@ def show_personal_stats(df_batting, df_pitching):
             # 規定投球 = その年の試合数 × COEFF_INN
             COEFF_AB  = 1.0
             COEFF_INN = 0.8
+            
+            # 【追加】最低表示数の設定（試合数が少ない年でも最低限必要な数）
+            MIN_AB  = 10
+            MIN_INN = 10
 
             # 1. 年度ごとの「試合数」をデータから自動算出
             # { "2024": 15, "2025": 12, ... } のような辞書ができる
@@ -645,9 +649,12 @@ def show_personal_stats(df_batting, df_pitching):
             # 規定打席数を計算して行に追加 (試合数 × 係数)
             df_bat_res["Req_Quota"] = df_bat_res["Year"].map(games_by_year_b).fillna(0) * COEFF_AB
             
-            # 率系ランキング用データの作成（規定到達者のみ）
+            # 率系ランキング用データの作成（規定到達 かつ 最低打数以上）
             # ※本来は「打席数(PA)」で判定すべきですが、既存に合わせて「打数(AB)」で判定しています
-            df_bat_rate_target = df_bat_res[df_bat_res["is_ab"] >= df_bat_res["Req_Quota"]].copy()
+            df_bat_rate_target = df_bat_res[
+                (df_bat_res["is_ab"] >= df_bat_res["Req_Quota"]) & 
+                (df_bat_res["is_ab"] >= MIN_AB)
+            ].copy()
 
             # 3. 投手集計 (年度・選手ごと)
             df_pit_res = get_ranking_df(df_p_target, ["Year", "選手名"], agg_rules_p)
@@ -657,8 +664,11 @@ def show_personal_stats(df_batting, df_pitching):
             # 規定投球回を計算して行に追加 (試合数 × 係数)
             df_pit_res["Req_Quota"] = df_pit_res["Year"].map(games_by_year_p).fillna(0) * COEFF_INN
 
-            # 率系ランキング用データの作成（規定到達者のみ）
-            df_pit_rate_target = df_pit_res[df_pit_res["Innings"] >= df_pit_res["Req_Quota"]].copy()
+            # 率系ランキング用データの作成（規定到達 かつ 最低投球回以上）
+            df_pit_rate_target = df_pit_res[
+                (df_pit_res["Innings"] >= df_pit_res["Req_Quota"]) & 
+                (df_pit_res["Innings"] >= MIN_INN)
+            ].copy()
 
         else:
             # 生涯通算 (Lifetime)
