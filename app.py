@@ -128,4 +128,4 @@ elif page == " 📈 データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
 
 elif page == " 🔧 データ修正":
-    edit_data.show_edit_page(df_batting, df_pitching)
+    edit_data.show_edit_page(df_batting, df_pitching, is_test_mode=is_test_mode)

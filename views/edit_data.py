@@ -3,9 +3,13 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 from config.settings import SPREADSHEET_URL, ALL_PLAYERS
 
-def show_edit_page(df_batting, df_pitching):
+def show_edit_page(df_batting, df_pitching, is_test_mode=False):
     st.title(" 🔧 データ修正")
     conn = st.connection("gsheets", type=GSheetsConnection)
+
+    # 🧪 テストモード判定で書き込むシートを切り替え
+    ws_batting = "打撃成績_テスト" if is_test_mode else "打撃成績"
+    ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
     
     # --- ★ 最終手段：Primaryボタンの色を「赤」に塗り替える ---
     st.markdown("""
@@ -50,7 +54,7 @@ def show_edit_page(df_batting, df_pitching):
         # ★ type="primary" を指定することで、CSSと確実に紐付けます
         if st.button("チェックした行を削除 ＆ 修正内容を保存", type="primary", use_container_width=True, key="del_bat_btn"):
             new_df = edited_b[edited_b["削除選択"] == False].drop(columns=["削除選択"])
-            conn.update(spreadsheet=SPREADSHEET_URL, data=new_df)
+            conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=new_df)
             st.cache_data.clear()
             st.success("更新しました")
             st.rerun()
@@ -71,7 +75,7 @@ def show_edit_page(df_batting, df_pitching):
         # ★ こちらも type="primary" にします
         if st.button("チェックした行を削除 ＆ 修正内容を保存 ", type="primary", use_container_width=True, key="del_pitch_btn"):
             new_df_p = edited_p[edited_p["削除選択"] == False].drop(columns=["削除選択"])
-            conn.update(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=new_df_p)
+            conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=new_df_p)
             st.cache_data.clear()
             st.success("更新しました")
             st.rerun()
