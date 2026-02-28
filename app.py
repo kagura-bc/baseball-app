@@ -62,10 +62,6 @@ if not st.session_state["is_logged_in"]:
 # 📱 ここから下がログイン後のメインアプリ
 # ==========================================
 
-# --- データ読み込み ---
-df_batting = load_batting_data()
-df_pitching = load_pitching_data()
-
 # --- サイドバー設定 (共通) ---
 st.sidebar.image(ICON_URL, use_container_width=True)
 
@@ -73,6 +69,17 @@ st.sidebar.image(ICON_URL, use_container_width=True)
 if st.sidebar.button("ログアウト", key="logout_btn"):
     st.session_state["is_logged_in"] = False
     st.rerun()
+
+# 🧪 テストモードのトグルスイッチを追加
+st.sidebar.markdown("---")
+is_test_mode = st.sidebar.toggle("🧪 テストモード", value=False)
+if is_test_mode:
+    st.sidebar.warning("現在テストモードです。入力データは本番環境(viewer)には反映されません。")
+st.sidebar.markdown("---")
+
+# --- データ読み込み（引数でモードを渡す） ---
+df_batting = load_batting_data(is_test_mode=is_test_mode)
+df_pitching = load_pitching_data(is_test_mode=is_test_mode)
 
 st.sidebar.header("⚙️ 試合設定")
 
@@ -100,13 +107,15 @@ page = st.sidebar.radio("表示", [" 🏠 打撃成績入力", " 🔥 投手成�
 if page == " 🏠 打撃成績入力":
     batting.show_batting_page(
         df_batting, df_pitching, 
-        selected_date_str, match_type, ground_name, opp_team, kagura_order
+        selected_date_str, match_type, ground_name, opp_team, kagura_order,
+        is_test_mode=is_test_mode
     )
 
 elif page == " 🔥 投手成績入力":
     pitching.show_pitching_page(
         df_batting, df_pitching,
-        selected_date_str, match_type, ground_name, opp_team, kagura_order
+        selected_date_str, match_type, ground_name, opp_team, kagura_order,
+        is_test_mode=is_test_mode
     )
 
 elif page == " 🏆 チーム成績":

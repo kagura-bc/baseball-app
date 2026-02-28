@@ -32,8 +32,12 @@ def local_fmt(name):
 # ==========================================
 # メイン表示関数
 # ==========================================
-def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order):
+def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
     conn = st.connection("gsheets", type=GSheetsConnection)
+    
+    # 🧪 テストモード判定で書き込むシートを切り替え
+    ws_batting = "打撃成績_テスト" if is_test_mode else "打撃成績"
+    ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
 
     # ==========================================
     # 1. 日付変更時のリセット処理 & 初期化
@@ -235,10 +239,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
                 try:
                     if new_batting_records:
-                        conn.update(spreadsheet=SPREADSHEET_URL, data=pd.concat([df_batting, pd.DataFrame(new_batting_records)], ignore_index=True))
+                        conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=pd.concat([df_batting, pd.DataFrame(new_batting_records)], ignore_index=True))
                     if new_pitching_records:
-                        conn.update(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=pd.concat([df_pitching, pd.DataFrame(new_pitching_records)], ignore_index=True))
-                    
+                        conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=pd.concat([df_pitching, pd.DataFrame(new_pitching_records)], ignore_index=True))
+                                        
                     st.cache_data.clear()
                     st.success("✅ スコアボードに反映しました")
                     import time
@@ -319,7 +323,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if recs:
                     try:
                         updated_df = pd.concat([df_batting, pd.DataFrame(recs)], ignore_index=True)
-                        conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
+                        conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=updated_df)
                         st.cache_data.clear()
                         st.success(f"✅ {len(recs)}件のまとめデータを保存しました")
                         import time
@@ -405,7 +409,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 try:
                     new_df = pd.DataFrame(new_records)
                     updated_df = pd.concat([df_batting, new_df], ignore_index=True)
-                    conn.update(spreadsheet=SPREADSHEET_URL, data=updated_df)
+                    conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=updated_df)
                     st.cache_data.clear()
                     
                     # イニング自動更新ロジック

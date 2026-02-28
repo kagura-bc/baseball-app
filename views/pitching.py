@@ -7,9 +7,11 @@ from utils.ui import render_scoreboard, render_out_indicator_3, fmt_player_name
 def local_fmt(name):
     return fmt_player_name(name, PLAYER_NUMBERS)
 
-def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order):
+def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
     conn = st.connection("gsheets", type=GSheetsConnection)
-    is_kagura_top = (kagura_order == "先攻 (表)")
+    
+    # 🧪 テストモード判定で書き込むシートを切り替え
+    ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
 
     # フィルタリング
     today_batting_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
@@ -302,7 +304,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 
                 # スプレッドシートへ保存
                 conn.update(
-                    spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=pd.concat([df_pitching, pd.DataFrame([rec])], 
+                    spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=pd.concat([df_pitching, pd.DataFrame([rec])], 
                     ignore_index=True)
                 )
                 st.cache_data.clear()
@@ -349,7 +351,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                         mask = (df_pitching["日付"].astype(str) == selected_date_str) & (df_pitching["選手名"] == target_player)
                         if not df_pitching[mask].empty:
                             df_pitching.loc[mask, "勝敗"] = dec_t
-                            conn.update(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=df_pitching)
+                            conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=df_pitching)
                             st.cache_data.clear()
                             st.success(f"✅ {target_player} 選手を「{dec_t}」で確定")
                         else: st.warning("本日の登板記録が見つかりません。")
@@ -421,7 +423,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     recs.append(base_rec)
                 
                 if recs:
-                    conn.update(spreadsheet=SPREADSHEET_URL, worksheet="投手成績", data=pd.concat([df_pitching, pd.DataFrame(recs)], ignore_index=True))
+                    conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=pd.concat([df_pitching, pd.DataFrame(recs)], ignore_index=True))
                     st.cache_data.clear()
                     st.success("✅ 登録完了")
                     st.rerun()
