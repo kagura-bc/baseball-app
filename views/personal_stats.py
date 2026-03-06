@@ -3,10 +3,20 @@ import pandas as pd
 import datetime
 import unicodedata
 from config.settings import ALL_PLAYERS, PLAYER_NUMBERS, OFFICIAL_GAME_TYPES
-try:
-    from local_secrets import HIDDEN_PLAYERS_TOTAL
-except ImportError:
-    HIDDEN_PLAYERS_TOTAL = []
+
+# ==========================================
+# --- ネットとローカルの二段構えでリストを取得 ---
+# ==========================================
+if "HIDDEN_PLAYERS_TOTAL" in st.secrets:
+    # 1. ネット上(Streamlit Cloud)に設定があればそれを使う
+    HIDDEN_PLAYERS_TOTAL = st.secrets["HIDDEN_PLAYERS_TOTAL"]
+else:
+    # 2. なければローカルのファイルから読み込む
+    try:
+        from local_secrets import HIDDEN_PLAYERS_TOTAL
+    except ImportError:
+        HIDDEN_PLAYERS_TOTAL = []
+# ==========================================
 
 def show_personal_stats(df_batting, df_pitching):
     st.title(" 📊 個人成績")
