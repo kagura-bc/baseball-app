@@ -608,18 +608,46 @@ def show_personal_stats(df_batting, df_pitching):
         # =================================================
         # 【設定】ここへ除外したい選手名を記述してください
         # =================================================
+        # secretsから取得。ローカルで直書きしたい場合は [] の中に直接名前を書きます。
+        # 例: ["助っ人A", "助っ人B", "山田太郎"]
         FIXED_EXCLUDE_LIST = st.secrets.get("FIXED_EXCLUDE_LIST", [])
 
+        # --- 表記ゆれを吸収して確実に除外するための追加処理 ---
+        def normalize_name_for_rec(text):
+            if not isinstance(text, str) or not text:
+                return ""
+            import unicodedata
+            text = unicodedata.normalize('NFKC', text)
+            return text.strip().replace(" ", "").replace("　", "").replace("さん", "")
+
+        # 比較用に除外リストをクレンジング
+        clean_exclude_list = [normalize_name_for_rec(n) for n in FIXED_EXCLUDE_LIST]
+
         # データの準備 & フィルタリング
-        df_b_target = df_b_calc[~df_b_calc["選手名"].isin(FIXED_EXCLUDE_LIST)].copy()
-        df_p_target = df_p_calc[~df_p_calc["選手名"].isin(FIXED_EXCLUDE_LIST)].copy()
+        df_b_target = df_b_calc.copy()
+        df_p_target = df_p_calc.copy()
+
+        # 打撃データの除外適用
+        if not df_b_target.empty and clean_exclude_list:
+            df_b_target["_match_name"] = df_b_target["選手名"].apply(normalize_name_for_rec)
+            df_b_target = df_b_target[~df_b_target["_match_name"].isin(clean_exclude_list)]
+            df_b_target = df_b_target.drop(columns=["_match_name"])
+
+        # 投手データの除外適用
+        if not df_p_target.empty and clean_exclude_list:
+            df_p_target["_match_name"] = df_p_target["選手名"].apply(normalize_name_for_rec)
+            df_p_target = df_p_target[~df_p_target["_match_name"].isin(clean_exclude_list)]
+            df_p_target = df_p_target.drop(columns=["_match_name"])
+        # -------------------------------------------------
 
         # 年度(Year)列を作成（試合数カウントと表示用）
-        df_b_target["Date"] = pd.to_datetime(df_b_target["日付"])
-        df_b_target["Year"] = df_b_target["Date"].dt.year.astype(str)
+        if not df_b_target.empty:
+            df_b_target["Date"] = pd.to_datetime(df_b_target["日付"])
+            df_b_target["Year"] = df_b_target["Date"].dt.year.astype(str)
         
-        df_p_target["Date"] = pd.to_datetime(df_p_target["日付"])
-        df_p_target["Year"] = df_p_target["Date"].dt.year.astype(str)
+        if not df_p_target.empty:
+            df_p_target["Date"] = pd.to_datetime(df_p_target["日付"])
+            df_p_target["Year"] = df_p_target["Date"].dt.year.astype(str)
 
         # -------------------------------------------------
         # 集計処理
