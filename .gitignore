@@ -12,3 +12,5 @@ env/
 
 # Macの不要ファイル（もしあれば）
 .DS_Store
+
+local_secrets.py

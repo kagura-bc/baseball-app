@@ -3,6 +3,10 @@ import pandas as pd
 import datetime
 import unicodedata
 from config.settings import ALL_PLAYERS, PLAYER_NUMBERS, OFFICIAL_GAME_TYPES
+try:
+    from local_secrets import HIDDEN_PLAYERS_TOTAL
+except ImportError:
+    HIDDEN_PLAYERS_TOTAL = []
 
 def show_personal_stats(df_batting, df_pitching):
     st.title(" 📊 個人成績")
@@ -131,7 +135,7 @@ def show_personal_stats(df_batting, df_pitching):
         st.markdown("#### 📊 通算成績リスト")
         
         # 非表示にしたい選手名をリストで定義 
-        HIDDEN_PLAYERS_TOTAL = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
+        # HIDDEN_PLAYERS_TOTAL = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
 
         years = sorted(list(set(df_batting["Year"].unique()) | set(df_pitching["Year"].unique())), reverse=True) if not df_batting.empty else []
         
@@ -161,12 +165,7 @@ def show_personal_stats(df_batting, df_pitching):
             # 空白の除去と「さん」の除去
             return text.strip().replace(" ", "").replace("　", "").replace("さん", "")
 
-        # .secrets.toml からリストを取得。取得できない場合はコード内のリストをデフォルトにする
-        hidden_list_raw = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [
-            "助っ人1", "助っ人2", "依田裕樹", "清水さん", "知見寺明司", 
-            "鮫田叶夢", "前島和貴", "濱瑠晟", "にまさん", "中村卓歳", 
-            "小林高知", "堤はるか", "藤本隆之輔"
-        ])
+        hidden_list_raw = HIDDEN_PLAYERS_TOTAL
 
         # 除外リストをクレンジング（比較用に「さん」などを抜いた状態にする）
         clean_hidden_list = [normalize_name(n) for n in hidden_list_raw]
@@ -608,9 +607,7 @@ def show_personal_stats(df_batting, df_pitching):
         # =================================================
         # 【設定】ここへ除外したい選手名を記述してください
         # =================================================
-        # secretsから取得。ローカルで直書きしたい場合は [] の中に直接名前を書きます。
-        # 例: ["助っ人A", "助っ人B", "山田太郎"]
-        FIXED_EXCLUDE_LIST = st.secrets.get("FIXED_EXCLUDE_LIST", [])
+        FIXED_EXCLUDE_LIST = HIDDEN_PLAYERS_TOTAL
 
         # --- 表記ゆれを吸収して確実に除外するための追加処理 ---
         def normalize_name_for_rec(text):
@@ -638,7 +635,6 @@ def show_personal_stats(df_batting, df_pitching):
             df_p_target["_match_name"] = df_p_target["選手名"].apply(normalize_name_for_rec)
             df_p_target = df_p_target[~df_p_target["_match_name"].isin(clean_exclude_list)]
             df_p_target = df_p_target.drop(columns=["_match_name"])
-        # -------------------------------------------------
 
         # 年度(Year)列を作成（試合数カウントと表示用）
         if not df_b_target.empty:
