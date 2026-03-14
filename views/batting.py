@@ -20,10 +20,6 @@ def save_lineup_item(i, item_type):
         val = st.session_state[widget_key]
         st.session_state["saved_lineup"][f"{item_type}_{i}"] = val
 
-def update_bench_state():
-    """ベンチメンバーの選択状態をsession_stateに保存するコールバック"""
-    st.session_state["persistent_bench"] = st.session_state.bench_selection_widget
-
 # --- ヘルパー関数 ---
 def local_fmt(name):
     """configのPLAYER_NUMBERSを使って名前を整形するローカル関数"""
@@ -69,6 +65,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["saved_lineup"] = {}
             st.session_state["persistent_bench"] = []
             st.session_state["persistent_inn"] = "1回" 
+            st.session_state["persistent_scorer"] = "" # ★ 追加
         
         # 4. 管理フラグを更新してリラン
         st.session_state["last_selected_date"] = selected_date_str
@@ -81,6 +78,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["persistent_bench"] = []
     if "persistent_inn" not in st.session_state: 
         st.session_state["persistent_inn"] = "1回"   
+    if "persistent_scorer" not in st.session_state: # ★ 追加
+        st.session_state["persistent_scorer"] = ""  # ★ 追加
 
     # ==========================================
     # 2. データのフィルタリング & 読み込み
@@ -488,7 +487,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 p_list = [""] + ALL_PLAYERS
                 saved_scorer = st.session_state.get("persistent_scorer", "")
                 def_scorer_ix = p_list.index(saved_scorer) if saved_scorer in p_list else 0
-                st.selectbox("スコアラー", p_list, index=def_scorer_ix, key="scorer_name", format_func=local_fmt)
+                
+                # 💡完全修正版：on_changeを辞め、選ばれた値を直接保管庫に入れる
+                selected_scorer = st.selectbox("スコアラー", p_list, index=def_scorer_ix, key="scorer_name", format_func=local_fmt)
+                st.session_state["persistent_scorer"] = selected_scorer
 
             batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
             
@@ -577,4 +579,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             st.divider()
             with st.expander(" 🚌 ベンチ入りメンバー", expanded=True):
-                st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
+                # 💡完全修正版：選ばれた値を直接保管庫に入れる
+                selected_bench = st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
+                st.session_state["persistent_bench"] = selected_bench

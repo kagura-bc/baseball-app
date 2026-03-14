@@ -291,11 +291,12 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     
                     "選手名": target_pitcher_name,   # 投手成績用
                     "守備位置": target_fielder_pos_str,  # ポジション（捕）
+                    "打球方向": target_fielder_pos_str,  # 💡追加：データ分析用に打球方向列に保存
                     "処理野手": fielder_display,     # 個人成績用（久保田剛志）
                     
-                    "結果": display_result,          # ⚠️ここを「凡退(捕)」に変更
+                    "結果": p_res,                   # 💡修正：計算エラーを防ぐため純粋な「単打」などを保存
                     "失点": p_run, 
-                    "自責点": p_er, 
+                    "自責点": p_er,
                     "勝敗": "ー", 
                     "被安打": add_hits, 
                     "奪三振": add_strikeouts,        # ★辞書データに奪三振の数を追加
@@ -370,9 +371,43 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                         display_items = []
                         for _, row in inn_df.iterrows():
                             b_idx = str(row["種別"]).split(":")[1].replace("番打者", "") if ":" in str(row["種別"]) else "?"
-                            res_text = f"{row['結果']}({row['処理野手']})" if row['処理野手'] else row['結果']
+                            
+                            # 画面表示用として結果と打球方向を合体させる
+                            raw_res = str(row.get('結果', ''))
+                            pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
+                            
+                            if pos_str and pos_str not in ["nan", "None", ""]:
+                                raw_res = f"{raw_res}({pos_str})"
+                                
+                            fielder_str = str(row.get('処理野手', ''))
+                            if fielder_str and fielder_str not in ["nan", "None", ""]:
+                                res_text = f"{raw_res} [{fielder_str}]"
+                            else:
+                                res_text = raw_res
+                                
+                            # 🌟追加：失点がある場合はテキストに失点数を追加
+                            runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
+                            runs = int(runs) if pd.notna(runs) else 0
+                            if runs > 0:
+                                res_text = f"{res_text} 💥失点{runs}"
+                                
                             display_items.append({"打順": f"{b_idx}番", "投手": local_fmt(row["選手名"]), "結果": res_text})
-                        st.dataframe(pd.DataFrame(display_items).T, use_container_width=True)
+                        
+                        # 🌟修正：データフレームを作成し、失点を含むセルを赤字にする
+                        df_disp = pd.DataFrame(display_items).T
+                        
+                        def highlight_timely(val):
+                            if isinstance(val, str) and "💥失点" in val:
+                                return "color: red; font-weight: bold;"
+                            return ""
+                        
+                        # Pandasのバージョンによる記述の違いを吸収する安全な処理
+                        try:
+                            styled_df = df_disp.style.map(highlight_timely)
+                        except AttributeError:
+                            styled_df = df_disp.style.applymap(highlight_timely)
+                            
+                        st.dataframe(styled_df, use_container_width=True)
             else: st.caption("詳細データはまだありません。")
         
     # ---------------------------------------------------------
