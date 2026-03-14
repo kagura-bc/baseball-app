@@ -68,6 +68,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state[f"sp{i}"] = "他"
             st.session_state["saved_lineup"] = {}
             st.session_state["persistent_bench"] = []
+            st.session_state["persistent_inn"] = "1回" 
         
         # 4. 管理フラグを更新してリラン
         st.session_state["last_selected_date"] = selected_date_str
@@ -78,6 +79,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["saved_lineup"] = {}
     if "persistent_bench" not in st.session_state:
         st.session_state["persistent_bench"] = []
+    if "persistent_inn" not in st.session_state: 
+        st.session_state["persistent_inn"] = "1回"   
 
     # ==========================================
     # 2. データのフィルタリング & 読み込み
@@ -358,6 +361,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             has_homerun = False
             current_inn = st.session_state.get("current_inn_key", "1回")
             current_scorer = st.session_state.get("scorer_name", "") # スコアラー名を取得
+            # ★ 追加：スコアラー名と選手名の画面状態を永続保存（ページ遷移対策）
+            st.session_state["persistent_scorer"] = current_scorer
+            st.session_state["persistent_inn"] = current_inn # ★ 追加：イニングも永続保存
             
             # ★ 追加：スコアラー名と選手名の画面状態を永続保存（ページ遷移対策）
             st.session_state["persistent_scorer"] = current_scorer
@@ -423,7 +429,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         try:
                             curr_idx = inn_list.index(current_inn)
                             if curr_idx < len(inn_list) - 1:
-                                st.session_state["current_inn_key"] = inn_list[curr_idx + 1]
+                                next_inn = inn_list[curr_idx + 1] # 変数に一度入れる
+                                st.session_state["current_inn_key"] = next_inn
+                                st.session_state["persistent_inn"] = next_inn # ★ 追加
                                 st.toast(f"3アウト交代！次イニングへ。")
                         except: pass
 
@@ -463,7 +471,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             c_inn, c_outs, c_scorer = st.columns([1.5, 2.5, 3.5]) # '_' を 'c_scorer' に変更
             with c_inn:
-                curr_inn = st.selectbox("イニング", [f"{i}回" for i in range(1, 10)] + ["延長"], key="current_inn_key")
+                # ★ 変更：保管庫からイニングを読み込んで初期値にセットする
+                inn_list = [f"{i}回" for i in range(1, 10)] + ["延長"]
+                saved_inn = st.session_state.get("persistent_inn", "1回")
+                def_inn_ix = inn_list.index(saved_inn) if saved_inn in inn_list else 0
+                curr_inn = st.selectbox("イニング", inn_list, index=def_inn_ix, key="current_inn_key")
             with c_outs:
                 disp_outs = 0
                 if not today_batting_df.empty:
