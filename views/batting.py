@@ -339,7 +339,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         def submit_everything():
             if "sn0" not in st.session_state: return 
 
-            require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打"]
+            require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打"]
             validation_errors = []
 
             for i in range(15):
