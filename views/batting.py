@@ -101,18 +101,22 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
                 
                 if not rows.empty:
-                    # その打順の最初のデータを取得
-                    first_row = rows.iloc[0]
-                    saved_name = first_row["選手名"]
-                    saved_pos = first_row.get("位置", "")
-                    
-                    # 画面の入力欄(session_state)にセット
-                    st.session_state[f"sn{i}"] = saved_name
-                    st.session_state[f"sp{i}"] = saved_pos
+                        # その打順の最後（最新）のデータを取得（代打など交代後の選手を維持するため）
+                        last_row = rows.iloc[-1]
+                        saved_name = last_row["選手名"]
+                        saved_pos = last_row.get("位置", "")
+                        
+                        # 画面の入力欄(session_state)にセット
+                        st.session_state[f"sn{i}"] = saved_name
+                        st.session_state[f"sp{i}"] = saved_pos
+                        
+                        # 復元時にもsaved_lineupへ最新の選手を確実に同期しておく
+                        st.session_state["saved_lineup"][f"name_{i}"] = saved_name
+                        st.session_state["saved_lineup"][f"pos_{i}"] = saved_pos
                     
                     # 投手の連携用データもセット
-                    if saved_pos == "投" and saved_name:
-                         st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
+                if saved_pos == "投" and saved_name:
+                        st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
                          
         except Exception as e:
             print(f"Data Loading Error: {e}")
