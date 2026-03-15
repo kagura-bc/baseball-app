@@ -257,7 +257,15 @@ def show_team_stats(df_batting, df_pitching):
                         def summarize_bat(df_group):
                             # 1. 基本情報の取得
                             order_val = df_group["打順"].iloc[0] if "打順" in df_group.columns else ""
-                            pos_val = df_group["守備"].iloc[0] if "守備" in df_group.columns else ""
+                            
+                            # 【修正箇所】列名が「位置」で保存されているケースに対応
+                            if "位置" in df_group.columns:
+                                pos_val = df_group["位置"].iloc[0]
+                            elif "守備" in df_group.columns:
+                                pos_val = df_group["守備"].iloc[0]
+                            else:
+                                pos_val = ""
+                                
                             player_name = df_group["選手名"].iloc[0]
                             
                             # 2. 打席数の計算
@@ -289,7 +297,7 @@ def show_team_stats(df_batting, df_pitching):
                                             "失策":"失", "併殺打":"併", "野選":"野"
                                         }.get(res, res[:1])
                                         
-                                        # 【修正箇所】打点の取得エラーを回避
+                                        # 打点の取得
                                         rbi_raw = pd.to_numeric(row.get("打点", 0), errors='coerce')
                                         rbi_val = int(rbi_raw) if pd.notna(rbi_raw) else 0
                                         
