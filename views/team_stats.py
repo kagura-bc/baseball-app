@@ -242,7 +242,21 @@ def show_team_stats(df_batting, df_pitching):
 
                 # ここからスタメン表示ロジック) 
                 st.divider()
-                st.markdown("#### 🏏  打撃成績")
+                st.markdown("#### 🏏  打撃成績")
+                
+                # --- 追加：スコアラーの表示（ここから） ---
+                if "スコアラー" in match_bat.columns:
+                    # 空白や未入力(NaN)を除外してスコアラー名を取得
+                    valid_scorers = match_bat["スコアラー"].dropna()
+                    valid_scorers = valid_scorers[valid_scorers != ""]
+                    scorer_name = valid_scorers.iloc[0] if not valid_scorers.empty else "未登録"
+                else:
+                    scorer_name = "未登録"
+                
+                # margin-topにマイナスを指定して、タイトルと同じ高さの右端に並べる小技
+                st.markdown(f"<div style='text-align: right; color: gray; font-size: 14px; margin-top: -35px; margin-bottom: 10px;'>📝 スコアラー: {scorer_name}</div>", unsafe_allow_html=True)
+                # --- 追加：スコアラーの表示（ここまで） ---
+
                 personal_bat = match_bat[match_bat["選手名"] != "チーム記録"].copy()
                 
                 if not personal_bat.empty:
