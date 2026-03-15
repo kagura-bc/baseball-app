@@ -334,10 +334,10 @@ def show_personal_stats(df_batting, df_pitching):
 
                     # 2. 集計
                     # 守備機会 = レコード数
-                    # 失策 = 結果が「失策」の数
+                    # 失策 = 結果が「失策」「暴投」「捕逸」の数
                     stats_f = fld_expanded.groupby(["FielderName", "FielderPos"]).agg(
                         守備機会=("結果", "count"),
-                        失策数=("結果", lambda x: (x == "失策").sum())
+                        失策数=("結果", lambda x: x.isin(["失策", "暴投", "捕逸"]).sum())
                     ).reset_index()
                     
                     # 守備率計算
