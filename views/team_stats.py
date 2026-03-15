@@ -255,62 +255,53 @@ def show_team_stats(df_batting, df_pitching):
 
                     if not df_active.empty:
                         def summarize_bat(df_group):
-                            df_group["打点"] = pd.to_numeric(df_group["打点"], errors='coerce').fillna(0)
-                            df_group["盗塁"] = pd.to_numeric(df_group["盗塁"], errors='coerce').fillna(0)
+                            # 1. 基本情報の取得
+                            order_val = df_group["打順"].iloc[0] if "打順" in df_group.columns else ""
+                            pos_val = df_group["守備"].iloc[0] if "守備" in df_group.columns else ""
+                            player_name = df_group["選手名"].iloc[0]
                             
+                            # 2. 打席数の計算
                             pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退(ゴロ)", "凡退(フライ)", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
-                            tpa = df_group[df_group["結果"].isin(pa_list)].shape[0]
-
-                            hits = df_group[df_group["結果"].isin(["単打", "二塁打", "三塁打", "本塁打"])].shape[0]
-                            hr = df_group[df_group["結果"] == "本塁打"].shape[0]
-                            rbi = int(df_group["打点"].sum())
-                            so = df_group[df_group["結果"].isin(["三振", "振り逃げ三振"])].shape[0]
-                            bb = df_group[df_group["結果"].isin(["四球", "死球"])].shape[0]
-                            sb = int(df_group["盗塁"].sum())
-                            run = int(pd.to_numeric(df_group["得点"], errors='coerce').fillna(0).sum())
-
-                            order_val = 999
-                            if "打順" in df_group.columns:
-                                vals = pd.to_numeric(df_group["打順"], errors='coerce').dropna()
-                                if not vals.empty: order_val = int(vals.min())
+                            tpa = df_group[df_group["結果"].isin(pa_list)].shape[0] if "結果" in df_group.columns else 0
                             
-                            pos_val = ""
-                            if "位置" in df_group.columns:
-                                valid_pos = df_group["位置"].dropna().astype(str)
-                                valid_pos = valid_pos[valid_pos != ""]
-                                if not valid_pos.empty: pos_val = valid_pos.iloc[0]
-
-                            # 打席ごとの履歴を作成
+                            # 3. 盗塁と得点の集計
+                            sb = int(pd.to_numeric(df_group["盗塁"], errors='coerce').fillna(0).sum()) if "盗塁" in df_group.columns else 0
+                            run = int(pd.to_numeric(df_group["得点"], errors='coerce').fillna(0).sum()) if "得点" in df_group.columns else 0
+                            
+                            # 4. 打席ごとの結果を生成
                             history_texts = []
                             count = 0
                             pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             
-                            for _, row in df_group.iterrows():
-                                res = str(row.get("結果", ""))
-                                if res in pa_list_for_history:
-                                    count += 1
-                                    p_dir = str(row.get("打球方向", ""))
-                                    if pd.isna(row.get("打球方向")) or p_dir == "None" or p_dir == "nan":
-                                        p_dir = ""
+                            if "結果" in df_group.columns:
+                                for _, row in df_group.iterrows():
+                                    res = str(row.get("結果", ""))
+                                    if res in pa_list_for_history:
+                                        count += 1
+                                        p_dir = str(row.get("打球方向", ""))
+                                        if pd.isna(row.get("打球方向")) or p_dir == "None" or p_dir == "nan":
+                                            p_dir = ""
+                                            
+                                        res_short = {
+                                            "単打":"安", "二塁打":"二", "三塁打":"三", "本塁打":"本", 
+                                            "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", 
+                                            "死球":"死", "犠打":"犠", "振り逃げ三振":"逃", "打撃妨害":"妨",
+                                            "失策":"失", "併殺打":"併", "野選":"野"
+                                        }.get(res, res[:1])
                                         
-                                    # 結果を1文字に短縮
-                                    res_short = {
-                                        "単打":"安", "二塁打":"二", "三塁打":"三", "本塁打":"本", 
-                                        "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", 
-                                        "死球":"死", "犠打":"犠", "振り逃げ三振":"逃", "打撃妨害":"妨",
-                                        "失策":"失", "併殺打":"併", "野選":"野"
-                                    }.get(res, res[:1])
-                                    
-                                    # 打点の取得
-                                    rbi_val = int(pd.to_numeric(row.get("打点", 0), errors='coerce').fillna(0))
-                                    disp_text = f"{p_dir}{res_short}"
-                                    
-                                    if rbi_val > 0:
-                                        history_texts.append(f"{count}({disp_text}･{rbi_val}打点)")
-                                    else:
-                                        history_texts.append(f"{count}({disp_text})")
+                                        # 【修正箇所】打点の取得エラーを回避
+                                        rbi_raw = pd.to_numeric(row.get("打点", 0), errors='coerce')
+                                        rbi_val = int(rbi_raw) if pd.notna(rbi_raw) else 0
+                                        
+                                        disp_text = f"{p_dir}{res_short}"
+                                        
+                                        # 打点がある場合は赤い絵文字をつけて目立たせる
+                                        if rbi_val > 0:
+                                            history_texts.append(f"🔴{count}({disp_text}･{rbi_val}打点)")
+                                        else:
+                                            history_texts.append(f"{count}({disp_text})")
                             
-                            # 盗塁と得点も補足として表示
+                            # 5. 補足情報（盗塁・得点）の追加
                             extra = []
                             if sb > 0: extra.append(f"盗{sb}")
                             if run > 0: extra.append(f"得{run}")
@@ -318,7 +309,13 @@ def show_team_stats(df_batting, df_pitching):
                             
                             summary_str = " ".join(history_texts) + extra_str
                             
-                            return pd.Series({"打順": order_val, "守備": pos_val, "選手名": df_group["選手名"].iloc[0], "打席": tpa, "成績詳細": summary_str})
+                            return pd.Series({
+                                "打順": order_val, 
+                                "守備": pos_val, 
+                                "選手名": player_name, 
+                                "打席": tpa, 
+                                "成績詳細": summary_str
+                            })
 
                         df_summary = df_active.groupby("選手名", sort=False).apply(summarize_bat).reset_index(drop=True)
                         
