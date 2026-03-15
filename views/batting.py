@@ -101,18 +101,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
                 
                 if not rows.empty:
-                        # その打順の最後（最新）のデータを取得（代打など交代後の選手を維持するため）
+                        # その打順の最後（最新）のデータを取得
                         last_row = rows.iloc[-1]
                         saved_name = last_row["選手名"]
                         saved_pos = last_row.get("位置", "")
                         
-                        # 画面の入力欄(session_state)にセット
-                        st.session_state[f"sn{i}"] = saved_name
-                        st.session_state[f"sp{i}"] = saved_pos
+                        # ▼▼▼ ここから修正 ▼▼▼
+                        # 入力欄（session_state）にまだ値が存在しない場合のみセットする
+                        # （ユーザーが手動で選手を変更した直後の強制上書きを防ぐため）
+                        if f"sn{i}" not in st.session_state:
+                            st.session_state[f"sn{i}"] = saved_name
+                            st.session_state[f"sp{i}"] = saved_pos
                         
-                        # 復元時にもsaved_lineupへ最新の選手を確実に同期しておく
-                        st.session_state["saved_lineup"][f"name_{i}"] = saved_name
-                        st.session_state["saved_lineup"][f"pos_{i}"] = saved_pos
+                        # 保存用の箱(saved_lineup)にも、まだ記録がなければ同期しておく
+                        if "saved_lineup" not in st.session_state:
+                            st.session_state["saved_lineup"] = {}
+                            
+                        if f"name_{i}" not in st.session_state["saved_lineup"]:
+                            st.session_state["saved_lineup"][f"name_{i}"] = saved_name
+                            st.session_state["saved_lineup"][f"pos_{i}"] = saved_pos
                     
                     # 投手の連携用データもセット
                 if saved_pos == "投" and saved_name:
