@@ -131,7 +131,7 @@ def show_analysis_page(df_batting, df_pitching):
     # ---------------------------------------------------------
     # タブ構成
     # ---------------------------------------------------------
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 チーム傾向", "🆚 対戦相手別", "⏱️ イニング・先制率", "🧠 理想オーダー", "🤝 チーム貢献度"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 チーム傾向", "🆚 対戦相手別", "⏱️ イニング・先制率", "🔍 詳細投打分析", "🧠 理想オーダー", "🤝 チーム貢献度"])
 
     # =========================================================
     # Tab 1: チーム傾向 (わくわくVer.)
@@ -386,11 +386,168 @@ def show_analysis_page(df_batting, df_pitching):
             
             # ヒートマップ風テーブル
             st.dataframe(df_inn[["イニング", "得点", "失点"]].set_index("イニング").T, use_container_width=True)
-
-    # =========================================================
-    # Tab 4: 理想オーダー 
-    # =========================================================
+    
+    # ---------------------------------------------------------
+    # Tab 4: 詳細投打データ分析（2026年以降）
+    # ---------------------------------------------------------
     with tab4:
+        st.markdown("## 🔍 詳細投打データ分析 (2026年以降)")
+        st.caption("※詳細な記録を取り始めた2026年以降のデータを集計しています")
+
+        # 【重要修正】他のタブの影響でエラーが出ないよう、大元の df_batting と df_pitching を直接使います
+        df_b_detail = df_batting[pd.to_datetime(df_batting["日付"], errors='coerce').dt.year >= 2026].copy() if not df_batting.empty else pd.DataFrame()
+        df_p_detail = df_pitching[pd.to_datetime(df_pitching["日付"], errors='coerce').dt.year >= 2026].copy() if not df_pitching.empty else pd.DataFrame()
+
+        # サブメニュー (スマホで横にスクロールしなくて済むよう、ここだけセレクトボックスにしています)
+        detail_menu = st.selectbox(
+            "📂 見たい分析項目を選んでください", 
+            ["チーム全体の傾向", "個人の打撃分析", "個人の投手分析"],
+            key="detail_analysis_menu"
+        )
+        st.divider()
+
+        # --- チーム全体の傾向 ---
+        if detail_menu == "チーム全体の傾向":
+            st.markdown("#### 🏢 チーム全体のプレースタイル")
+            
+            st.markdown("##### チーム打球傾向 (アウトの内訳)")
+            if not df_b_detail.empty:
+                t_goro = len(df_b_detail[df_b_detail["結果"].astype(str).str.contains("ゴロ|併殺打")])
+                t_fly = len(df_b_detail[df_b_detail["結果"].astype(str).str.contains("フライ|犠飛")])
+                t_so = len(df_b_detail[df_b_detail["結果"].astype(str).str.contains("三振")])
+                
+                df_t_out = pd.DataFrame({"種類": ["ゴロアウト", "フライアウト", "三振"], "数": [t_goro, t_fly, t_so]})
+                if df_t_out["数"].sum() > 0:
+                    pie_t_out = alt.Chart(df_t_out).mark_arc(innerRadius=40).encode(
+                        theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロアウト", "フライアウト", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
+                    ).properties(height=300)
+                    st.altair_chart(pie_t_out, use_container_width=True)
+                else:
+                    st.caption("データがありません")
+            else:
+                st.caption("2026年以降の打撃データがありません")
+                    
+            st.write("")
+            st.markdown("##### チーム投手陣のアウト取得傾向")
+            if not df_p_detail.empty:
+                p_goro = len(df_p_detail[df_p_detail["結果"].astype(str).str.contains("ゴロ|併殺打")])
+                p_fly = len(df_p_detail[df_p_detail["結果"].astype(str).str.contains("フライ")])
+                p_so = int(pd.to_numeric(df_p_detail["奪三振"], errors='coerce').fillna(0).sum()) if "奪三振" in df_p_detail.columns else 0
+                
+                df_p_out = pd.DataFrame({"種類": ["ゴロで打たせてとる", "フライアウト", "三振で奪う"], "数": [p_goro, p_fly, p_so]})
+                if df_p_out["数"].sum() > 0:
+                    pie_p_out = alt.Chart(df_p_out).mark_arc(innerRadius=40).encode(
+                        theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロで打たせてとる", "フライアウト", "三振で奪う"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
+                    ).properties(height=300)
+                    st.altair_chart(pie_p_out, use_container_width=True)
+                else:
+                    st.caption("詳細な投手データがありません")
+            else:
+                st.caption("2026年以降の投手データがありません")
+
+        # --- 個人の打撃分析 ---
+        elif detail_menu == "個人の打撃分析":
+            if not df_b_detail.empty:
+                players_b = sorted(df_b_detail[df_b_detail["選手名"] != "チーム記録"]["選手名"].dropna().unique())
+                if players_b:
+                    target_b_player = st.selectbox("分析する打者を選択", players_b, key="ana_bat_player")
+                    my_b = df_b_detail[df_b_detail["選手名"] == target_b_player].copy()
+                    
+                    if not my_b.empty:
+                        st.markdown(f"#### {target_b_player} の打球方向")
+                        def show_player_direction_chart(data_df, title_label):
+                            if "打球方向" not in data_df.columns: return
+                            valid_dirs = data_df["打球方向"].dropna().astype(str).str.strip()
+                            valid_dirs = valid_dirs[(valid_dirs != "") & (valid_dirs != "nan") & (valid_dirs != "None")]
+                            dir_counts = valid_dirs.value_counts().reset_index()
+                            if not dir_counts.empty:
+                                dir_counts.columns = ["方向", "数"]
+                                bar_dir = alt.Chart(dir_counts).mark_bar().encode(
+                                    x=alt.X("数:Q", title="打球数"), y=alt.Y("方向:N", sort="-x", title="方向"), color=alt.Color("方向:N", legend=None), tooltip=["方向", "数"]
+                                ).properties(height=250)
+                                st.altair_chart(bar_dir, use_container_width=True)
+                            else:
+                                st.caption(f"（{title_label} のデータはありません）")
+
+                        st.markdown("**■ 全体 (安打・凡退含む)**")
+                        show_player_direction_chart(my_b, "全体")
+                        
+                        hit_results = ["単打", "二塁打", "三塁打", "本塁打"]
+                        out_results = ["凡退(ゴロ)", "凡退(フライ)", "併殺打", "野選", "失策"]
+                        st.markdown("**■ 安打時**")
+                        show_player_direction_chart(my_b[my_b["結果"].isin(hit_results)], "安打時")
+                        st.markdown("**■ 凡退・失策時**")
+                        show_player_direction_chart(my_b[my_b["結果"].isin(out_results)], "凡退時")
+                        
+                        st.divider()
+                        st.markdown(f"#### {target_b_player} のゴロ/フライ比率 (GO/AO)")
+                        my_goro = len(my_b[my_b["結果"].astype(str).str.contains("ゴロ|併殺打")])
+                        my_fly = len(my_b[my_b["結果"].astype(str).str.contains("フライ|犠飛")])
+                        st.metric("ゴロアウト数", my_goro)
+                        st.metric("フライアウト数", my_fly)
+                        if my_fly > 0:
+                            st.metric("GO/AO (ゴロ÷フライ)", f"{my_goro / my_fly:.2f}", help="1.0以上ならゴロヒッター、未満ならフライヒッターと言えます。")
+                        else:
+                            st.write("※ フライアウトが0のため比率計算不可")
+                    else:
+                        st.write("該当選手のデータなし")
+                else:
+                    st.write("対象となる選手がいません")
+            else:
+                st.info("2026年以降の打撃データがありません")
+
+        # --- 個人の投手分析 ---
+        elif detail_menu == "個人の投手分析":
+            if not df_p_detail.empty:
+                players_p = sorted(df_p_detail[(df_p_detail["選手名"] != "チーム記録") & (df_p_detail["選手名"].notna())]["選手名"].unique())
+                if players_p:
+                    target_p_player = st.selectbox("分析する投手を選択", players_p, key="ana_pit_player")
+                    my_p = df_p_detail[df_p_detail["選手名"] == target_p_player].copy()
+                    
+                    if not my_p.empty:
+                        st.markdown(f"#### {target_p_player} のアウトの取り方")
+                        out_goro = len(my_p[my_p["結果"].astype(str).str.contains("ゴロ|併殺打")])
+                        out_fly = len(my_p[my_p["結果"].astype(str).str.contains("フライ")])
+                        out_so = len(my_p[my_p["結果"].astype(str).str.contains("三振")])
+                        
+                        df_my_p_out = pd.DataFrame({"種類": ["ゴロ", "フライ", "三振"], "数": [out_goro, out_fly, out_so]})
+                        if df_my_p_out["数"].sum() > 0:
+                            pie_my_p = alt.Chart(df_my_p_out).mark_arc(innerRadius=50).encode(
+                                theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロ", "フライ", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
+                            ).properties(height=300)
+                            st.altair_chart(pie_my_p, use_container_width=True)
+                        else:
+                            st.info("詳細なアウトデータがありません。")
+                            
+                        st.write("")
+                        st.divider()
+                        st.markdown(f"#### {target_p_player} の被安打・四死球の傾向")
+                        hit_1 = len(my_p[my_p["結果"].astype(str).str.contains("単打|安打")])
+                        hit_2 = len(my_p[my_p["結果"].astype(str).str.contains("二塁打")])
+                        hit_3 = len(my_p[my_p["結果"].astype(str).str.contains("三塁打")])
+                        hit_hr = len(my_p[my_p["結果"].astype(str).str.contains("本塁打")])
+                        give_bb = len(my_p[my_p["結果"].astype(str).str.contains("四球|死球")])
+                        
+                        df_my_p_hit = pd.DataFrame({
+                            "結果": ["単打", "長打(二・三塁打)", "本塁打", "四死球"], "数": [hit_1, hit_2 + hit_3, hit_hr, give_bb]
+                        })
+                        if df_my_p_hit["数"].sum() > 0:
+                            bar_my_p = alt.Chart(df_my_p_hit).mark_bar().encode(
+                                x=alt.X("結果:N", sort=["単打", "長打(二・三塁打)", "本塁打", "四死球"]), y="数:Q", color=alt.Color("結果:N", legend=None), tooltip=["結果", "数"]
+                            ).properties(height=300)
+                            st.altair_chart(bar_my_p, use_container_width=True)
+                        else:
+                            st.info("被安打・四死球の詳細データがありません。")
+                    else:
+                        st.write("該当選手のデータなし")
+                else:
+                    st.write("対象となる投手がいません")
+            else:
+                st.info("2026年以降の投手データがありません")
+    # =========================================================
+    # Tab 5: 理想オーダー 
+    # =========================================================
+    with tab5:
         st.markdown("### 🧠 統計データに基づく推奨オーダー")
         st.caption("過去の個人成績から、セイバーメトリクスの定石に基づいたオーダー案を提示します。")
 
@@ -498,9 +655,9 @@ def show_analysis_page(df_batting, df_pitching):
             st.info("データがありません。")
 
     # =========================================================
-    # Tab 5: チーム貢献度 (出席率 × 実力)
+    # Tab 6: チーム貢献度 (出席率 × 実力)
     # =========================================================
-    with tab5:
+    with tab6:
         st.markdown("### 🤝 チーム貢献度分析")
         st.caption("「試合に参加すること」は最大の貢献です。出席率と成績をクロス分析し、チームの支柱を見つけます。")
 
@@ -594,3 +751,5 @@ def show_analysis_page(df_batting, df_pitching):
                 """)
         else:
             st.warning("分析に必要なデータが不足しています。")
+
+    
