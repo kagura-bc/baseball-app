@@ -439,5 +439,76 @@ def show_team_stats(df_batting, df_pitching):
                         summary_list.append({"投手名": p_name, "結果": final_res, "回": fin, "球数": int(balls), "被安": int(total_hits), "奪三": int(total_so), "四死": int(total_bb), "失点": int(runs), "自責": int(er)})
                     
                     st.table(pd.DataFrame(summary_list).set_index("投手名")[["結果", "回", "球数", "被安", "奪三", "四死", "失点", "自責"]])
+
+                    # =========================================================
+                    # 📊 全イニング 対戦詳細履歴 (入力画面と同じ転置・強調形式)
+                    # =========================================================
+                    st.write("")
+                    st.markdown("##### 📊 全イニング 対戦詳細履歴")
+                    
+                    # この試合の「詳細」データを抽出
+                    history_df = df_pitching[
+                        (df_pitching["日付"].astype(str) == d_str) & 
+                        (df_pitching["対戦相手"] == opp) & 
+                        (df_pitching["試合種別"] == m_type) &
+                        (df_pitching["種別"].str.contains("詳細", na=False))
+                    ].copy()
+
+                    if not history_df.empty:
+                        # イニングごとにループして表示
+                        for inn in [f"{i}回" for i in range(1, 10)] + ["延長"]:
+                            inn_df = history_df[history_df["イニング"] == inn]
+                            if not inn_df.empty:
+                                st.write(f"**【{inn}】**")
+                                display_items = []
+                                for _, row in inn_df.iterrows():
+                                    # 打順の抽出 (例: "詳細:1番打者" -> "1番")
+                                    b_idx = str(row["種別"]).split(":")[1].replace("番打者", "") if ":" in str(row["種別"]) else "?"
+                                    
+                                    # 結果と打球方向の合体
+                                    raw_res = str(row.get('結果', ''))
+                                    pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
+                                    
+                                    if pos_str and pos_str not in ["nan", "None", ""]:
+                                        raw_res = f"{raw_res}({pos_str})"
+                                    
+                                    # 処理野手の追加
+                                    fielder_str = str(row.get('処理野手', ''))
+                                    if fielder_str and fielder_str not in ["nan", "None", ""]:
+                                        res_text = f"{raw_res} [{fielder_str}]"
+                                    else:
+                                        res_text = raw_res
+                                        
+                                    # 失点がある場合は強調用のテキストを追加
+                                    runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
+                                    runs = int(runs) if pd.notna(runs) else 0
+                                    if runs > 0:
+                                        res_text = f"{res_text} 💥失点{runs}"
+                                        
+                                    display_items.append({
+                                        "打順": f"{b_idx}番", 
+                                        "投手": row["選手名"], 
+                                        "結果": res_text
+                                    })
+                                
+                                # データフレームを転置 (.T) して表示形式を整える
+                                df_disp = pd.DataFrame(display_items).T
+                                
+                                # 失点があるセルを赤字にするスタイリング
+                                def highlight_timely(val):
+                                    if isinstance(val, str) and "💥失点" in val:
+                                        return "color: red; font-weight: bold;"
+                                    return ""
+                                
+                                # Pandasのバージョン差異を吸収しつつ適用
+                                try:
+                                    styled_df = df_disp.style.map(highlight_timely)
+                                except AttributeError:
+                                    styled_df = df_disp.style.applymap(highlight_timely)
+                                    
+                                st.dataframe(styled_df, use_container_width=True)
+                    else:
+                        st.caption("詳細データはまだありません。")
+                    # =========================================================
                 else:
                     st.caption("※ 個人投手成績なし")
