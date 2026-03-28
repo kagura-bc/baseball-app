@@ -33,14 +33,22 @@ def show_personal_stats(df_batting, df_pitching):
         
         hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
         # 打数(AB)にカウントされる結果（四死球や犠打を含まない）
-        ab_cols = hit_cols + ["凡退", "失策", "走塁死", "盗塁死", "牽制死", "三振", "併殺打", "野選", "振り逃げ", "打撃妨害"]
-        
+        # 1. まず安打を判定
         df_b_calc["is_hit"] = df_b_calc["結果"].isin(hit_cols).astype(int)
-        df_b_calc["is_ab"] = df_b_calc["結果"].isin(ab_cols).astype(int)
+
+        # 2. 打数(AB)の判定方法を変更
+        # 「四球」「死球」「犠打」「犠飛」のいずれでもない、かつ「空欄」でないものを打数とする
+        non_ab_results = ["四球", "死球", "犠打", "犠飛"]
+        df_b_calc["is_ab"] = (
+            df_b_calc["結果"].notna() & 
+            (df_b_calc["結果"] != "") & 
+            ~df_b_calc["結果"].isin(non_ab_results)
+        ).astype(int)
+        # --------------------
         df_b_calc["is_hr"] = (df_b_calc["結果"] == "本塁打").astype(int)
         
         # ★追加: 三振フラグ
-        df_b_calc["is_so"] = (df_b_calc["結果"] == "三振").astype(int)
+        df_b_calc["is_so"] = df_b_calc["結果"].str.contains("三振", na=False).astype(int)
 
         # 長打率計算用に、塁打の内訳フラグを作成
         df_b_calc["is_1b"] = (df_b_calc["結果"] == "単打").astype(int)
