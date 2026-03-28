@@ -503,7 +503,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 selected_scorer = st.selectbox("スコアラー", p_list, index=def_scorer_ix, key="scorer_name", format_func=local_fmt)
                 st.session_state["persistent_scorer"] = selected_scorer
 
-            batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
+            batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "併殺打", "失策", "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
             
             col_ratios = [0.5, 1.1, 1.8, 1.4, 0.9, 0.8, 0.8, 3.5]
             h = st.columns(col_ratios)

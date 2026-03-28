@@ -104,7 +104,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             p_inn_df_check = today_pitching_df[today_pitching_df["イニング"] == current_inn_val]
             
             # 1アウト系（三振、凡退など）
-            out_keywords = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛"]
+            out_keywords = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛", "牽制死", "盗塁死", "走塁死"]
             # str(x)で文字列化してからstartswithで判定
             single_outs = len(p_inn_df_check[p_inn_df_check["結果"].apply(lambda x: any(str(x).startswith(k) for k in out_keywords))])
             
@@ -150,7 +150,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     # selectboxで選ばれているイニング（current_inn）に基づいて計算
                     p_inn_df_disp = today_pitching_df[today_pitching_df["イニング"] == current_inn]
                     
-                    out_keywords = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛"]
+                    out_keywords = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛", "牽制死", "盗塁死", "走塁死"]
                     s_outs = len(p_inn_df_disp[p_inn_df_disp["結果"].apply(lambda x: any(str(x).startswith(k) for k in out_keywords))])
                     d_outs = len(p_inn_df_disp[p_inn_df_disp["結果"].apply(lambda x: str(x).startswith("併殺打"))]) * 2
                     
@@ -189,7 +189,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             
             with c_res:
                 p_res = st.selectbox("結果", ["凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打", "犠飛", "併殺打", 
-                                            "失策", "振り逃げ三振", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"], key="p_det_res")
+                                            "失策", "振り逃げ三振", "野選", "打撃妨害", "ボーク", "暴投", "捕逸", "牽制死", "盗塁死", "走塁死"], key="p_det_res")
             
             with c_pos:
                 target_fielder_pos_list = st.multiselect(
@@ -274,7 +274,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 add_outs = 0
                 if p_res == "併殺打":
                     add_outs = 2
-                elif p_res in ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛"]:
+                elif p_res in ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛", "牽制死", "盗塁死", "走塁死"]:
                     add_outs = 1
                 
                 add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0

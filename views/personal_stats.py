@@ -81,18 +81,44 @@ def show_personal_stats(df_batting, df_pitching):
 
         df_p_calc = df_p_calc[df_p_calc["選手名"] != "チーム記録"]
 
-        df_p_calc["is_win"] = df_p_calc["勝敗"].astype(str).str.contains("勝").astype(int)
-        df_p_calc["is_lose"] = df_p_calc["勝敗"].astype(str).str.contains("負|敗").astype(int)
-        df_p_calc["is_so"] = (df_p_calc["結果"] == "三振").astype(int)
+        # 1. まずデフォルトで0を入れておく
+        df_p_calc["is_win"] = 0
+        df_p_calc["is_lose"] = 0
         
-        if "奪三振" not in df_p_calc.columns: df_p_calc["奪三振"] = 0
-        if "処理野手" not in df_p_calc.columns: df_p_calc["処理野手"] = ""
-        
+        # 2. 試合ごとにグループ化して、1試合につき1回だけカウントする
+        if "勝敗" in df_p_calc.columns:
+            # 試合を識別するためのキー（日付と対戦相手）
+            match_keys = ["日付", "対戦相手"] if "対戦相手" in df_p_calc.columns else ["日付"]
+            
+            # 各選手の試合ごとのグループを作る
+            for (player, *match_info), group in df_p_calc.groupby(["選手名"] + match_keys):
+                r_str = "".join(group["勝敗"].dropna().astype(str).tolist())
+                # その試合の中に「勝」が含まれていれば、グループの最初の行だけ1にする
+                if "勝" in r_str or "○" in r_str:
+                    df_p_calc.loc[group.index[0], "is_win"] = 1
+                # その試合の中に「負」「敗」が含まれていれば、グループの最初の行だけ1にする
+                elif "負" in r_str or "敗" in r_str or "●" in r_str:
+                    df_p_calc.loc[group.index[0], "is_lose"] = 1
         for c in ["自責点", "失点", "アウト数", "被安打", "与四球", "奪三振"]:
-             if c not in df_p_calc.columns: df_p_calc[c] = 0
-             df_p_calc[c] = pd.to_numeric(df_p_calc[c], errors='coerce').fillna(0)
-             
-        df_p_calc["total_bb"] = df_p_calc["与四球"] + df_p_calc["結果"].isin(["四球", "死球"]).astype(int)
+            if c not in df_p_calc.columns: df_p_calc[c] = 0
+            df_p_calc[c] = pd.to_numeric(df_p_calc[c], errors='coerce').fillna(0)
+            
+        if "処理野手" not in df_p_calc.columns: df_p_calc["処理野手"] = ""
+
+        # 詳細入力（1打席ごとの結果）と、直接入力（まとめ入力）の「大きい方」を採用し、単純な足し算による2倍化を防ぐ
+        
+        # 1. 奪三振の重複防止
+        temp_so = df_p_calc["結果"].isin(["三振", "振り逃げ三振"]).astype(int)
+        df_p_calc["奪三振"] = df_p_calc[["奪三振"]].assign(flag=temp_so).max(axis=1)
+        df_p_calc["is_so"] = 0  # 後段での二重足し算を無効化
+        
+        # 2. 四死球の重複防止
+        temp_bb = df_p_calc["結果"].isin(["四球", "死球"]).astype(int)
+        df_p_calc["total_bb"] = df_p_calc[["与四球"]].assign(flag=temp_bb).max(axis=1)
+        
+        # 3. 被安打の重複防止
+        temp_hit = df_p_calc["結果"].isin(["安打", "単打", "二塁打", "三塁打", "本塁打"]).astype(int)
+        df_p_calc["被安打"] = df_p_calc[["被安打"]].assign(flag=temp_hit).max(axis=1)
     else:
         df_p_calc = pd.DataFrame()
 
@@ -508,6 +534,73 @@ def show_personal_stats(df_batting, df_pitching):
                     })
                 )
             else: st.info("データなし")
+        
+        # =================================================
+        # 🧤 守備成績 (年度別 + 通算)
+        # =================================================
+        if not df_p_calc.empty and "処理野手" in df_p_calc.columns and "守備位置" in df_p_calc.columns:
+            fld_base = df_p_calc[df_p_calc["処理野手"].notna() & (df_p_calc["処理野手"] != "")].copy()
+            if not fld_base.empty:
+                fld_base["処理野手"] = fld_base["処理野手"].astype(str)
+                fld_base["守備位置"] = fld_base["守備位置"].astype(str)
+                
+                # sel_playerが含まれている行だけを抽出
+                fld_base = fld_base[fld_base["処理野手"].str.contains(sel_player, na=False)]
+                
+                if not fld_base.empty:
+                    fld_base["zipped"] = fld_base.apply(
+                        lambda x: list(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-"))), 
+                        axis=1
+                    )
+                    fld_expanded = fld_base.explode("zipped").reset_index(drop=True)
+                    
+                    if not fld_expanded.empty:
+                        # (名前, ポジション)を別カラムに展開
+                        fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
+                        
+                        # 選択された選手のデータのみ抽出
+                        my_f = fld_expanded[fld_expanded["FielderName"] == sel_player].copy()
+                        
+                        if not my_f.empty:
+                            # 1. 年度別に集計
+                            hist_f = my_f.groupby("Year").agg(
+                                守備機会=("結果", "count"),
+                                失策数=("結果", lambda x: x.isin(["失策", "暴投", "捕逸"]).sum())
+                            ).sort_index(ascending=False)
+                            
+                            # 2. 通算の集計
+                            total_f_opp = my_f["結果"].count()
+                            total_f_err = my_f["結果"].isin(["失策", "暴投", "捕逸"]).sum()
+                            hist_f_total = pd.DataFrame({
+                                "守備機会": [total_f_opp],
+                                "失策数": [total_f_err]
+                            }, index=["通算"])
+                            
+                            # 3. 結合
+                            combined_f = pd.concat([hist_f_total, hist_f])
+                            
+                            # --- 指標計算 ---
+                            combined_f["守備率"] = combined_f.apply(
+                                lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, 
+                                axis=1
+                            )
+                            
+                            # 表示用データフレームの作成
+                            disp_f_hist = pd.DataFrame()
+                            disp_f_hist["守備率"] = combined_f["守備率"]
+                            disp_f_hist["守備機会"] = combined_f["守備機会"]
+                            disp_f_hist["失策"] = combined_f["失策数"]
+                            disp_f_hist.index.name = "年度"
+                            
+                            st.markdown("##### 🧤 守備成績推移")
+                            st.dataframe(
+                                disp_f_hist.style.format({
+                                    "守備率": "{:.3f}"
+                                })
+                            )
+                        else:
+                            st.caption("※ 守備記録なし")
+            # =================================================
 
     # ----------------------------------------------------
     # 3. ランキング

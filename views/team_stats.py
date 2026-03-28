@@ -407,12 +407,34 @@ def show_team_stats(df_batting, df_pitching):
                         elif frac == 2: fin += " 2/3"
 
                         final_res = "-"
-                        if "勝敗" in group.columns:
-                            r_str = str(group["勝敗"].astype(str).unique())
-                            if "勝" in r_str: final_res = "勝"
-                            elif "負" in r_str: final_res = "負"
-                            elif "S" in r_str: final_res = "S"
-                            elif "H" in r_str: final_res = "H"
+                        
+                        # パターン1: 「勝」「負」などが別々の列に記録されている場合
+                        if "勝" in group.columns and pd.to_numeric(group["勝"], errors='coerce').fillna(0).sum() > 0:
+                            final_res = "勝"
+                        elif "負" in group.columns and pd.to_numeric(group["負"], errors='coerce').fillna(0).sum() > 0:
+                            final_res = "負"
+                        elif "敗" in group.columns and pd.to_numeric(group["敗"], errors='coerce').fillna(0).sum() > 0:
+                            final_res = "負"
+                        elif "セーブ" in group.columns and pd.to_numeric(group["セーブ"], errors='coerce').fillna(0).sum() > 0:
+                            final_res = "S"
+                        elif "S" in group.columns and pd.to_numeric(group["S"], errors='coerce').fillna(0).sum() > 0:
+                            final_res = "S"
+                        elif "ホールド" in group.columns and pd.to_numeric(group["ホールド"], errors='coerce').fillna(0).sum() > 0:
+                            final_res = "H"
+                        elif "H" in group.columns and pd.to_numeric(group["H"], errors='coerce').fillna(0).sum() > 0:
+                            final_res = "H"
+                            
+                        # パターン2: 「勝敗」や「責任」という1つの列に文字で入っている場合
+                        else:
+                            for col in ["勝敗", "責任"]:
+                                if col in group.columns:
+                                    r_str = "".join(group[col].dropna().astype(str).tolist())
+                                    if "勝" in r_str or "○" in r_str: final_res = "勝"
+                                    elif "負" in r_str or "敗" in r_str or "●" in r_str: final_res = "負"
+                                    elif "S" in r_str or "セーブ" in r_str: final_res = "S"
+                                    elif "H" in r_str or "ホールド" in r_str: final_res = "H"
+                                    if final_res != "-":
+                                        break
                         
                         summary_list.append({"投手名": p_name, "結果": final_res, "回": fin, "球数": int(balls), "被安": int(total_hits), "奪三": int(total_so), "四死": int(total_bb), "失点": int(runs), "自責": int(er)})
                     
