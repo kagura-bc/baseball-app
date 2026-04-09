@@ -472,7 +472,7 @@ def show_personal_stats(df_batting, df_pitching):
                     st.dataframe(
                         disp_hist.style.format({
                             "打率": "{:.3f}", "OPS": "{:.3f}", "長打率": "{:.3f}", "出塁率": "{:.3f}"
-                        }).applymap(
+                        }).map(
                             lambda x: "font-weight: bold; background-color: #f0f2f6;" if isinstance(x, str) else "", 
                             subset=pd.IndexSlice[["通算"], :]
                         )
