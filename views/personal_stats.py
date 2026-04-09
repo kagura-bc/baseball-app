@@ -181,7 +181,9 @@ def show_personal_stats(df_batting, df_pitching):
         # 非表示にしたい選手名をリストで定義 
         # HIDDEN_PLAYERS_TOTAL = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
 
-        years = sorted(list(set(df_batting["Year"].astype(str).unique()) | set(df_pitching["Year"].astype(str).unique())), reverse=True) if not df_batting.empty else []
+        years_bat = set(df_batting["Year"].dropna().astype(str).unique()) if (df_batting is not None and not df_batting.empty and "Year" in df_batting.columns) else set()
+        years_pit = set(df_pitching["Year"].dropna().astype(str).unique()) if (df_pitching is not None and not df_pitching.empty and "Year" in df_pitching.columns) else set()
+        years = sorted(list(years_bat | years_pit), reverse=True)
         
         c1, c2 = st.columns(2)
         target_year = c1.selectbox("年度", ["通算"] + years)
