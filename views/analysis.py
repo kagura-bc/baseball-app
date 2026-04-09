@@ -38,7 +38,7 @@ def show_analysis_page(df_batting, df_pitching):
     df_b["Year"] = df_b["Date"].dt.year.astype(str)
 
     # フィルタリング（年度・試合種別）
-    years = sorted(df_b["Year"].unique(), reverse=True)
+    years = sorted([str(y).replace('.0', '') for y in df_b["Year"].unique() if str(y) != 'nan'], reverse=True)
     c1, c2 = st.columns(2)
     selected_year = c1.selectbox("対象年度", ["全期間"] + list(years))
     
