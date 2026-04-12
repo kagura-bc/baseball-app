@@ -314,7 +314,7 @@ def show_team_stats(df_batting, df_pitching):
                                             
                                         res_short = {
                                             "単打":"安", "二塁打":"二", "三塁打":"三", "本塁打":"本", 
-                                            "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", 
+                                            "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"四", 
                                             "死球":"死", "犠打":"犠", "振り逃げ三振":"逃", "打撃妨害":"妨",
                                             "失策":"失", "併殺打":"併", "野選":"野"
                                         }.get(res, res[:1])
@@ -444,14 +444,11 @@ def show_team_stats(df_batting, df_pitching):
                     # 📊 全イニング 対戦詳細履歴 (入力画面と同じ転置・強調形式)
                     # =========================================================
                     st.write("")
-                    st.markdown("##### 📊 全イニング 対戦詳細履歴")
+                    st.markdown("##### 📊 全イニング 対戦詳細履歴（守備）")
                     
                     # この試合の「詳細」データを抽出
-                    history_df = df_pitching[
-                        (df_pitching["日付"].astype(str) == d_str) & 
-                        (df_pitching["対戦相手"] == opp) & 
-                        (df_pitching["試合種別"] == m_type) &
-                        (df_pitching["種別"].str.contains("詳細", na=False))
+                    history_df = match_pit[
+                        match_pit["種別"].str.contains("詳細", na=False)
                     ].copy()
 
                     if not history_df.empty:
