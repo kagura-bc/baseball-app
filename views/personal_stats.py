@@ -33,7 +33,7 @@ def show_personal_stats(df_batting, df_pitching):
         # もし日付が空欄のデータがある場合、"nan" になってしまうのを防ぐため補完します
         df_batting["Year"] = df_batting["Year"].fillna("不明")
         df_b_calc = df_batting[df_batting["選手名"] != "チーム記録"].copy()
-        
+        df_b_calc["Year"] = df_b_calc["Year"].fillna("不明")
         hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
         # 打数(AB)にカウントされる結果（四死球や犠打を含まない）
         # 1. まず安打を判定
