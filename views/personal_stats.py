@@ -39,14 +39,17 @@ def show_personal_stats(df_batting, df_pitching):
         # 1. まず安打を判定
         df_b_calc["is_hit"] = df_b_calc["結果"].isin(hit_cols).astype(int)
 
+        # ▼ 追加：判定前に、前後の不要なスペースを削除してデータを綺麗にする
+        df_b_calc["結果"] = df_b_calc["結果"].astype(str).str.strip()
+
         # 2. 打数(AB)の判定方法を変更
-        # 「四球」「死球」「犠打」「犠飛」のいずれでもない、かつ「空欄」でないものを打数とする
-        non_ab_results = ["四球", "死球", "犠打", "犠飛"]
+        # 「四球」「死球」「犠打」「犠飛」のいずれでもない、かつ「空欄」や「無効な文字列」でないものを打数とする
+        non_ab_results = ["四球", "死球", "犠打", "犠飛", "nan", "None", "-"]
         df_b_calc["is_ab"] = (
-            df_b_calc["結果"].notna() & 
             (df_b_calc["結果"] != "") & 
             ~df_b_calc["結果"].isin(non_ab_results)
         ).astype(int)
+        
         # --------------------
         df_b_calc["is_hr"] = (df_b_calc["結果"] == "本塁打").astype(int)
         
