@@ -75,9 +75,11 @@ def show_personal_stats(df_batting, df_pitching):
         # ★追加: is_so を追加
         df_b_calc = pd.DataFrame(columns=["Year", "選手名", "結果", "is_hit", "is_ab", "is_hr", "is_so", "is_1b", "is_2b", "is_3b", "is_bb", "bases", "打点", "盗塁", "得点"])
 
-    # --- 投手データ --
+    # --- 投手データ ---
     if not df_pitching.empty:
-        df_pitching["Year"] = pd.to_datetime(df_pitching["日付"]).dt.year.astype(str)
+        # 日付からYearを作成 (2026.0問題の解消)
+        df_pitching["Year"] = pd.to_datetime(df_pitching["日付"], errors='coerce').dt.strftime('%Y')
+        df_pitching["Year"] = df_pitching["Year"].fillna("不明")
         
         if "選手名" in df_pitching.columns:
             df_p_calc = df_pitching[df_pitching["選手名"] != "チーム記録"].copy()
