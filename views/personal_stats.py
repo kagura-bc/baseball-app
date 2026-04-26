@@ -27,8 +27,10 @@ def show_personal_stats(df_batting, df_pitching):
     
     # --- 打撃データ ---
     if not df_batting.empty:
-        # 日付からYearを作成
-        df_batting["Year"] = pd.to_datetime(df_batting["日付"]).dt.year.astype(str)
+        # 日付からYearを作成 (2026.0問題の解消)
+        df_batting["Year"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y')
+        # もし日付が空欄のデータがある場合、"nan" になってしまうのを防ぐため補完します
+        df_batting["Year"] = df_batting["Year"].fillna("不明")
         df_b_calc = df_batting[df_batting["選手名"] != "チーム記録"].copy()
         
         hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
