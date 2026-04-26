@@ -60,6 +60,7 @@ def show_personal_stats(df_batting, df_pitching):
         
         # 四死球（出塁率計算用）
         df_b_calc["is_bb"] = df_b_calc["結果"].isin(["四球", "死球"]).astype(int)
+        df_b_calc["is_sf"] = (df_b_calc["結果"] == "犠飛").astype(int)
         
         # 塁打数 (単打1, 二塁打2...)
         df_b_calc["bases"] = 0
@@ -166,6 +167,7 @@ def show_personal_stats(df_batting, df_pitching):
     agg_rules_b = {
         "is_hit": "sum", "is_ab": "sum", "is_hr": "sum", "is_so": "sum",
         "is_1b": "sum", "is_2b": "sum", "is_3b": "sum", "is_bb": "sum",
+        "is_sf": "sum",  # ← これを追加
         "打点": "sum", "盗塁": "sum", "得点": "sum", "bases": "sum"
     }
     agg_rules_p = {
@@ -282,8 +284,8 @@ def show_personal_stats(df_batting, df_pitching):
 
                 # --- 2. 出塁率 (OBP) = (安打 + 四死球) / (打数 + 四死球) ---
                 stats["出塁率"] = stats.apply(
-                    lambda x: (x["is_hit"] + x["is_bb"]) / (x["is_ab"] + x["is_bb"]) 
-                    if (x["is_ab"] + x["is_bb"]) > 0 else 0, 
+                    lambda x: (x["is_hit"] + x["is_bb"]) / (x["is_ab"] + x["is_bb"] + x["is_sf"])
+                    if (x["is_ab"] + x["is_bb"] + x["is_sf"]) > 0 else 0,
                     axis=1
                 )
 
@@ -440,10 +442,10 @@ def show_personal_stats(df_batting, df_pitching):
                         lambda x: x["is_hit"]/x["is_ab"] if x["is_ab"]>0 else 0, axis=1
                     )
                     
-                    # 出塁率 (安打+四死球) / (打数+四死球)
+                    # 出塁率 (安打+四死球) / (打数+四死球+犠飛)
                     combined_hist["出塁率"] = combined_hist.apply(
-                        lambda x: (x["is_hit"] + x["is_bb"]) / (x["is_ab"] + x["is_bb"]) 
-                        if (x["is_ab"] + x["is_bb"]) > 0 else 0, axis=1
+                        lambda x: (x["is_hit"] + x["is_bb"]) / (x["is_ab"] + x["is_bb"] + x["is_sf"])
+                        if (x["is_ab"] + x["is_bb"] + x["is_sf"]) > 0 else 0, axis=1
                     )
 
                     # 長打率
@@ -678,7 +680,7 @@ def show_personal_stats(df_batting, df_pitching):
             rank_b["Total_PA"] = rank_b["is_ab"] + rank_b["is_bb"] 
             rank_b["AVG"] = rank_b.apply(lambda x: x["is_hit"]/x["is_ab"] if x["is_ab"]>0 else 0, axis=1)
             # OPS計算（四死球を含む出塁率を使用）
-            rank_b["OBP"] = (rank_b["is_hit"] + rank_b["is_bb"]) / (rank_b["is_ab"] + rank_b["is_bb"]) 
+            rank_b["OBP"] = (rank_b["is_hit"] + rank_b["is_bb"]) / (rank_b["is_ab"] + rank_b["is_bb"] + rank_b["is_sf"])
             rank_b["SLG"] = rank_b["bases"] / rank_b["is_ab"]
             rank_b["OPS"] = (rank_b["OBP"] + rank_b["SLG"]).fillna(0)
             
@@ -843,7 +845,7 @@ def show_personal_stats(df_batting, df_pitching):
                 if df.empty: continue
                 df["AVG"] = df.apply(lambda x: x["is_hit"]/x["is_ab"] if x["is_ab"]>0 else 0, axis=1)
                 # OPS計算 (OBP + SLG)
-                obp = (df["is_hit"] + df["is_bb"]) / (df["is_ab"] + df["is_bb"] + 1e-9)
+                obp = (df["is_hit"] + df["is_bb"]) / (df["is_ab"] + df["is_bb"] + df["is_sf"] + 1e-9)
                 slg = df["bases"] / (df["is_ab"] + 1e-9)
                 df["OPS"] = obp + slg
 
