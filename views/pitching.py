@@ -166,32 +166,35 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 st.session_state["opp_batter_index"] = st.number_input("現在の打順", 1, st.session_state["opp_batter_count"], value=st.session_state["opp_batter_index"])
             
             with c_mid3:
-                    pitcher_list_opts = [""] + [local_fmt(p) for p in ALL_PLAYERS]
-                    default_pitcher_idx = 0
-                    
-                    # ★修正: 打撃入力画面でリアルタイム保存されているオーダー(saved_lineup)から「投」を探す
-                    saved_pitcher = None
-                    lineup = st.session_state.get("saved_lineup", {})
-                    
-                    for i in range(20):
+                pitcher_list_opts = [""] + [local_fmt(p) for p in ALL_PLAYERS]
+                default_pitcher_idx = 0
+                
+                # --- 安全な投手取得処理 ---
+                current_pitcher = ""
+                lineup = st.session_state.get("saved_lineup")
+                
+                # 打撃画面のオーダー(辞書型)から「投」を探す
+                if isinstance(lineup, dict):
+                    for i in range(20): # 最大20人分の枠を確認
                         if lineup.get(f"pos_{i}") == "投":
                             raw_name = lineup.get(f"name_{i}", "")
                             if raw_name:
                                 # 括弧などの付加情報を除去して名前のみ取得
-                                saved_pitcher = raw_name.split(" (")[0]
+                                current_pitcher = raw_name.split(" (")[0]
                             break
-                    
-                    # 見つからなかった場合の保険
-                    if not saved_pitcher:
-                        saved_pitcher = st.session_state.get("shared_starting_pitcher")
-                    
-                    if saved_pitcher:
-                        for i, p_opt in enumerate(pitcher_list_opts):
-                            if saved_pitcher in p_opt:
-                                default_pitcher_idx = i
-                                break
-                                
-                    target_pitcher_disp = st.selectbox("登板投手", pitcher_list_opts, index=default_pitcher_idx)
+                
+                # 見つからなかった場合の保険
+                if not current_pitcher:
+                    current_pitcher = st.session_state.get("shared_starting_pitcher", "")
+                
+                # プルダウンの初期値をセット
+                if current_pitcher:
+                    for i, p_opt in enumerate(pitcher_list_opts):
+                        if current_pitcher in p_opt:
+                            default_pitcher_idx = i
+                            break
+                            
+                target_pitcher_disp = st.selectbox("登板投手", pitcher_list_opts, index=default_pitcher_idx)
                 
                 # 投手成績のクイック表示
                 if "current_season_pitching" in locals() and target_pitcher_disp in current_season_pitching:
@@ -240,7 +243,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
 
         # 4. 登録実行処理
         if submit_detail:
-            input_name = target_pitcher_disp if target_pitcher_disp else (saved_pitcher if 'saved_pitcher' in locals() and saved_pitcher else "")
+            # target_pitcher_disp を優先採用。万が一空欄なら current_pitcher を使う
+            input_name = target_pitcher_disp if target_pitcher_disp else current_pitcher
             
             if not input_name: 
                 st.error("⚠️ 投手を選択してください")
