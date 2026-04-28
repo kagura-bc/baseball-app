@@ -494,6 +494,47 @@ def show_analysis_page(df_batting, df_pitching):
             else:
                 st.caption("2026年以降の投手データがありません")
 
+            # ========================================================
+            # ▼▼▼ チーム全体のポジション別打球傾向 ▼▼▼
+            # ========================================================
+            st.write("")
+            st.markdown("##### 🏟️ ポジション別の打球傾向")
+            
+            # ポジション順に並べるためのリスト
+            pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+            
+            c_dir1, c_dir2 = st.columns(2)
+            
+            with c_dir1:
+                st.markdown("**▼ チーム打撃 (どこへ打っているか)**")
+                if "打球方向" in df_b_detail.columns:
+                    b_dir_counts = df_b_detail["打球方向"].dropna().astype(str).str.strip().value_counts().reset_index()
+                    b_dir_counts.columns = ["方向", "数"]
+                    if not b_dir_counts.empty:
+                        bar_b_dir = alt.Chart(b_dir_counts).mark_bar(color="#f97316").encode(
+                            x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
+                            y=alt.Y("数:Q", title="打球数"),
+                            tooltip=["方向", "数"]
+                        ).properties(height=250)
+                        st.altair_chart(bar_b_dir, use_container_width=True)
+                    else:
+                        st.caption("データがありません")
+            
+            with c_dir2:
+                st.markdown("**▼ チーム投手陣 (どこへ打たせているか)**")
+                if "打球方向" in df_p_detail.columns:
+                    p_dir_counts = df_p_detail["打球方向"].dropna().astype(str).str.strip().value_counts().reset_index()
+                    p_dir_counts.columns = ["方向", "数"]
+                    if not p_dir_counts.empty:
+                        bar_p_dir = alt.Chart(p_dir_counts).mark_bar(color="#0ea5e9").encode(
+                            x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
+                            y=alt.Y("数:Q", title="打球数"),
+                            tooltip=["方向", "数"]
+                        ).properties(height=250)
+                        st.altair_chart(bar_p_dir, use_container_width=True)
+                    else:
+                        st.caption("データがありません")
+
         # --- 個人の打撃分析 ---
         elif detail_menu == "個人の打撃分析":
             if not df_b_detail.empty:
@@ -511,8 +552,14 @@ def show_analysis_page(df_batting, df_pitching):
                             dir_counts = valid_dirs.value_counts().reset_index()
                             if not dir_counts.empty:
                                 dir_counts.columns = ["方向", "数"]
-                                bar_dir = alt.Chart(dir_counts).mark_bar().encode(
-                                    x=alt.X("数:Q", title="打球数"), y=alt.Y("方向:N", sort="-x", title="方向"), color=alt.Color("方向:N", legend=None), tooltip=["方向", "数"]
+                                # ========================================================
+                                # ▼▼▼ ここをポジション順（ライトモード対応）に書き換え ▼▼▼
+                                # ========================================================
+                                pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                                bar_dir = alt.Chart(dir_counts).mark_bar(color="#f97316").encode(
+                                    x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
+                                    y=alt.Y("数:Q", title="打球数"),
+                                    tooltip=["方向", "数"]
                                 ).properties(height=250)
                                 st.altair_chart(bar_dir, use_container_width=True)
                             else:
@@ -593,6 +640,7 @@ def show_analysis_page(df_batting, df_pitching):
                     st.write("対象となる投手がいません")
             else:
                 st.info("2026年以降の投手データがありません")
+           
     # =========================================================
     # Tab 5: 理想オーダー 
     # =========================================================
