@@ -19,6 +19,49 @@ def show_analysis_page(df_batting, df_pitching):
     df_p = df_pitching.copy()
 
     # =========================================================
+    # ▼▼▼ 追加: analysis.py 側でも is_ab や is_hit を計算する ▼▼▼
+    # =========================================================
+    
+    # 【追加】データが空の場合でもエラーにならないよう、集計に必要な列をすべて0で作っておく
+    required_columns = ["is_hit", "is_ab", "is_hr", "is_so", "is_1b", "is_2b", "is_3b", "is_bb", "is_sf", "bases", "打点", "盗塁", "得点"]
+    for col in required_columns:
+        if col not in df_b.columns:
+            df_b[col] = 0
+
+    if not df_b.empty and "結果" in df_b.columns:
+        # 空白除去
+        df_b["結果"] = df_b["結果"].astype(str).str.replace(r"\s+", "", regex=True)
+
+        # 安打判定
+        df_b["is_hit"] = df_b["結果"].str.contains("単打|二塁打|三塁打|本塁打", na=False).astype(int)
+        
+        # 打数(AB)判定
+        non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+        is_valid = ~df_b["結果"].isin(["", "nan", "None", "-"])
+        is_not_excluded = ~df_b["結果"].str.contains(non_ab_pattern, na=False)
+        df_b["is_ab"] = (is_valid & is_not_excluded).astype(int)
+
+        # その他のフラグ
+        df_b["is_hr"] = df_b["結果"].str.contains("本塁打", na=False).astype(int)
+        df_b["is_so"] = df_b["結果"].str.contains("三振", na=False).astype(int)
+        df_b["is_1b"] = df_b["結果"].str.contains("単打", na=False).astype(int)
+        df_b["is_2b"] = df_b["結果"].str.contains("二塁打", na=False).astype(int)
+        df_b["is_3b"] = df_b["結果"].str.contains("三塁打", na=False).astype(int)
+        df_b["is_bb"] = df_b["結果"].str.contains("四球|死球|四死球", na=False).astype(int)
+        df_b["is_sf"] = df_b["結果"].str.contains("犠飛", na=False).astype(int)
+        
+        # 塁打
+        df_b["bases"] = (
+            df_b["is_1b"] * 1 + df_b["is_2b"] * 2 + df_b["is_3b"] * 3 + df_b["is_hr"] * 4
+        )
+
+        # 打点・盗塁・得点を安全に数値化（文字列が含まれていても0にする）
+        for c in ["打点", "盗塁", "得点"]:
+            df_b[c] = pd.to_numeric(df_b[c], errors='coerce').fillna(0)
+
+    # =========================================================
+
+    # =========================================================
     # 🚑 【緊急修正】 名前の強力クリーニング
     # =========================================================
     # 1. 強制的に文字列型にする
@@ -32,13 +75,19 @@ def show_analysis_page(df_batting, df_pitching):
         return [str(n).replace("　", " ").strip() for n in name_list]
     # =========================================================
     
-    # 日付変換
-    df_b["Date"] = pd.to_datetime(df_b["日付"])
-    df_p["Date"] = pd.to_datetime(df_p["日付"])
-    df_b["Year"] = df_b["Date"].dt.year.astype(str)
+    # ---------------------------------------------------------
+    # 日付変換とYear列の作成
+    # ---------------------------------------------------------
+    df_b["Date"] = pd.to_datetime(df_b["日付"], errors='coerce')
+    df_p["Date"] = pd.to_datetime(df_p["日付"], errors='coerce')
+
+    # ".0" が発生しても安全なように、作成時点でクリーンな文字列にしておく
+    df_b["Year"] = df_b["Date"].dt.year.astype(str).str.replace('.0', '', regex=False)
+    df_p["Year"] = df_p["Date"].dt.year.astype(str).str.replace('.0', '', regex=False)
 
     # フィルタリング（年度・試合種別）
-    years = sorted([str(y).replace('.0', '') for y in df_b["Year"].unique() if str(y) != 'nan'], reverse=True)
+    # nan や NaT を除外しつつ、クリーンなYearリストを作成
+    years = sorted([y for y in df_b["Year"].unique() if y not in ['nan', 'NaT']], reverse=True)
     c1, c2 = st.columns(2)
     selected_year = c1.selectbox("対象年度", ["全期間"] + list(years))
     
@@ -48,7 +97,7 @@ def show_analysis_page(df_batting, df_pitching):
     # フィルタ適用
     if selected_year != "全期間":
         df_b = df_b[df_b["Year"] == selected_year]
-        df_p = df_p[df_p["Date"].dt.year.astype(str) == selected_year]
+        df_p = df_p[df_p["Year"] == selected_year] # ★ここをdf_bと同じシンプルな条件に変更
     
     if selected_type == "公式戦のみ":
         df_b = df_b[df_b["試合種別"].isin(OFFICIAL_GAME_TYPES)]

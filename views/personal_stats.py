@@ -32,53 +32,55 @@ def show_personal_stats(df_batting, df_pitching):
         df_batting["Year"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y')
         # もし日付が空欄のデータがある場合、"nan" になってしまうのを防ぐため補完します
         df_batting["Year"] = df_batting["Year"].fillna("不明")
+        
         df_b_calc = df_batting[df_batting["選手名"] != "チーム記録"].copy()
-        df_b_calc["Year"] = df_b_calc["Year"].fillna("不明")
-        hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
-        # 打数(AB)にカウントされる結果（四死球や犠打を含まない）
-        # 1. まず安打を判定
-        df_b_calc["is_hit"] = df_b_calc["結果"].isin(hit_cols).astype(int)
 
-        # ▼ 追加：判定前に、前後の不要なスペースを削除してデータを綺麗にする
-        df_b_calc["結果"] = df_b_calc["結果"].astype(str).str.strip()
+        # 前後の空白だけでなく、文字間の空白（全角・半角）もすべて削除してデータを綺麗にする
+        df_b_calc["結果"] = df_b_calc["結果"].astype(str).str.replace(r"\s+", "", regex=True)
 
-        # 2. 打数(AB)の判定方法を変更
-        # 「四球」「死球」「犠打」「犠飛」のいずれでもない、かつ「空欄」や「無効な文字列」でないものを打数とする
-        non_ab_results = ["四球", "死球", "犠打", "犠飛", "nan", "None", "-"]
-        df_b_calc["is_ab"] = (
-            (df_b_calc["結果"] != "") & 
-            ~df_b_calc["結果"].isin(non_ab_results)
-        ).astype(int)
+        # 1. 安打の判定（「〜単打」などの表記ゆれに対応するため部分一致）
+        df_b_calc["is_hit"] = df_b_calc["結果"].str.contains("単打|二塁打|三塁打|本塁打", na=False).astype(int)
+
+        # 2. 打数(AB)の判定方法
+        # 四死球や犠打に加えて、「得点」「盗塁」などの走塁・非打席イベントも除外対象にする
+        non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+        
+        # ① 空欄やハイフンなどの無効な文字列ではない
+        is_valid = ~df_b_calc["結果"].isin(["", "nan", "None", "-"])
+        # ② 打数にカウントされない文字列（四死球や走塁イベントなど）が含まれていない
+        is_not_excluded = ~df_b_calc["結果"].str.contains(non_ab_pattern, na=False)
+
+        # 両方を満たすものを打数(AB)とする
+        df_b_calc["is_ab"] = (is_valid & is_not_excluded).astype(int)
         
         # --------------------
-        df_b_calc["is_hr"] = (df_b_calc["結果"] == "本塁打").astype(int)
-        
-        # ★追加: 三振フラグ
+        # 以降のフラグもすべて部分一致に変更し、取りこぼしを防ぐ
+        df_b_calc["is_hr"] = df_b_calc["結果"].str.contains("本塁打", na=False).astype(int)
         df_b_calc["is_so"] = df_b_calc["結果"].str.contains("三振", na=False).astype(int)
 
-        # 長打率計算用に、塁打の内訳フラグを作成
-        df_b_calc["is_1b"] = (df_b_calc["結果"] == "単打").astype(int)
-        df_b_calc["is_2b"] = (df_b_calc["結果"] == "二塁打").astype(int)
-        df_b_calc["is_3b"] = (df_b_calc["結果"] == "三塁打").astype(int)
+        # 長打率計算用の塁打フラグ
+        df_b_calc["is_1b"] = df_b_calc["結果"].str.contains("単打", na=False).astype(int)
+        df_b_calc["is_2b"] = df_b_calc["結果"].str.contains("二塁打", na=False).astype(int)
+        df_b_calc["is_3b"] = df_b_calc["結果"].str.contains("三塁打", na=False).astype(int)
         
-        # 四死球（出塁率計算用）
-        df_b_calc["is_bb"] = df_b_calc["結果"].isin(["四球", "死球"]).astype(int)
-        df_b_calc["is_sf"] = (df_b_calc["結果"] == "犠飛").astype(int)
+        # 四死球・犠飛（出塁率計算用）
+        df_b_calc["is_bb"] = df_b_calc["結果"].str.contains("四球|死球|四死球", na=False).astype(int)
+        df_b_calc["is_sf"] = df_b_calc["結果"].str.contains("犠飛", na=False).astype(int)
         
         # 塁打数 (単打1, 二塁打2...)
-        df_b_calc["bases"] = 0
-        df_b_calc.loc[df_b_calc["結果"]=="単打", "bases"] = 1
-        df_b_calc.loc[df_b_calc["結果"]=="二塁打", "bases"] = 2
-        df_b_calc.loc[df_b_calc["結果"]=="三塁打", "bases"] = 3
-        df_b_calc.loc[df_b_calc["結果"]=="本塁打", "bases"] = 4
+        df_b_calc["bases"] = (
+            df_b_calc["is_1b"] * 1 + 
+            df_b_calc["is_2b"] * 2 + 
+            df_b_calc["is_3b"] * 3 + 
+            df_b_calc["is_hr"] * 4
+        )
 
         for c in ["打点", "盗塁", "得点"]: 
             df_b_calc[c] = pd.to_numeric(df_b_calc[c], errors='coerce').fillna(0)
     else:
         # データがない場合でも、後続のフィルタ処理でエラーにならないようカラム定義をしておく
-        # ★追加: is_so を追加
         df_b_calc = pd.DataFrame(columns=["Year", "選手名", "結果", "is_hit", "is_ab", "is_hr", "is_so", "is_1b", "is_2b", "is_3b", "is_bb", "bases", "打点", "盗塁", "得点"])
-
+        
     # --- 投手データ ---
     if not df_pitching.empty:
         # 日付からYearを作成 (2026.0問題の解消)
