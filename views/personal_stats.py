@@ -350,42 +350,68 @@ def show_personal_stats(df_batting, df_pitching):
             else: st.info("データなし")
 
         with st_fld:
-            # 守備データ (修正版)
-            # df_p_tg はフィルタリング済みの投手データフレーム
+            # 守備データ (2行入力を1機会にまとめる対応版)
             if not df_p_tg.empty and "処理野手" in df_p_tg.columns and "守備位置" in df_p_tg.columns:
+                
+                # 1. 元のデータの「行順序」を記録しておく（連続入力判定用）
+                fld_base = df_p_tg.copy().reset_index(drop=True)
+                fld_base["Original_Idx"] = fld_base.index 
+
                 # 処理野手が空でないデータのみ抽出
-                fld_data = df_p_tg[df_p_tg["処理野手"].notna() & (df_p_tg["処理野手"] != "")].copy()
+                fld_data = fld_base[fld_base["処理野手"].notna() & (fld_base["処理野手"] != "")].copy()
                 
                 if not fld_data.empty:
-                    # 文字列型にしておく
                     fld_data["処理野手"] = fld_data["処理野手"].astype(str)
                     fld_data["守備位置"] = fld_data["守備位置"].astype(str)
 
-                    # 1. 併殺などで複数人いる場合 ("選手A-選手B", "位置A-位置B") を分解するための準備
-                    # それぞれをリストに変換して、ペアとして扱えるようにZIPする
+                    # ("遊-遊") などの同一セル内重複を排除
                     fld_data["zipped"] = fld_data.apply(
-                        lambda x: list(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-"))), 
+                        lambda x: list(dict.fromkeys(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-")))), 
                         axis=1
                     )
                     
-                    # 1行を複数行に展開 (explode)
-                    fld_expanded = fld_data.explode("zipped")
-                    
-                    # 展開したタプル (名前, 位置) を別々のカラムに戻す
-                    # インデックスが重複するため、一旦リセットしてから処理
-                    fld_expanded = fld_expanded.reset_index(drop=True)
+                    fld_expanded = fld_data.explode("zipped").reset_index(drop=True)
                     if not fld_expanded.empty:
                         fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
                     else:
                         fld_expanded["FielderName"] = ""
                         fld_expanded["FielderPos"] = ""
 
-                    # 2. 集計
-                    # 守備機会 = レコード数
-                    # 失策 = 結果が「失策」「暴投」「捕逸」の数
-                    stats_f = fld_expanded.groupby(["FielderName", "FielderPos"]).agg(
-                        守備機会=("結果", "count"),
-                        失策数=("結果", lambda x: x.isin(["失策", "暴投", "捕逸"]).sum())
+                    # ========================================================
+                    # 2. 連続する入力（2行）を「同じ守備機会(PlayBlock)」にまとめる
+                    # ========================================================
+                    fld_expanded["is_error"] = fld_expanded["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
+
+                    group_keys = ["日付", "FielderName", "FielderPos"]
+                    if "相手打順" in fld_expanded.columns:
+                        group_keys.append("相手打順")
+                    if "イニング" in fld_expanded.columns:
+                        group_keys.append("イニング")
+                    
+                    # 相手打順が無い場合、元の行が「連続しているか（インデックスの差が1）」で判定する
+                    if "相手打順" not in fld_expanded.columns:
+                        diff = fld_expanded["Original_Idx"].diff()
+                        match_cond = (
+                            (diff != 1) | 
+                            (fld_expanded["日付"] != fld_expanded["日付"].shift(1)) |
+                            (fld_expanded["FielderName"] != fld_expanded["FielderName"].shift(1)) |
+                            (fld_expanded["FielderPos"] != fld_expanded["FielderPos"].shift(1))
+                        )
+                        # 条件に当てはまるごとにブロック番号を加算
+                        fld_expanded["PlayBlock"] = match_cond.cumsum()
+                        group_keys.append("PlayBlock")
+
+                    # 同一機会（ブロック）の行を1つに圧縮（失策は2行のうち1つでもあればエラーと判定）
+                    fld_unique = fld_expanded.groupby(group_keys).agg(
+                        is_error=("is_error", "max")
+                    ).reset_index()
+
+                    # ========================================================
+                    # 3. 集計
+                    # ========================================================
+                    stats_f = fld_unique.groupby(["FielderName", "FielderPos"]).agg(
+                        守備機会=("FielderName", "count"), # 圧縮後の行数が実際の守備機会
+                        失策数=("is_error", "sum")
                     ).reset_index()
                     
                     # 守備率計算
@@ -394,21 +420,16 @@ def show_personal_stats(df_batting, df_pitching):
                         axis=1
                     )
                     
-                    # 3. 表示用整形
+                    # --- 表示用整形 ---
                     pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
                     stats_f["SortKey"] = stats_f["FielderPos"].apply(
                         lambda x: pos_order.index(x) if x in pos_order else 99
                     )
-                    
-                    # 並び替え（ポジション順 > 守備機会順）
                     stats_f = stats_f.sort_values(["SortKey", "守備機会"], ascending=[True, False])
                     
-                    # カラム名変更とフォーマット
                     disp_df = stats_f[["FielderPos", "FielderName", "守備機会", "失策数", "守備率"]].copy()
                     disp_df.columns = ["守備位置", "選手名", "守備機会", "失策", "守備率"]
                     disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
-                    
-                    # 選手名が不明なものを除外（空文字や"不明"など）
                     disp_df = disp_df[disp_df["選手名"] != ""]
                     
                     st.dataframe(disp_df, use_container_width=True, hide_index=True)
@@ -561,53 +582,86 @@ def show_personal_stats(df_batting, df_pitching):
         # 🧤 守備成績 (年度別 + 通算)
         # =================================================
         if not df_p_calc.empty and "処理野手" in df_p_calc.columns and "守備位置" in df_p_calc.columns:
-            fld_base = df_p_calc[df_p_calc["処理野手"].notna() & (df_p_calc["処理野手"] != "")].copy()
+            
+            # 1. 元の行順序を記録
+            fld_base_all = df_p_calc.copy().reset_index(drop=True)
+            fld_base_all["Original_Idx"] = fld_base_all.index
+            
+            fld_base = fld_base_all[fld_base_all["処理野手"].notna() & (fld_base_all["処理野手"] != "")].copy()
+            
             if not fld_base.empty:
                 fld_base["処理野手"] = fld_base["処理野手"].astype(str)
                 fld_base["守備位置"] = fld_base["守備位置"].astype(str)
                 
-                # sel_playerが含まれている行だけを抽出
+                # 選択された選手が含まれている行だけを抽出
                 fld_base = fld_base[fld_base["処理野手"].str.contains(sel_player, na=False)]
                 
                 if not fld_base.empty:
                     fld_base["zipped"] = fld_base.apply(
-                        lambda x: list(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-"))), 
+                        lambda x: list(dict.fromkeys(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-")))), 
                         axis=1
                     )
                     fld_expanded = fld_base.explode("zipped").reset_index(drop=True)
                     
                     if not fld_expanded.empty:
-                        # (名前, ポジション)を別カラムに展開
                         fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
-                        
-                        # 選択された選手のデータのみ抽出
                         my_f = fld_expanded[fld_expanded["FielderName"] == sel_player].copy()
                         
                         if not my_f.empty:
-                            # 1. 年度別に集計
-                            hist_f = my_f.groupby("Year").agg(
-                                守備機会=("結果", "count"),
-                                失策数=("結果", lambda x: x.isin(["失策", "暴投", "捕逸"]).sum())
+                            # ========================================================
+                            # 2. 連続する入力（2行）を「同じ守備機会(PlayBlock)」にまとめる
+                            # ========================================================
+                            my_f["is_error"] = my_f["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
+
+                            group_keys = ["Year", "日付", "FielderName", "FielderPos"]
+                            if "相手打順" in my_f.columns:
+                                group_keys.append("相手打順")
+                            if "イニング" in my_f.columns:
+                                group_keys.append("イニング")
+                            
+                            # 相手打順が無い場合
+                            if "相手打順" not in my_f.columns:
+                                diff = my_f["Original_Idx"].diff()
+                                match_cond = (
+                                    (diff != 1) | 
+                                    (my_f["日付"] != my_f["日付"].shift(1)) |
+                                    (my_f["FielderName"] != my_f["FielderName"].shift(1)) |
+                                    (my_f["FielderPos"] != my_f["FielderPos"].shift(1))
+                                )
+                                my_f["PlayBlock"] = match_cond.cumsum()
+                                group_keys.append("PlayBlock")
+
+                            # 同一機会の行を1つに圧縮
+                            fld_unique = my_f.groupby(group_keys).agg(
+                                is_error=("is_error", "max")
+                            ).reset_index()
+
+                            # ========================================================
+                            # 3. 集計
+                            # ========================================================
+                            # 年度別に集計
+                            hist_f = fld_unique.groupby("Year").agg(
+                                守備機会=("FielderName", "count"),
+                                失策数=("is_error", "sum")
                             ).sort_index(ascending=False)
                             
-                            # 2. 通算の集計
-                            total_f_opp = my_f["結果"].count()
-                            total_f_err = my_f["結果"].isin(["失策", "暴投", "捕逸"]).sum()
+                            # 通算の集計
+                            total_f_opp = fld_unique["FielderName"].count()
+                            total_f_err = fld_unique["is_error"].sum()
                             hist_f_total = pd.DataFrame({
                                 "守備機会": [total_f_opp],
                                 "失策数": [total_f_err]
                             }, index=["通算"])
                             
-                            # 3. 結合
+                            # 結合
                             combined_f = pd.concat([hist_f_total, hist_f])
                             
-                            # --- 指標計算 ---
+                            # 指標計算
                             combined_f["守備率"] = combined_f.apply(
                                 lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, 
                                 axis=1
                             )
                             
-                            # 表示用データフレームの作成
                             disp_f_hist = pd.DataFrame()
                             disp_f_hist["守備率"] = combined_f["守備率"]
                             disp_f_hist["守備機会"] = combined_f["守備機会"]
@@ -615,11 +669,7 @@ def show_personal_stats(df_batting, df_pitching):
                             disp_f_hist.index.name = "年度"
                             
                             st.markdown("##### 🧤 守備成績推移")
-                            st.dataframe(
-                                disp_f_hist.style.format({
-                                    "守備率": "{:.3f}"
-                                })
-                            )
+                            st.dataframe(disp_f_hist.style.format({"守備率": "{:.3f}"}))
                         else:
                             st.caption("※ 守備記録なし")
             # =================================================
