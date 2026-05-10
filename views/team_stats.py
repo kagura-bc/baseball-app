@@ -40,7 +40,7 @@ def show_team_stats(df_batting, df_pitching):
             total_hr = hr
             total_sb = pd.to_numeric(individuals["盗塁"], errors='coerce').fillna(0).sum()
             
-            ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退(ゴロ)", "凡退(フライ)", "失策", "併殺打", "野選", "振り逃げ三振"]
+            ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振"]
             total_ab = len(individuals[individuals["結果"].isin(ab_results)])
 
         gr = group["グラウンド"].iloc[0] if not group.empty else ""
@@ -288,7 +288,7 @@ def show_team_stats(df_batting, df_pitching):
                             pos_val = "".join(seen_pos)
                             
                             # 2. 打席数の計算
-                            pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "凡退(ゴロ)", "凡退(フライ)", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
+                            pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             res_col = player_group.get("結果")
                             tpa = res_col.isin(pa_list).sum() if res_col is not None else 0
                             
@@ -301,7 +301,7 @@ def show_team_stats(df_batting, df_pitching):
                             # 4. 打席ごとの結果を生成
                             history_texts = []
                             count = 0
-                            pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
+                            pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             
                             if res_col is not None:
                                 for _, row in player_group.iterrows():
@@ -315,8 +315,8 @@ def show_team_stats(df_batting, df_pitching):
                                         res_short = {
                                             "単打":"安", "二塁打":"二", "三塁打":"三", "本塁打":"本", 
                                             "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"四", 
-                                            "死球":"死", "犠打":"犠", "振り逃げ三振":"逃", "打撃妨害":"妨",
-                                            "失策":"失", "併殺打":"併", "野選":"野"
+                                            "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "振り逃げ三振":"逃", "打撃妨害":"妨",
+                                            "失策(ゴロ)":"失", "失策(フライ)":"失", "併殺打":"併", "野選":"野"
                                         }.get(res, res[:1])
                                         
                                         rbi_raw = pd.to_numeric(row.get("打点", 0), errors='coerce')
