@@ -352,7 +352,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         def submit_everything():
             if "sn0" not in st.session_state: return 
 
-            require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打"]
+            require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打(ゴロ)", "犠打(フライ)", "失策(ゴロ)", "失策(フライ)"]
             validation_errors = []
 
             for i in range(15):
@@ -503,7 +503,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 selected_scorer = st.selectbox("スコアラー", p_list, index=def_scorer_ix, key="scorer_name", format_func=local_fmt)
                 st.session_state["persistent_scorer"] = selected_scorer
 
-            batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "併殺打", "失策", "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
+            batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
+                               "失策(ゴロ)", "失策(フライ)", "野選", "併殺打",  "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
             
             col_ratios = [0.5, 1.1, 1.8, 1.4, 0.9, 0.8, 0.8, 3.5]
             h = st.columns(col_ratios)
@@ -559,7 +560,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     ]
                     if not p_df.empty:
                         history_html = []
-                        pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打", "失策", "併殺打", "振り逃げ三振", "打撃妨害"]
+                        pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
+                                               "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
                         count = 0
                         total_runs = 0
                         for _, row in p_df.iterrows():
@@ -571,7 +573,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             
                             res_short = {
                                 "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 
-                                "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打":"犠", "振り逃げ三振":"逃", "打撃妨害":"妨"
+                                "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "失策(ゴロ)":"失", "失策(フライ)":"失", "野選":"野", "併殺打":"併", 
+                                "振り逃げ三振":"逃", "打撃妨害":"妨"
                             }.get(res, res[:1])
                             
                             if res in pa_list_for_history:
