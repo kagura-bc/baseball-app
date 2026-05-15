@@ -13,7 +13,7 @@ PLAYER_NUMBERS = dict(st.secrets["PLAYER_NUMBERS"])
 ALL_PLAYERS = list(PLAYER_NUMBERS.keys())
 
 # ポジションリスト
-ALL_POSITIONS = ["", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+ALL_POSITIONS = ["", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"] 
 
 # グラウンドリスト
 GROUND_LIST = [
