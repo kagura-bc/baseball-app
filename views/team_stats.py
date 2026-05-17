@@ -241,10 +241,15 @@ def show_team_stats(df_batting, df_pitching):
                 if has_team_rec:
                     sb_bat = match_bat[match_bat["選手名"] == "チーム記録"].copy()
                     sb_pit = match_pit[match_pit["選手名"] == "チーム記録"].copy()
+                    sb_pit["失策"] = target_row["失策"] # ★追加：スコアボード表示用に失策数を連動
                 else:
                     sb_bat = match_bat; sb_pit = match_pit
+                    if "失策" not in sb_pit.columns:   # ★追加
+                        sb_pit["失策"] = 0
 
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
+
+                # （以降のスタメン表示、打撃成績、投手成績ロジックはそのままです）
 
                 # ここからスタメン表示ロジック) 
                 st.divider()
