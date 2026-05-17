@@ -63,16 +63,16 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     k_h = b_df[b_df["結果"].isin(hit_list)].shape[0] if "結果" in b_df.columns else 0
     opp_h = p_df[p_df["結果"].isin(hit_list)].shape[0] if "結果" in p_df.columns else 0
 
-    # 自チームの失策（投手・守備データから）
-    if "失策" in p_df.columns:
-        k_e = int(pd.to_numeric(p_df["失策"], errors='coerce').fillna(0).sum())
-    else:
-        k_e = p_df["結果"].astype(str).str.contains("失策").sum() if "結果" in p_df.columns else 0
+    # 【自チームの失策 (k_e)】
+    # 「失策」列の合計値と、「結果」列内の「失策(〜)」の数のうち、大きい方を確実に採用する
+    k_e_col = int(pd.to_numeric(p_df["失策"], errors='coerce').fillna(0).sum()) if "失策" in p_df.columns else 0
+    k_e_res = p_df["結果"].astype(str).str.contains("失策").sum() if "結果" in p_df.columns else 0
+    k_e = max(k_e_col, k_e_res)
 
-    # 相手チームの失策（自チームの打撃結果が「失策」になった数）
-    opp_e = b_df["結果"].astype(str).str.contains("失策").sum() if "結果" in b_df.columns else 0
-    if opp_e == 0 and "失策" in b_df.columns:
-        opp_e = int(pd.to_numeric(b_df["失策"], errors='coerce').fillna(0).sum())
+    # 【相手チームの失策 (opp_e)】
+    opp_e_col = int(pd.to_numeric(b_df["失策"], errors='coerce').fillna(0).sum()) if "失策" in b_df.columns else 0
+    opp_e_res = b_df["結果"].astype(str).str.contains("失策").sum() if "結果" in b_df.columns else 0
+    opp_e = max(opp_e_col, opp_e_res)
 
     # KAGURAが先攻か後攻かで表示順を入れ替え
     # my_team_fixed を MY_TEAM に変更
