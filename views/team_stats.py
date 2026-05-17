@@ -50,7 +50,7 @@ def show_team_stats(df_batting, df_pitching):
             games_map[key] = {
                 "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
                 "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
-                "自責点": 0, "投球回": 0.0,
+                "自責点": 0, "投球回": 0.0, "失策": 0, # ← 追加
                 "has_team_record": False
             }
         
@@ -70,8 +70,10 @@ def show_team_stats(df_batting, df_pitching):
         team_rec_rows = group[group["選手名"] == "チーム記録"]
         if not team_rec_rows.empty:
             runs_allowed = pd.to_numeric(team_rec_rows["失点"], errors='coerce').fillna(0).sum()
+            errors = pd.to_numeric(team_rec_rows["失策"], errors='coerce').fillna(0).sum() if "失策" in team_rec_rows.columns else 0 # ← 追加
         else:
             runs_allowed = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
+            errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum() if "失策" in group.columns else 0 # ← 追加
 
         if "投手名" in group.columns:
             individuals_p = group[group["投手名"] != "チーム記録"]
@@ -95,13 +97,14 @@ def show_team_stats(df_batting, df_pitching):
             games_map[key] = {
                 "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
                 "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
-                "自責点": 0, "投球回": 0.0,
+                "自責点": 0, "投球回": 0.0, "失策": 0, # ← 追加
                 "has_team_record": False
             }
         
         games_map[key]["失点"] = runs_allowed
         games_map[key]["自責点"] += er
         games_map[key]["投球回"] += outs
+        games_map[key]["失策"] = errors # ← 追加
 
     match_results = list(games_map.values())
     df_team_stats = pd.DataFrame(match_results)
@@ -144,6 +147,7 @@ def show_team_stats(df_batting, df_pitching):
     wins = 0; losses = 0; draws = 0
     total_score = 0; total_lost = 0
     total_ab_sum = 0; total_hits = 0; total_hr = 0; total_sb = 0; total_er = 0; total_ip = 0.0
+    total_errors = 0 # ← 追加
     viewer_options = []
 
     if not df_display.empty:
@@ -157,6 +161,7 @@ def show_team_stats(df_batting, df_pitching):
             total_sb += row.get("盗塁", 0)
             total_er += row.get("自責点", 0)
             total_ip += row.get("投球回", 0)
+            total_errors += row.get("失策", 0) # ← 追加
 
             res_txt = "-"
             if s > l: wins += 1; res_txt = " 🔴 勝ち"
@@ -190,15 +195,16 @@ def show_team_stats(df_batting, df_pitching):
     a4.metric("盗塁数", f"{int(total_sb)} 個")
 
     st.markdown("#####   🛡️   守備スタッツ")
-    d1, d2, d3 = st.columns(3)
+    d1, d2, d3, d4 = st.columns(4) # ← 3から4列に変更
     d1.metric("チーム防御率", f"{team_era:.2f}")
     d2.metric("平均失点", f"{runs_allowed_per_game:.2f}", delta=f"総: {int(total_lost)}", delta_color="inverse")
     d3.metric("得失点差", f"{int(total_score - total_lost):+d}")
+    d4.metric("総失策数", f"{int(total_errors)} 個") # ← 追加
 
     # 4. 試合履歴
     st.subheader(" 📋  試合履歴")
     if not df_display.empty:
-        cols = ["日付", "対戦相手", "得点", "失点", "勝敗", "試合種別", "グラウンド"]
+        cols = ["日付", "対戦相手", "得点", "失点", "失策", "勝敗", "試合種別", "グラウンド"] # Byzantium: "失策"を追加
         st.dataframe(df_display[cols], use_container_width=True, hide_index=True)
     else:
         st.write("履歴データがありません")
@@ -246,21 +252,17 @@ def show_team_stats(df_batting, df_pitching):
                 
                 # --- 追加：スコアラーの表示（ここから） ---
                 if "スコアラー" in match_bat.columns:
-                    # 空白や未入力(NaN)を除外してスコアラー名を取得
                     valid_scorers = match_bat["スコアラー"].dropna()
                     valid_scorers = valid_scorers[valid_scorers != ""]
                     scorer_name = valid_scorers.iloc[0] if not valid_scorers.empty else "未登録"
                 else:
                     scorer_name = "未登録"
                 
-                # margin-topにマイナスを指定して、タイトルと同じ高さの右端に並べる小技
                 st.markdown(f"<div style='text-align: right; color: gray; font-size: 14px; margin-top: -35px; margin-bottom: 10px;'>📝 スコアラー: {scorer_name}</div>", unsafe_allow_html=True)
-                # --- 追加：スコアラーの表示（ここまで） ---
 
                 personal_bat = match_bat[match_bat["選手名"] != "チーム記録"].copy()
                 
                 if not personal_bat.empty:
-                    # スタメンとベンチの分離
                     active_mask = personal_bat["イニング"] != "ベンチ"
                     active_players = personal_bat.loc[active_mask, "選手名"].unique()
                     
@@ -269,15 +271,12 @@ def show_team_stats(df_batting, df_pitching):
 
                     if not df_active.empty:
                         summary_list = []
-                        
-                        # 名前に含まれるスペースを除去して同一人物をまとめる
                         df_active["選手名_統一"] = df_active["選手名"].astype(str).str.replace(r'[\s　]+', '', regex=True)
                         
                         for player_key, player_group in df_active.groupby("選手名_統一", sort=False):
                             player_name = player_group["選手名"].iloc[0]
                             order_val = player_group["打順"].iloc[0] if "打順" in player_group.columns else ""
                             
-                            # 【大修正】「守備」列を最優先で取得し、すべての履歴を繋げる
                             pos_col = "守備" if "守備" in player_group.columns else ("位置" if "位置" in player_group.columns else None)
                             seen_pos = []
                             if pos_col:
@@ -287,21 +286,18 @@ def show_team_stats(df_batting, df_pitching):
                                         seen_pos.append(p_clean)
                             pos_val = "".join(seen_pos)
                             
-                            # 2. 打席数の計算
                             pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             res_col = player_group.get("結果")
                             tpa = res_col.isin(pa_list).sum() if res_col is not None else 0
                             
-                            # 3. 盗塁と得点の集計
                             sb_col = player_group.get("盗塁")
                             sb = int(pd.to_numeric(sb_col, errors='coerce').fillna(0).sum()) if sb_col is not None else 0
                             run_col = player_group.get("得点")
                             run = int(pd.to_numeric(run_col, errors='coerce').fillna(0).sum()) if run_col is not None else 0
                             
-                            # 4. 打席ごとの結果を生成
                             history_texts = []
                             count = 0
-                            pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
+                            pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             
                             if res_col is not None:
                                 for _, row in player_group.iterrows():
@@ -329,7 +325,6 @@ def show_team_stats(df_batting, df_pitching):
                                         else:
                                             history_texts.append(f"{count}({disp_text})")
                             
-                            # 5. 補足情報（盗塁・得点）の追加
                             extra = []
                             if sb > 0: extra.append(f"盗{sb}")
                             if run > 0: extra.append(f"得{run}")
@@ -347,7 +342,6 @@ def show_team_stats(df_batting, df_pitching):
 
                         df_summary = pd.DataFrame(summary_list)
                         
-                        # 打順補完
                         temp_orders = []
                         for i in range(len(df_summary)):
                             current_val = df_summary.at[i, "打順"]
@@ -408,7 +402,6 @@ def show_team_stats(df_batting, df_pitching):
 
                         final_res = "-"
                         
-                        # パターン1: 「勝」「負」などが別々の列に記録されている場合
                         if "勝" in group.columns and pd.to_numeric(group["勝"], errors='coerce').fillna(0).sum() > 0:
                             final_res = "勝"
                         elif "負" in group.columns and pd.to_numeric(group["負"], errors='coerce').fillna(0).sum() > 0:
@@ -423,8 +416,6 @@ def show_team_stats(df_batting, df_pitching):
                             final_res = "H"
                         elif "H" in group.columns and pd.to_numeric(group["H"], errors='coerce').fillna(0).sum() > 0:
                             final_res = "H"
-                            
-                        # パターン2: 「勝敗」や「責任」という1つの列に文字で入っている場合
                         else:
                             for col in ["勝敗", "責任"]:
                                 if col in group.columns:
@@ -440,43 +431,34 @@ def show_team_stats(df_batting, df_pitching):
                     
                     st.table(pd.DataFrame(summary_list).set_index("投手名")[["結果", "回", "球数", "被安", "奪三", "四死", "失点", "自責"]])
 
-                    # =========================================================
-                    # 📊 全イニング 対戦詳細履歴 (入力画面と同じ転置・強調形式)
-                    # =========================================================
                     st.write("")
                     st.markdown("##### 📊 全イニング 対戦詳細履歴（守備）")
                     
-                    # この試合の「詳細」データを抽出
                     history_df = match_pit[
                         match_pit["種別"].str.contains("詳細", na=False)
                     ].copy()
 
                     if not history_df.empty:
-                        # イニングごとにループして表示
                         for inn in [f"{i}回" for i in range(1, 10)] + ["延長"]:
                             inn_df = history_df[history_df["イニング"] == inn]
                             if not inn_df.empty:
                                 st.write(f"**【{inn}】**")
                                 display_items = []
                                 for _, row in inn_df.iterrows():
-                                    # 打順の抽出 (例: "詳細:1番打者" -> "1番")
                                     b_idx = str(row["種別"]).split(":")[1].replace("番打者", "") if ":" in str(row["種別"]) else "?"
                                     
-                                    # 結果と打球方向の合体
                                     raw_res = str(row.get('結果', ''))
                                     pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
                                     
                                     if pos_str and pos_str not in ["nan", "None", ""]:
                                         raw_res = f"{raw_res}({pos_str})"
                                     
-                                    # 処理野手の追加
                                     fielder_str = str(row.get('処理野手', ''))
                                     if fielder_str and fielder_str not in ["nan", "None", ""]:
                                         res_text = f"{raw_res} [{fielder_str}]"
                                     else:
                                         res_text = raw_res
                                         
-                                    # 失点がある場合は強調用のテキストを追加
                                     runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
                                     runs = int(runs) if pd.notna(runs) else 0
                                     if runs > 0:
@@ -488,16 +470,13 @@ def show_team_stats(df_batting, df_pitching):
                                         "結果": res_text
                                     })
                                 
-                                # データフレームを転置 (.T) して表示形式を整える
                                 df_disp = pd.DataFrame(display_items).T
                                 
-                                # 失点があるセルを赤字にするスタイリング
                                 def highlight_timely(val):
                                     if isinstance(val, str) and "💥失点" in val:
                                         return "color: red; font-weight: bold;"
                                     return ""
                                 
-                                # Pandasのバージョン差異を吸収しつつ適用
                                 try:
                                     styled_df = df_disp.style.map(highlight_timely)
                                 except AttributeError:
@@ -506,6 +485,5 @@ def show_team_stats(df_batting, df_pitching):
                                 st.dataframe(styled_df, use_container_width=True)
                     else:
                         st.caption("詳細データはまだありません。")
-                    # =========================================================
                 else:
                     st.caption("※ 個人投手成績なし")
