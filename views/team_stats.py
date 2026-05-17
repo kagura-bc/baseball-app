@@ -232,22 +232,41 @@ def show_team_stats(df_batting, df_pitching):
                 match_bat = df_batting[(pd.to_datetime(df_batting["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & (df_batting["対戦相手"] == target_opp)].copy()
                 match_pit = df_pitching[(pd.to_datetime(df_pitching["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & (df_pitching["対戦相手"] == target_opp)].copy()
 
+                # ... 前略 ...
                 detected_top = True
                 tr_row = match_bat[match_bat["選手名"] == "チーム記録"]
                 if not tr_row.empty:
                     p_info = str(tr_row.iloc[0]["位置"])
                     if "後攻" in p_info or "裏" in p_info: detected_top = False
 
+                # --- ★追加・修正箇所 ---
+                # 相手チームの失策数を、自チームの打撃結果（「失策」を含むもの）から算出
+                opp_errors = match_bat["結果"].astype(str).str.contains("失策").sum()
+                my_errors = target_row.get("失策", 0)
+
                 if has_team_rec:
                     sb_bat = match_bat[match_bat["選手名"] == "チーム記録"].copy()
                     sb_pit = match_pit[match_pit["選手名"] == "チーム記録"].copy()
-                    sb_pit["失策"] = target_row["失策"] # ★追加：スコアボード表示用に失策数を連動
+                    sb_pit["失策"] = my_errors     # 自チームの失策
+                    sb_bat["失策"] = opp_errors    # 相手チームの失策
                 else:
-                    sb_bat = match_bat; sb_pit = match_pit
-                    if "失策" not in sb_pit.columns:   # ★追加
+                    sb_bat = match_bat.copy()
+                    sb_pit = match_pit.copy()
+                    
+                    # UI側が列の合計(sum)を取っているケースを想定し、先頭行に合計値を注入する
+                    if "失策" not in sb_pit.columns:
                         sb_pit["失策"] = 0
+                    if not sb_pit.empty:
+                        sb_pit.iloc[0, sb_pit.columns.get_loc("失策")] = my_errors
+                        
+                    if "失策" not in sb_bat.columns:
+                        sb_bat["失策"] = 0
+                    if not sb_bat.empty:
+                        sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
+                # ------------------------
 
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
+
 
                 # （以降のスタメン表示、打撃成績、投手成績ロジックはそのままです）
 
