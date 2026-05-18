@@ -158,8 +158,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 
                 st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
 
-            # --- 中段：打順と投手選択 ---
-            c_mid1, c_mid2, c_mid3 = st.columns([1.2, 1.2, 2.5])
+            # --- 中段：打順と投手・捕手選択 ---
+            c_mid1, c_mid2, c_mid3, c_mid4 = st.columns([1.0, 1.0, 2.0, 2.0])
             with c_mid1: 
                 st.session_state["opp_batter_count"] = st.number_input("相手打順人数", 1, 20, value=st.session_state["opp_batter_count"])
             with c_mid2: 
@@ -173,21 +173,17 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 current_pitcher = ""
                 lineup = st.session_state.get("saved_lineup")
                 
-                # 打撃画面のオーダー(辞書型)から「投」を探す
                 if isinstance(lineup, dict):
-                    for i in range(20): # 最大20人分の枠を確認
+                    for i in range(20):
                         if lineup.get(f"pos_{i}") == "投":
                             raw_name = lineup.get(f"name_{i}", "")
                             if raw_name:
-                                # 括弧などの付加情報を除去して名前のみ取得
                                 current_pitcher = raw_name.split(" (")[0]
                             break
                 
-                # 見つからなかった場合の保険
                 if not current_pitcher:
                     current_pitcher = st.session_state.get("shared_starting_pitcher", "")
                 
-                # プルダウンの初期値をセット
                 if current_pitcher:
                     for i, p_opt in enumerate(pitcher_list_opts):
                         if current_pitcher in p_opt:
@@ -196,9 +192,30 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             
                 target_pitcher_disp = st.selectbox("登板投手", pitcher_list_opts, index=default_pitcher_idx)
                 
-                # 投手成績のクイック表示
                 if "current_season_pitching" in locals() and target_pitcher_disp in current_season_pitching:
                     st.markdown(f"<div style='font-size:14px; color:#1e3a8a;'>{current_season_pitching[target_pitcher_disp]}</div>", unsafe_allow_html=True)
+
+            with c_mid4:
+                # --- ★新規追加：安全な捕手取得処理 ---
+                catcher_list_opts = [""] + [local_fmt(p) for p in ALL_PLAYERS]
+                default_catcher_idx = 0
+                
+                current_catcher = ""
+                if isinstance(lineup, dict):
+                    for i in range(20):
+                        if lineup.get(f"pos_{i}") == "捕":
+                            raw_name = lineup.get(f"name_{i}", "")
+                            if raw_name:
+                                current_catcher = raw_name.split(" (")[0]
+                            break
+                
+                if current_catcher:
+                    for i, c_opt in enumerate(catcher_list_opts):
+                        if current_catcher in c_opt:
+                            default_catcher_idx = i
+                            break
+                            
+                target_catcher_disp = st.selectbox("現在の捕手", catcher_list_opts, index=default_catcher_idx)
 
             # --- 下段：具体的な成績入力 ---
             st.divider()
@@ -208,7 +225,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             
             with c_res:
                 p_res = st.selectbox("結果", ["凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", 
-                                            "振り逃げ三振", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "ボーク", "暴投", "捕逸", "牽制死", "盗塁死", "走塁死"], key="p_det_res")
+                                            "振り逃げ三振", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "ボーク", "暴投", "捕逸", "牽制死", "盗塁死", "盗塁", "走塁死"], key="p_det_res")
             
             with c_pos:
                 target_fielder_pos_list = st.multiselect(
@@ -323,10 +340,41 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     "アウト数": add_outs, 
                     "種別": f"詳細:{batter_idx_str}番打者"
                 }
-                
-                # スプレッドシートへ保存
+
+                # ==========================================
+                # ★新規追加：捕手の盗塁記録の作成
+                # ==========================================
+                records_to_save = [rec] # 投手の記録をリストに入れる
+                target_catcher_name = str(target_catcher_disp).split(" (")[0].strip() if target_catcher_disp else ""
+
+                if target_catcher_name and p_res in ["盗塁死", "盗塁"]:
+                    # スプレッドシートには「盗塁阻止」または「盗塁」として記録
+                    catcher_result = "盗塁阻止" if p_res == "盗塁死" else "盗塁"
+
+                    catcher_rec = {
+                        "日付": selected_date_str, 
+                        "グラウンド": ground_name, 
+                        "対戦相手": opp_team, 
+                        "試合種別": match_type,
+                        "イニング": current_inn, 
+                        "選手名": target_catcher_name,   # 捕手名
+                        "守備位置": "捕", 
+                        "打球方向": "", 
+                        "処理野手": "", 
+                        "結果": catcher_result, 
+                        "失点": 0, 
+                        "自責点": 0,
+                        "勝敗": "ー", 
+                        "被安打": 0, 
+                        "奪三振": 0, 
+                        "アウト数": 0, # 重複計算を防ぐためアウトは0
+                        "種別": f"詳細:{batter_idx_str}番打者_捕手"
+                    }
+                    records_to_save.append(catcher_rec) # 捕手の記録を追加
+
+                # スプレッドシートへ保存（投手＋捕手のデータを一括送信）
                 conn.update(
-                    spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=pd.concat([df_pitching, pd.DataFrame([rec])], 
+                    spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=pd.concat([df_pitching, pd.DataFrame(records_to_save)], 
                     ignore_index=True)
                 )
                 st.cache_data.clear()
