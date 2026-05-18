@@ -566,9 +566,9 @@ def show_analysis_page(df_batting, df_pitching):
                     else:
                         st.info("詳細なアウトデータがありません。")
 
-                        st.write("")
+                    st.write("")
                     st.divider()
-                    # ★修正：個人の投手の打球方向×種類（安全対策版）
+                    # ★修正：個人の投手の打球方向×種類（安打等も表示版）
                     st.markdown(f"#### {target_p_player} の打たせた打球方向と種類")
                     
                     if "打球方向" in my_p.columns:
@@ -587,8 +587,14 @@ def show_analysis_page(df_batting, df_pitching):
                                 
                             def determine_hit_type(res, current_type):
                                 res_s = str(res)
-                                if current_type != "その他" and pd.notna(current_type):
+                                # ★追加：安打系の判定を優先して行う
+                                if "本塁打" in res_s: return "本塁打"
+                                if "二塁打" in res_s or "三塁打" in res_s: return "長打"
+                                if "単打" in res_s or "安打" in res_s: return "単打"
+                                
+                                if current_type != "その他" and pd.notna(current_type) and current_type != "":
                                     return current_type # すでに判定済みならそのまま
+                                    
                                 if "ゴロ" in res_s: return "ゴロ"
                                 if "フライ" in res_s or "飛" in res_s: return "フライ"
                                 if "直" in res_s or "ライナー" in res_s: return "ライナー"
@@ -605,7 +611,10 @@ def show_analysis_page(df_batting, df_pitching):
                                 bar_p_dir_indiv = alt.Chart(p_indiv_dir_counts).mark_bar().encode(
                                     x=alt.X("方向:N", sort=safe_pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
                                     y=alt.Y("数:Q", title="打球数"),
-                                    color=alt.Color("打球種類:N", scale=alt.Scale(domain=["ゴロ", "フライ", "ライナー", "その他"], range=["#eab308", "#3b82f6", "#22c55e", "#9ca3af"])),
+                                    color=alt.Color("打球種類:N", scale=alt.Scale(
+                                        domain=["ゴロ", "フライ", "ライナー", "単打", "長打", "本塁打", "その他"], 
+                                        range=["#eab308", "#3b82f6", "#22c55e", "#ef4444", "#a855f7", "#ec4899", "#9ca3af"]
+                                    )),
                                     tooltip=["方向", "打球種類", "数"]
                                 ).properties(height=250)
                                 
@@ -616,7 +625,7 @@ def show_analysis_page(df_batting, df_pitching):
                             st.caption("打球方向のデータがありません。")
                     else:
                         st.caption("打球方向の列が見つかりません。")
-                                
+                        
                         st.write("")
                         st.divider()
                         st.markdown(f"#### {target_p_player} の被安打・四死球の傾向")
