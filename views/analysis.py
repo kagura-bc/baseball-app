@@ -425,9 +425,13 @@ def show_analysis_page(df_batting, df_pitching):
             st.write("")
             st.markdown("##### チーム投手陣のアウト取得傾向")
             if not df_p_detail.empty:
-                p_goro = len(df_p_detail[df_p_detail["結果"].astype(str).str.contains("ゴロ|併殺打")])
-                p_fly = len(df_p_detail[df_p_detail["結果"].astype(str).str.contains("フライ")])
-                p_so = int(pd.to_numeric(df_p_detail["奪三振"], errors='coerce').fillna(0).sum()) if "奪三振" in df_p_detail.columns else 0
+                # ★ 追加: 「失策」と「振り逃げ」が含まれるものを除外したデータフレームを作成
+                df_p_out_only = df_p_detail[~df_p_detail["結果"].astype(str).str.contains("失策|振り逃げ", na=False)]
+                
+                # ★ 修正: df_p_detail ではなく df_p_out_only からカウントする
+                p_goro = len(df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("ゴロ|併殺打")])
+                p_fly = len(df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("フライ")])
+                p_so = len(df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("三振")])
                 
                 df_p_out = pd.DataFrame({"種類": ["ゴロで打たせてとる", "フライアウト", "三振で奪う"], "数": [p_goro, p_fly, p_so]})
                 if df_p_out["数"].sum() > 0:
@@ -541,22 +545,26 @@ def show_analysis_page(df_batting, df_pitching):
                 players_p = sorted(df_p_detail[(df_p_detail["選手名"] != "チーム記録") & (df_p_detail["選手名"].notna())]["選手名"].unique())
                 if players_p:
                     target_p_player = st.selectbox("分析する投手を選択", players_p, key="ana_pit_player")
-                    my_p = df_p_detail[df_p_detail["選手名"] == target_p_player].copy()
+                my_p = df_p_detail[df_p_detail["選手名"] == target_p_player].copy()
+                if not my_p.empty:
+                    st.markdown(f"#### {target_p_player} のアウトの取り方")
+                    # ★ 修正: 個人のデータからも「失策」が含まれるものだけを除外
+                    my_p_out_only = my_p[~my_p["結果"].astype(str).str.contains("失策", na=False)]
                     
-                    if not my_p.empty:
-                        st.markdown(f"#### {target_p_player} のアウトの取り方")
-                        out_goro = len(my_p[my_p["結果"].astype(str).str.contains("ゴロ|併殺打")])
-                        out_fly = len(my_p[my_p["結果"].astype(str).str.contains("フライ")])
-                        out_so = len(my_p[my_p["結果"].astype(str).str.contains("三振")])
-                        
-                        df_my_p_out = pd.DataFrame({"種類": ["ゴロ", "フライ", "三振"], "数": [out_goro, out_fly, out_so]})
-                        if df_my_p_out["数"].sum() > 0:
-                            pie_my_p = alt.Chart(df_my_p_out).mark_arc(innerRadius=50).encode(
-                                theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロ", "フライ", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
-                            ).properties(height=300)
-                            st.altair_chart(pie_my_p, use_container_width=True)
-                        else:
-                            st.info("詳細なアウトデータがありません。")
+                    # ★ 修正: my_p ではなく my_p_out_only からカウントする
+                    out_goro = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("ゴロ|併殺打")])
+                    out_fly = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("フライ")])
+                    out_so = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("三振")])
+                    
+                    # ▼▼▼ ここから下のインデントを左に1段階（4スペース）戻して揃えました ▼▼▼
+                    df_my_p_out = pd.DataFrame({"種類": ["ゴロ", "フライ", "三振"], "数": [out_goro, out_fly, out_so]})
+                    if df_my_p_out["数"].sum() > 0:
+                        pie_my_p = alt.Chart(df_my_p_out).mark_arc(innerRadius=50).encode(
+                            theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロ", "フライ", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
+                        ).properties(height=300)
+                        st.altair_chart(pie_my_p, use_container_width=True)
+                    else:
+                        st.info("詳細なアウトデータがありません。")
 
                         st.write("")
                         st.divider()
@@ -597,12 +605,14 @@ def show_analysis_page(df_batting, df_pitching):
                             st.altair_chart(bar_my_p, use_container_width=True)
                         else:
                             st.info("被安打・四死球の詳細データがありません。")
-                    else:
-                        st.write("該当選手のデータなし")
+                
+                # ▼ここのブロックのインデントを整えました
                 else:
-                    st.write("対象となる投手がいません")
+                    st.write("該当選手のデータなし")
             else:
-                st.info("2026年以降の投手データがありません")
+                st.write("対象となる投手がいません")
+        else:
+            st.info("2026年以降の投手データがありません")
 
     # =========================================================
     # Tab 5, 6 は元のまま省略せずに残します
