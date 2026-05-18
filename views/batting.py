@@ -408,7 +408,47 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     if rbi_val == 0: rbi_val = 1
                     has_homerun = True
 
-                # 結果が「---」以外、または得点が1以上の時（通常の打席結果保存）
+                # ==================================================
+                # ★ 新規追加：スタメン・交代・守備変更の履歴を自動判定して記録
+                # ==================================================
+                if p_name:
+                    # その打順の今日の過去の記録を取得
+                    order_records = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == i + 1]
+                    
+                    if order_records.empty:
+                        # まだ誰も登録されていない場合は「スタメン」
+                        new_records.append({
+                            "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                            "イニング": "試合前", "選手名": p_name, "位置": p_pos, "打順": i+1,
+                            "結果": "スタメン", "打点": 0, "得点": 0, "盗塁": 0, 
+                            "種別": "スタメン", "打球方向": "", "スコアラー": current_scorer
+                        })
+                    else:
+                        # 既に登録がある場合、直近の選手名・ポジションと比較
+                        last_record = order_records.iloc[-1]
+                        last_name = last_record["選手名"]
+                        last_pos = last_record.get("位置", "")
+                        
+                        # ① 選手が変わった場合（代打・代走・ベンチからの交代など）
+                        if p_name != last_name:
+                            new_records.append({
+                                "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                                "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
+                                "結果": "交代", "打点": 0, "得点": 0, "盗塁": 0, 
+                                "種別": "交代", "打球方向": "", "スコアラー": current_scorer
+                            })
+                        # ② 選手は同じだが守備位置が変わった場合（シート変更）
+                        elif p_pos != last_pos:
+                            new_records.append({
+                                "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                                "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
+                                "結果": "守備変更", "打点": 0, "得点": 0, "盗塁": 0, 
+                                "種別": "守備変更", "打球方向": "", "スコアラー": current_scorer
+                            })
+
+                # ==================================================
+                # 通常の打席結果・得点の保存
+                # ==================================================
                 if p_name and (p_res != "---" or run_val > 0):
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
@@ -416,7 +456,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "結果": p_res if p_res != "---" else "得点",
                         "打点": rbi_val, "得点": run_val, "盗塁": (1 if p_res == "盗塁" else 0), 
                         "種別": "打席", "打球方向": p_dir if p_dir != "---" else "",
-                        "スコアラー": current_scorer # 辞書にスコアラー情報を追加
+                        "スコアラー": current_scorer
                     }
                     new_records.append(record_dict)
                 
