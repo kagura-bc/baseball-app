@@ -70,10 +70,16 @@ def show_team_stats(df_batting, df_pitching):
         team_rec_rows = group[group["選手名"] == "チーム記録"]
         if not team_rec_rows.empty:
             runs_allowed = pd.to_numeric(team_rec_rows["失点"], errors='coerce').fillna(0).sum()
-            errors = pd.to_numeric(team_rec_rows["失策"], errors='coerce').fillna(0).sum() if "失策" in team_rec_rows.columns else 0 # ← 追加
+            col_errors = pd.to_numeric(team_rec_rows["失策"], errors='coerce').fillna(0).sum() if "失策" in team_rec_rows.columns else 0
         else:
             runs_allowed = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
-            errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum() if "失策" in group.columns else 0 # ← 追加
+            col_errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum() if "失策" in group.columns else 0
+            
+        # ★ 追加：詳細入力モードで「結果」列に「失策(ゴロ)」「失策(フライ)」などが記録されている数をカウント
+        res_errors = group["結果"].astype(str).str.contains("失策").sum() if "結果" in group.columns else 0
+        
+        # 従来の列入力(col_errors)と、新しい結果文字列(res_errors)の合算を総失策とする
+        errors = col_errors + res_errors
 
         if "投手名" in group.columns:
             individuals_p = group[group["投手名"] != "チーム記録"]
