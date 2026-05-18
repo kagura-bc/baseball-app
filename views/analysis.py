@@ -567,24 +567,55 @@ def show_analysis_page(df_batting, df_pitching):
                         st.info("詳細なアウトデータがありません。")
 
                         st.write("")
-                        st.divider()
-                        # ★追加：個人の投手の打球方向×種類
-                        st.markdown(f"#### {target_p_player} の打たせた打球方向と種類")
-                        if "打球方向" in my_p.columns:
-                            valid_p_df = my_p[my_p["打球方向"].notna() & (my_p["打球方向"] != "") & (my_p["打球方向"] != "nan")].copy()
-                            if not valid_p_df.empty:
-                                valid_p_df["方向"] = valid_p_df["打球方向"].astype(str).str.strip()
-                                p_indiv_dir_counts = valid_p_df.groupby(["方向", "打球種類"]).size().reset_index(name="数")
+                    st.divider()
+                    # ★修正：個人の投手の打球方向×種類（安全対策版）
+                    st.markdown(f"#### {target_p_player} の打たせた打球方向と種類")
+                    
+                    if "打球方向" in my_p.columns:
+                        # "nan" や "---" など、無効な文字列を除外
+                        valid_p_df = my_p[my_p["打球方向"].notna() & 
+                                          (my_p["打球方向"] != "") & 
+                                          (my_p["打球方向"] != "nan") & 
+                                          (my_p["打球方向"] != "---")].copy()
+                        
+                        if not valid_p_df.empty:
+                            valid_p_df["方向"] = valid_p_df["打球方向"].astype(str).str.strip()
+                            
+                            # ★安全対策：「打球種類」列が存在しない、または空の場合に自動補完する
+                            if "打球種類" not in valid_p_df.columns:
+                                valid_p_df["打球種類"] = "その他"
+                                
+                            def determine_hit_type(res, current_type):
+                                res_s = str(res)
+                                if current_type != "その他" and pd.notna(current_type):
+                                    return current_type # すでに判定済みならそのまま
+                                if "ゴロ" in res_s: return "ゴロ"
+                                if "フライ" in res_s or "飛" in res_s: return "フライ"
+                                if "直" in res_s or "ライナー" in res_s: return "ライナー"
+                                return "その他"
+                                
+                            valid_p_df["打球種類"] = valid_p_df.apply(lambda row: determine_hit_type(row["結果"], row.get("打球種類")), axis=1)
+
+                            p_indiv_dir_counts = valid_p_df.groupby(["方向", "打球種類"]).size().reset_index(name="数")
+                            
+                            if not p_indiv_dir_counts.empty:
+                                # 並び順の定義（エラー防止のため直接指定）
+                                safe_pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
                                 
                                 bar_p_dir_indiv = alt.Chart(p_indiv_dir_counts).mark_bar().encode(
-                                    x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
+                                    x=alt.X("方向:N", sort=safe_pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
                                     y=alt.Y("数:Q", title="打球数"),
-                                    color=alt.Color("打球種類:N", scale=hit_type_color_scale),
+                                    color=alt.Color("打球種類:N", scale=alt.Scale(domain=["ゴロ", "フライ", "ライナー", "その他"], range=["#eab308", "#3b82f6", "#22c55e", "#9ca3af"])),
                                     tooltip=["方向", "打球種類", "数"]
                                 ).properties(height=250)
+                                
                                 st.altair_chart(bar_p_dir_indiv, use_container_width=True)
                             else:
-                                st.caption("打球方向のデータがありません")
+                                st.caption("有効な打球方向のデータがありません。")
+                        else:
+                            st.caption("打球方向のデータがありません。")
+                    else:
+                        st.caption("打球方向の列が見つかりません。")
                                 
                         st.write("")
                         st.divider()
