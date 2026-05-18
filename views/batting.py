@@ -408,7 +408,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     if rbi_val == 0: rbi_val = 1
                     has_homerun = True
 
-                # 結果が「---」以外、または得点が1以上の時のみDB保存対象にする
+                # 結果が「---」以外、または得点が1以上の時（通常の打席結果保存）
                 if p_name and (p_res != "---" or run_val > 0):
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
@@ -419,6 +419,23 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "スコアラー": current_scorer # 辞書にスコアラー情報を追加
                     }
                     new_records.append(record_dict)
+                
+                # ★ 新規追加：打席結果がない（スタメンのみ）場合でもデータベースに記録する
+                elif p_name:
+                    # すでに今日の同じ打順に、同じ選手が登録されているかチェック（重複保存を防止）
+                    is_already_registered = not today_batting_df[
+                        (today_batting_df["打順"] == i + 1) & 
+                        (today_batting_df["選手名"] == p_name)
+                    ].empty
+                    
+                    if not is_already_registered:
+                        new_records.append({
+                            "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                            "イニング": "試合前", "選手名": p_name, "位置": p_pos, "打順": i+1,
+                            "結果": "スタメン", "打点": 0, "得点": 0, "盗塁": 0, 
+                            "種別": "スタメン", "打球方向": "",
+                            "スコアラー": current_scorer
+                        })
 
             # 打席の入力があった場合はデータベースへ保存
             if new_records:
