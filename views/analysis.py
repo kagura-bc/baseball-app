@@ -4,53 +4,61 @@ import numpy as np
 import altair as alt
 from config.settings import OFFICIAL_GAME_TYPES
 
+# =========================================================
+# 共通関数
+# =========================================================
+
+# ▼▼▼ 追加: 固定で除外するメンバーのリスト ▼▼▼
+FIXED_EXCLUDE_LIST = [
+    "助っ人1", "助っ人2", "依田裕樹", "小峠海晴"
+]
+
+def normalize_name(name):
+    """名前からスペースを除去する"""
+    return str(name).replace(" ", "").replace("　", "").strip()
+
+def get_exclude_set():
+    """Secretsから除外リストを読み込み、固定リストと結合して集合(set)にして返す"""
+    # secrets.tomlから取得（存在しない場合は空リスト）
+    raw_hidden = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
+    
+    # ▼▼▼ 修正: secretsのリストと固定リストを結合する ▼▼▼
+    combined_list = list(raw_hidden) + FIXED_EXCLUDE_LIST
+    
+    return {normalize_name(n) for n in combined_list}
+
+def filter_players(df, exclude_set):
+    """データフレームから除外対象を除去する関数"""
+    if "選手名" not in df.columns:
+        return df
+    
+    # チーム記録は残すフラグ
+    is_team_record = df["選手名"].astype(str).str.contains("チーム記録", na=False)
+    
+    # 名前の正規化
+    clean_names = df["選手名"].apply(normalize_name)
+    
+    # フィルタリング
+    mask = is_team_record | (~clean_names.isin(exclude_set))
+    
+    return df[mask]
+
+# =========================================================
+# メインの表示関数
+# =========================================================
 def show_analysis_page(df_batting, df_pitching):
     st.title("📈 データ分析 & 傾向")
 
-    # =========================================================
-    # ▼▼▼ 共通：除外・有効選手リストの作成（スペース完全無視） ▼▼▼
-    # =========================================================
-    # 1. 除外リストの取得・正規化
-    raw_hidden = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
-    if isinstance(raw_hidden, str): raw_hidden = [x.strip() for x in raw_hidden.split(",")]
-    
-    # 2. 背番号リストの取得・正規化
-    player_numbers_dict = st.secrets.get("PLAYER_NUMBERS", {})
-    
-    # 名前をスペースなしの文字列に変換して比較用の集合を作る
-    def normalize_name(name):
-        return str(name).replace(" ", "").replace("　", "").strip()
+    # ★ここで一回だけ除外リストを作成（これがどこでも使えるようになります）
+    exclude_set = get_exclude_set()
 
-    # 除外対象の集合
-    exclude_set = {normalize_name(n) for n in raw_hidden}
-    # 背番号がある有効な選手の集合
-    valid_numbered_set = {normalize_name(name) for name, num in player_numbers_dict.items() 
-                          if num is not None and str(num).strip() != ""}
-
-    # フィルタリング関数：名前が除外リストになく、かつ背番号リストに含まれている選手のみ残す
-    def filter_players(df):
-        if "選手名" not in df.columns: return df
-        # 名前を正規化して判定
-        df["_clean_name"] = df["選手名"].apply(normalize_name)
-        
-        # 条件: 除外リストになく、かつ背番号リストに入っていること
-        # (背番号リストが空の場合は全選手許可とするなら調整が必要ですが、今回は登録選手のみとする場合)
-        mask = (~df["_clean_name"].isin(exclude_set))
-        if valid_numbered_set:
-            mask = mask & (df["_clean_name"].isin(valid_numbered_set))
-            
-        return df[mask].drop(columns=["_clean_name"])
-
-    # ---------------------------------------------------------
-    # 0. データ前処理
-    # ---------------------------------------------------------
     if df_batting.empty and df_pitching.empty:
         st.info("分析するデータがありません。")
         return
 
-    # ★最初から除外フィルターを適用★
-    df_b = filter_players(df_batting.copy())
-    df_p = filter_players(df_pitching.copy())
+    # ★フィルター関数に作成した exclude_set を渡す
+    df_b = filter_players(df_batting.copy(), exclude_set)
+    df_p = filter_players(df_pitching.copy(), exclude_set)
 
     # =========================================================
     # ▼▼▼ 追加: analysis.py 側でも is_ab や is_hit を計算する ▼▼▼
@@ -129,33 +137,36 @@ def show_analysis_page(df_batting, df_pitching):
         df_p = df_p[df_p["試合種別"] == "練習試合"]
 
     # ---------------------------------------------------------
-    # ゲーム単位のデータセット作成 (勝敗、得点、先攻後攻など)
+    # ゲーム単位のデータセット作成 (得点計算 + FirstScore判定)
     # ---------------------------------------------------------
     games_list = []
-    for (d, opp), g_b in df_b.groupby(["Date", "対戦相手"]):
-        g_p = df_p[(df_p["Date"] == d) & (df_p["対戦相手"] == opp)]
+    # 試合種別も含めてグループ化
+    for (d, opp, m_type), g_b in df_b.groupby(["Date", "対戦相手", "試合種別"]):
+        g_p = df_p[(df_p["Date"] == d) & (df_p["対戦相手"] == opp) & (df_p["試合種別"] == m_type)]
         
-        tm_row = g_b[g_b["選手名"] == "チーム記録"]
-        if not tm_row.empty:
-            my_score = pd.to_numeric(tm_row["得点"], errors='coerce').sum()
-            pos_info = str(tm_row.iloc[0]["位置"])
-            is_top = "先攻" in pos_info or "表" in pos_info
-        else:
-            my_score = pd.to_numeric(g_b["得点"], errors='coerce').sum()
-            is_top = None
-
-        tm_p_row = g_p[g_p["選手名"] == "チーム記録"]
-        if not tm_p_row.empty:
-            opp_score = pd.to_numeric(tm_p_row["失点"], errors='coerce').sum()
-        else:
-            opp_score = pd.to_numeric(g_p["失点"], errors='coerce').sum()
-
-        if my_score > opp_score: res = "Win"
-        elif my_score < opp_score: res = "Lose"
-        else: res = "Draw"
-
-        first_score_team = None 
+        # 1. チーム記録行と個人行を分離して計算
+        is_team_rec = g_b["選手名"].astype(str).str.contains("チーム記録", na=False)
+        team_rows = g_b[is_team_rec]
+        indiv_rows = g_b[~is_team_rec]
         
+        if not team_rows.empty:
+            my_score = pd.to_numeric(team_rows["得点"], errors='coerce').fillna(0).sum()
+        else:
+            my_score = pd.to_numeric(indiv_rows["得点"], errors='coerce').fillna(0).sum()
+
+        is_p_team_rec = g_p["選手名"].astype(str).str.contains("チーム記録", na=False)
+        p_team_rows = g_p[is_p_team_rec]
+        p_indiv_rows = g_p[~is_p_team_rec]
+
+        if not p_team_rows.empty:
+            opp_score = pd.to_numeric(p_team_rows["失点"], errors='coerce').fillna(0).sum()
+        else:
+            opp_score = pd.to_numeric(p_indiv_rows["失点"], errors='coerce').fillna(0).sum()
+
+        # 2. 勝敗判定
+        res = "Win" if my_score > opp_score else ("Lose" if my_score < opp_score else "Draw")
+
+        # 3. 先制判定 (FirstScoreの計算)
         def get_inn_num(t):
             t = str(t).replace("回", "")
             return int(t) if t.isdigit() else 99
@@ -170,20 +181,12 @@ def show_analysis_page(df_batting, df_pitching):
         opp_score_inns = opp_inn_scores[pd.to_numeric(opp_inn_scores["失点"], errors='coerce') > 0].sort_values("InnNum")
         min_opp_inn = opp_score_inns["InnNum"].iloc[0] if not opp_score_inns.empty else 99
 
-        if min_my_inn < min_opp_inn:
-            first_score_team = "自チーム"
-        elif min_opp_inn < min_my_inn:
-            first_score_team = "相手"
-        elif min_my_inn == min_opp_inn and min_my_inn != 99:
-            if is_top is True: first_score_team = "自チーム"
-            elif is_top is False: first_score_team = "相手"
-            else: first_score_team = "不明"
-        else:
-            first_score_team = "なし(0-0)"
+        first_score_team = "自チーム" if min_my_inn < min_opp_inn else ("相手" if min_opp_inn < min_my_inn else "なし(0-0)")
 
+        # 4. 辞書に追加 (FirstScore を忘れずに入れています)
         games_list.append({
-            "Date": d, "Opponent": opp, "MyScore": my_score, "OppScore": opp_score,
-            "Result": res, "FirstScore": first_score_team, "IsTop": is_top
+            "Date": d, "Opponent": opp, "MyScore": my_score, 
+            "OppScore": opp_score, "Result": res, "FirstScore": first_score_team
         })
     
     df_games = pd.DataFrame(games_list)
@@ -302,29 +305,73 @@ def show_analysis_page(df_batting, df_pitching):
         if df_games.empty:
             st.warning("データなし")
         else:
-            st.markdown("##### 対戦相手別成績")
-            opp_stats = df_games.groupby("Opponent").agg(
-                試合数=("Result", "count"), 勝利=("Result", lambda x: (x=="Win").sum()), 敗戦=("Result", lambda x: (x=="Lose").sum()),
-                引分=("Result", lambda x: (x=="Draw").sum()), 平均得点=("MyScore", "mean"), 平均失点=("OppScore", "mean")
+            st.markdown("##### 🔍 対戦相手別成績とデバッグ")
+            
+            # --- データのクレンジングと集計準備 ---
+            # 1. 重複排除 (DateとOpponentが同じなら同一試合とみなす)
+            # ここで drop_duplicates を使うことで、もしdf_gamesに重複があっても1試合1行にします
+            df_clean = df_games.drop_duplicates(subset=["Date", "Opponent"]).copy()
+            
+            # 2. 数値変換
+            df_clean["MyScore"] = pd.to_numeric(df_clean["MyScore"], errors='coerce').fillna(0)
+            df_clean["OppScore"] = pd.to_numeric(df_clean["OppScore"], errors='coerce').fillna(0)
+            
+            # 3. [デバッグ表示] 計算対象のデータを確認
+            # ここでDarkLegionの行が1行だけであることを確認してください
+            with st.expander("データの計算内訳を確認する（デバッグ）"):
+                st.write("計算に使われているデータ（DarkLegionのみ）:")
+                st.dataframe(df_clean[df_clean["Opponent"] == "DarkLegion"])
+                st.caption("※ここが1行で、得点が正しい数値（10など）になっていれば、平均も正しく計算されます。")
+
+            # 4. 対戦相手別に集計
+            opp_stats = df_clean.groupby("Opponent").agg(
+                試合数=("Result", "count"), 
+                勝利=("Result", lambda x: (x=="Win").sum()), 
+                敗戦=("Result", lambda x: (x=="Lose").sum()),
+                引分=("Result", lambda x: (x=="Draw").sum()), 
+                平均得点=("MyScore", "mean"), 
+                平均失点=("OppScore", "mean")
             ).reset_index()
             
-            opp_stats["勝率"] = opp_stats.apply(lambda x: x["勝利"]/(x["勝利"]+x["敗戦"]) if (x["勝利"]+x["敗戦"])>0 else 0, axis=1)
-            opp_stats = opp_stats.sort_values("試合数", ascending=False)
+            # 5. 勝率計算
+            opp_stats["勝率"] = opp_stats.apply(
+                lambda x: x["勝利"] / (x["勝利"] + x["敗戦"]) if (x["勝利"] + x["敗戦"]) > 0 else 0, 
+                axis=1
+            )
+            
+            # 6. 並び替え
+            opp_stats = opp_stats.sort_values("試合数", ascending=False).reset_index(drop=True)
 
+            # 7. 表示
             st.dataframe(
                 opp_stats.style.format({"平均得点": "{:.1f}", "平均失点": "{:.1f}", "勝率": "{:.3f}"})
                          .background_gradient(subset=["勝率"], cmap="Reds"),
-                use_container_width=True, hide_index=True
+                use_container_width=True,
+                hide_index=True
             )
 
+            # 8. グラフ描画
             opp_stats["得失差"] = opp_stats["平均得点"] - opp_stats["平均失点"]
-            bar_diff = alt.Chart(opp_stats).mark_bar().encode(
-                x=alt.X("Opponent", sort="-y", title="対戦相手"),
-                y=alt.Y("得失差", title="平均得失点差"),
-                color=alt.condition(alt.datum.得失差 > 0, alt.value("#e11d48"), alt.value("#1e40af")),
-                tooltip=["Opponent", "試合数", "平均得点", "平均失点", "得失差"]
+            bar_diff = (
+                alt.Chart(opp_stats)
+                .mark_bar()
+                .encode(
+                    x=alt.X("Opponent:N", sort="-y", title="対戦相手"),
+                    y=alt.Y("得失差:Q", title="平均得失点差"),
+                    color=alt.condition(alt.datum.得失差 > 0, alt.value("#e11d48"), alt.value("#1e40af")),
+                    tooltip=[
+                        alt.Tooltip("Opponent:N", title="対戦相手"),
+                        alt.Tooltip("試合数:Q", title="試合数"),
+                        alt.Tooltip("平均得点:Q", title="平均得点", format=".1f"),
+                        alt.Tooltip("平均失点:Q", title="平均失点", format=".1f"),
+                        alt.Tooltip("得失差:Q", title="得失差", format=".1f"),
+                        alt.Tooltip("勝率:Q", title="勝率", format=".3f")
+                    ]
+                )
+                .properties(height=400)
             )
             st.altair_chart(bar_diff, use_container_width=True)
+
 
     # =========================================================
     # Tab 3: イニング・先制率
@@ -691,70 +738,65 @@ def show_analysis_page(df_batting, df_pitching):
         else:
             st.info("2026年以降の投手データがありません")
 
-    # =========================================================
-    # Tab 5, 6 
-    # =========================================================
-    # ▼▼▼ secrets.toml から除外リストを安全に取得（Tab 5, 6 共通） ▼▼▼
-    raw_exclude_list = []
-    try:
-        if "HIDDEN_PLAYERS_TOTAL" in st.secrets:
-            secret_val = st.secrets["HIDDEN_PLAYERS_TOTAL"]
-            if isinstance(secret_val, list):
-                raw_exclude_list = secret_val
-            elif isinstance(secret_val, str):
-                raw_exclude_list = [x.strip() for x in secret_val.split(",")]
-    except Exception:
-        pass
-    
-    # ★原因対策: 姓名の間のスペース（全角・半角）を完全に消去して比較用リストを作る
-    exclude_list_no_space = [str(n).replace("　", "").replace(" ", "").strip() for n in raw_exclude_list]
-    # ▲▲▲ 取得ここまで ▲▲▲
-
     with tab5:
-        st.markdown("### 🧠 統計データに基づく推奨オーダー")
-        st.caption("過去の個人成績から、セイバーメトリクスの定石に基づいたオーダー案を提示します。")
+        st.markdown("### 🤖 統計データに基づく推奨オーダー")
+        
+        # 1. 複数のリストを取得して統合
+        raw_hidden = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
+        fixed_list = st.secrets.get("FIXED_EXCLUDE_LIST", [])
+        
+        # 【重要】リストを結合し、さらにそれぞれを正規化する
+        # これにより、データフレーム側の正規化された名前と完全にマッチさせます
+        all_exclude_names = raw_hidden + fixed_list
+        exclude_set = {normalize_name(n) for n in all_exclude_names}
 
         if not df_b.empty:
+            # 1. データのクレンジング
             df_calc = df_b[df_b["選手名"] != "チーム記録"].copy()
             
-            # ★推奨オーダーの集計から除外選手を削除 (スペース無視で比較)★
-            temp_names = df_calc["選手名"].astype(str).str.replace(r"\s+", "", regex=True)
-            df_calc = df_calc[~temp_names.isin(exclude_list_no_space)]
+            # 正規化した名前でフィルタリング
+            # (apply(normalize_name) は上で定義した共通関数を使用)
+            df_calc["_temp_norm"] = df_calc["選手名"].apply(normalize_name)
+            
+            # 【重要】正規化された同士を比較
+            df_calc = df_calc[~df_calc["_temp_norm"].isin(exclude_set)]
 
             if df_calc.empty:
                 st.warning("除外設定の結果、表示できるデータがなくなりました。")
             else:
+                # 2. 基本スタッツの集計
+                # ... (以下、元の計算処理) ...
                 hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
                 df_calc["Hit"] = df_calc["結果"].isin(hit_cols).astype(int)
                 df_calc["BB"] = df_calc["結果"].isin(["四球", "死球"]).astype(int)
                 df_calc["AB"] = df_calc["結果"].isin(hit_cols + ["凡退", "三振", "失策", "併殺打", "野選"]).astype(int)
                 df_calc["PA"] = 1 
                 
-                df_calc["TB"] = 0
-                df_calc.loc[df_calc["結果"]=="単打", "TB"] = 1
-                df_calc.loc[df_calc["結果"]=="二塁打", "TB"] = 2
-                df_calc.loc[df_calc["結果"]=="三塁打", "TB"] = 3
-                df_calc.loc[df_calc["結果"]=="本塁打", "TB"] = 4
-                
+                tb_map = {"単打":1, "二塁打":2, "三塁打":3, "本塁打":4}
+                df_calc["TB"] = df_calc["結果"].map(tb_map).fillna(0)
+                df_calc["TB"] = pd.to_numeric(df_calc["TB"], errors='coerce').fillna(0)
                 df_calc["SB"] = pd.to_numeric(df_calc["盗塁"], errors='coerce').fillna(0)
                 
                 stats = df_calc.groupby("選手名").agg({
                     "PA": "sum", "AB": "sum", "Hit": "sum", "BB": "sum", "TB": "sum", "SB": "sum"
                 }).reset_index()
                 
+                # 3. 最低打席数フィルタ
                 max_pa = int(stats["PA"].max()) if not stats.empty else 0
                 default_pa = min(20, max_pa)
                 min_pa = st.slider("対象とする最低打席数", 0, max_pa, default_pa)
                 stats = stats[stats["PA"] >= min_pa]
 
                 if not stats.empty:
-                    stats["OBP"] = (stats["Hit"] + stats["BB"]) / stats["PA"]
+                    # 4. 指標計算
+                    stats["OBP"] = stats.apply(lambda x: (x["Hit"] + x["BB"]) / x["PA"] if x["PA"] > 0 else 0, axis=1)
                     stats["SLG"] = stats.apply(lambda x: x["TB"] / x["AB"] if x["AB"] > 0 else 0, axis=1)
                     stats["OPS"] = stats["OBP"] + stats["SLG"]
                     
                     candidates = stats.copy()
                     used_players = []
 
+                    # 5. 打順生成ロジック
                     def pick_player(df_source, sort_col, role_name, description):
                         available = df_source[~df_source["選手名"].isin(used_players)].sort_values(sort_col, ascending=False)
                         st.markdown(f"##### {len(used_players)+1}番: {role_name}")
@@ -762,28 +804,27 @@ def show_analysis_page(df_batting, df_pitching):
                         
                         if not available.empty:
                             p = available.iloc[0]
-                            val = p[sort_col]
-                            st.success(f"**{p['選手名']}** ({sort_col}: {val:.3f})")
+                            st.success(f"**{p['選手名']}** ({sort_col}: {p[sort_col]:.3f})")
                             used_players.append(p["選手名"])
                         else:
-                            st.info("候補なし")
+                            st.info("候補選手なし")
                     
                     st.divider()
-                    candidates["LeadOff"] = candidates["OBP"] + (candidates["SB"] * 0.01)
-                    pick_player(candidates, "LeadOff", "リードオフマン", "出塁率に加え、盗塁能力も考慮")
-                    pick_player(candidates, "OBP", "最強の繋ぎ役", "現代野球の定石。チーム内で高い出塁率を誇る選手")
-                    pick_player(candidates, "OPS", "ポイントゲッター", "総合的な打撃力（OPS）が最も高い選手")
-                    pick_player(candidates, "SLG", "主砲", "チームNo.1の長打力（SLG）を持つ選手")
-                    pick_player(candidates, "OPS", "クリーンナップ", "上位4人が返せなかった走者を返す勝負強さ")
-                    pick_player(candidates, "OPS", "下位打線の核", "上位打線に匹敵する打撃力")
-                    pick_player(candidates, "OPS", "伏兵", "下位からチャンスを作る")
-                    pick_player(candidates, "OPS", "伏兵", "意外性のある一打")
-                    pick_player(candidates, "LeadOff", "第2のリードオフマン", "上位に繋ぐため、足のある選手や出塁できる選手")
+                    candidates["LeadOff"] = candidates["OBP"] + (candidates["SB"] * 0.05)
+                    
+                    pick_player(candidates, "LeadOff", "リードオフマン", "出塁率と走塁能力が高い選手")
+                    pick_player(candidates, "OBP", "チャンスメーカー", "チーム一の出塁率で後続に繋ぐ")
+                    pick_player(candidates, "OPS", "強打の3番", "走者を返す能力と長打力")
+                    pick_player(candidates, "SLG", "主砲", "チームNo.1の長打力で一気に走者を返す")
+                    pick_player(candidates, "OPS", "ポイントゲッター", "チャンスで回ってくるためOPS重視")
+                    
+                    for i in range(6, 10):
+                        pick_player(candidates, "OPS", f"{i}番打者", "総合的な打撃力で繋ぐ")
                 else:
                     st.info("条件を満たす選手がいません。")
         else:
             st.info("データがありません。")
-
+            
     with tab6:
         st.markdown("### 🤝 チーム貢献度分析")
         st.caption("「試合に参加すること」は最大の貢献です。出席率と成績をクロス分析し、チームの支柱を見つけます。")
