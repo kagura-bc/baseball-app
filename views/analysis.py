@@ -7,6 +7,40 @@ from config.settings import OFFICIAL_GAME_TYPES
 def show_analysis_page(df_batting, df_pitching):
     st.title("📈 データ分析 & 傾向")
 
+    # =========================================================
+    # ▼▼▼ 共通：除外・有効選手リストの作成（スペース完全無視） ▼▼▼
+    # =========================================================
+    # 1. 除外リストの取得・正規化
+    raw_hidden = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
+    if isinstance(raw_hidden, str): raw_hidden = [x.strip() for x in raw_hidden.split(",")]
+    
+    # 2. 背番号リストの取得・正規化
+    player_numbers_dict = st.secrets.get("PLAYER_NUMBERS", {})
+    
+    # 名前をスペースなしの文字列に変換して比較用の集合を作る
+    def normalize_name(name):
+        return str(name).replace(" ", "").replace("　", "").strip()
+
+    # 除外対象の集合
+    exclude_set = {normalize_name(n) for n in raw_hidden}
+    # 背番号がある有効な選手の集合
+    valid_numbered_set = {normalize_name(name) for name, num in player_numbers_dict.items() 
+                          if num is not None and str(num).strip() != ""}
+
+    # フィルタリング関数：名前が除外リストになく、かつ背番号リストに含まれている選手のみ残す
+    def filter_players(df):
+        if "選手名" not in df.columns: return df
+        # 名前を正規化して判定
+        df["_clean_name"] = df["選手名"].apply(normalize_name)
+        
+        # 条件: 除外リストになく、かつ背番号リストに入っていること
+        # (背番号リストが空の場合は全選手許可とするなら調整が必要ですが、今回は登録選手のみとする場合)
+        mask = (~df["_clean_name"].isin(exclude_set))
+        if valid_numbered_set:
+            mask = mask & (df["_clean_name"].isin(valid_numbered_set))
+            
+        return df[mask].drop(columns=["_clean_name"])
+
     # ---------------------------------------------------------
     # 0. データ前処理
     # ---------------------------------------------------------
@@ -14,9 +48,9 @@ def show_analysis_page(df_batting, df_pitching):
         st.info("分析するデータがありません。")
         return
 
-    # コピー作成
-    df_b = df_batting.copy()
-    df_p = df_pitching.copy()
+    # ★最初から除外フィルターを適用★
+    df_b = filter_players(df_batting.copy())
+    df_p = filter_players(df_pitching.copy())
 
     # =========================================================
     # ▼▼▼ 追加: analysis.py 側でも is_ab や is_hit を計算する ▼▼▼
@@ -159,7 +193,6 @@ def show_analysis_page(df_batting, df_pitching):
     # ---------------------------------------------------------
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 チーム傾向", "🆚 対戦相手別", "⏱️ イニング・先制率", "🔍 詳細投打分析", "🧠 理想オーダー", "🤝 チーム貢献度"])
 
-    # (Tab 1, Tab 2, Tab 3 は省略せずにそのまま残します)
     # =========================================================
     # Tab 1: チーム傾向 
     # =========================================================
@@ -371,6 +404,22 @@ def show_analysis_page(df_batting, df_pitching):
         df_b_detail = df_batting[pd.to_datetime(df_batting["日付"], errors='coerce').dt.year >= 2026].copy() if not df_batting.empty else pd.DataFrame()
         df_p_detail = df_pitching[pd.to_datetime(df_pitching["日付"], errors='coerce').dt.year >= 2026].copy() if not df_pitching.empty else pd.DataFrame()
 
+        # ▼▼▼ 追加: 外野のゴロ失策（ヒット＆エラー等での2重カウント回避）を除外 ▼▼▼
+        def remove_outfield_goro_error(df):
+            if df.empty or "打球方向" not in df.columns or "結果" not in df.columns:
+                return df
+            # 打球方向が外野であり、かつ結果に「失策」と「ゴロ」が両方含まれる行を判定
+            is_outfield = df["打球方向"].astype(str).str.strip().isin(["左", "中", "右"])
+            is_error = df["結果"].astype(str).str.contains("失策", na=False)
+            is_goro = df["結果"].astype(str).str.contains("ゴロ", na=False)
+            
+            # 条件に合致する行（外野ゴロエラー）を除外
+            return df[~(is_outfield & is_error & is_goro)].copy()
+
+        df_b_detail = remove_outfield_goro_error(df_b_detail)
+        df_p_detail = remove_outfield_goro_error(df_p_detail)
+        # ▲▲▲ 追加ここまで ▲▲▲
+
         # ▼▼▼ 追加: 打球種類の判定関数 ▼▼▼
         def classify_hit_type(res):
             res = str(res)
@@ -425,10 +474,8 @@ def show_analysis_page(df_batting, df_pitching):
             st.write("")
             st.markdown("##### チーム投手陣のアウト取得傾向")
             if not df_p_detail.empty:
-                # ★ 追加: 「失策」と「振り逃げ」が含まれるものを除外したデータフレームを作成
                 df_p_out_only = df_p_detail[~df_p_detail["結果"].astype(str).str.contains("失策|振り逃げ", na=False)]
                 
-                # ★ 修正: df_p_detail ではなく df_p_out_only からカウントする
                 p_goro = len(df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("ゴロ|併殺打")])
                 p_fly = len(df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("フライ")])
                 p_so = len(df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("三振")])
@@ -548,15 +595,12 @@ def show_analysis_page(df_batting, df_pitching):
                 my_p = df_p_detail[df_p_detail["選手名"] == target_p_player].copy()
                 if not my_p.empty:
                     st.markdown(f"#### {target_p_player} のアウトの取り方")
-                    # ★ 修正: 個人のデータからも「失策」が含まれるものだけを除外
                     my_p_out_only = my_p[~my_p["結果"].astype(str).str.contains("失策", na=False)]
                     
-                    # ★ 修正: my_p ではなく my_p_out_only からカウントする
                     out_goro = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("ゴロ|併殺打")])
                     out_fly = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("フライ")])
                     out_so = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("三振")])
                     
-                    # ▼▼▼ ここから下のインデントを左に1段階（4スペース）戻して揃えました ▼▼▼
                     df_my_p_out = pd.DataFrame({"種類": ["ゴロ", "フライ", "三振"], "数": [out_goro, out_fly, out_so]})
                     if df_my_p_out["数"].sum() > 0:
                         pie_my_p = alt.Chart(df_my_p_out).mark_arc(innerRadius=50).encode(
@@ -568,11 +612,9 @@ def show_analysis_page(df_batting, df_pitching):
 
                     st.write("")
                     st.divider()
-                    # ★修正：個人の投手の打球方向×種類（安打等も表示版）
                     st.markdown(f"#### {target_p_player} の打たせた打球方向と種類")
                     
                     if "打球方向" in my_p.columns:
-                        # "nan" や "---" など、無効な文字列を除外
                         valid_p_df = my_p[my_p["打球方向"].notna() & 
                                           (my_p["打球方向"] != "") & 
                                           (my_p["打球方向"] != "nan") & 
@@ -581,19 +623,17 @@ def show_analysis_page(df_batting, df_pitching):
                         if not valid_p_df.empty:
                             valid_p_df["方向"] = valid_p_df["打球方向"].astype(str).str.strip()
                             
-                            # ★安全対策：「打球種類」列が存在しない、または空の場合に自動補完する
                             if "打球種類" not in valid_p_df.columns:
                                 valid_p_df["打球種類"] = "その他"
                                 
                             def determine_hit_type(res, current_type):
                                 res_s = str(res)
-                                # ★追加：安打系の判定を優先して行う
                                 if "本塁打" in res_s: return "本塁打"
                                 if "二塁打" in res_s or "三塁打" in res_s: return "長打"
                                 if "単打" in res_s or "安打" in res_s: return "単打"
                                 
                                 if current_type != "その他" and pd.notna(current_type) and current_type != "":
-                                    return current_type # すでに判定済みならそのまま
+                                    return current_type 
                                     
                                 if "ゴロ" in res_s: return "ゴロ"
                                 if "フライ" in res_s or "飛" in res_s: return "フライ"
@@ -605,7 +645,6 @@ def show_analysis_page(df_batting, df_pitching):
                             p_indiv_dir_counts = valid_p_df.groupby(["方向", "打球種類"]).size().reset_index(name="数")
                             
                             if not p_indiv_dir_counts.empty:
-                                # 並び順の定義（エラー防止のため直接指定）
                                 safe_pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
                                 
                                 bar_p_dir_indiv = alt.Chart(p_indiv_dir_counts).mark_bar().encode(
@@ -645,8 +684,6 @@ def show_analysis_page(df_batting, df_pitching):
                             st.altair_chart(bar_my_p, use_container_width=True)
                         else:
                             st.info("被安打・四死球の詳細データがありません。")
-                
-                # ▼ここのブロックのインデントを整えました
                 else:
                     st.write("該当選手のデータなし")
             else:
@@ -655,19 +692,34 @@ def show_analysis_page(df_batting, df_pitching):
             st.info("2026年以降の投手データがありません")
 
     # =========================================================
-    # Tab 5, 6 は元のまま省略せずに残します
+    # Tab 5, 6 
     # =========================================================
+    # ▼▼▼ secrets.toml から除外リストを安全に取得（Tab 5, 6 共通） ▼▼▼
+    raw_exclude_list = []
+    try:
+        if "HIDDEN_PLAYERS_TOTAL" in st.secrets:
+            secret_val = st.secrets["HIDDEN_PLAYERS_TOTAL"]
+            if isinstance(secret_val, list):
+                raw_exclude_list = secret_val
+            elif isinstance(secret_val, str):
+                raw_exclude_list = [x.strip() for x in secret_val.split(",")]
+    except Exception:
+        pass
+    
+    # ★原因対策: 姓名の間のスペース（全角・半角）を完全に消去して比較用リストを作る
+    exclude_list_no_space = [str(n).replace("　", "").replace(" ", "").strip() for n in raw_exclude_list]
+    # ▲▲▲ 取得ここまで ▲▲▲
+
     with tab5:
         st.markdown("### 🧠 統計データに基づく推奨オーダー")
         st.caption("過去の個人成績から、セイバーメトリクスの定石に基づいたオーダー案を提示します。")
 
         if not df_b.empty:
             df_calc = df_b[df_b["選手名"] != "チーム記録"].copy()
-
-            raw_exclude_list = ["助っ人1", "助っ人2", "依田裕樹"] 
-            exclude_list = [str(n).replace("　", " ").strip() for n in raw_exclude_list]
-
-            df_calc = df_calc[~df_calc["選手名"].isin(exclude_list)]
+            
+            # ★推奨オーダーの集計から除外選手を削除 (スペース無視で比較)★
+            temp_names = df_calc["選手名"].astype(str).str.replace(r"\s+", "", regex=True)
+            df_calc = df_calc[~temp_names.isin(exclude_list_no_space)]
 
             if df_calc.empty:
                 st.warning("除外設定の結果、表示できるデータがなくなりました。")
@@ -736,77 +788,168 @@ def show_analysis_page(df_batting, df_pitching):
         st.markdown("### 🤝 チーム貢献度分析")
         st.caption("「試合に参加すること」は最大の貢献です。出席率と成績をクロス分析し、チームの支柱を見つけます。")
 
+        # ==========================================
+        # ★徹底デバッグ＆除外リスト読み込み★
+        # ==========================================
+        # secretsから直接取得
+        raw_hidden = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
+        
+        # もしこれがリストでなければ（誤って辞書などになっていれば）空リストにする
+        if not isinstance(raw_hidden, list):
+            raw_hidden = []
+            
+        # 比較用にスペース除去したリストを作成
+        exclude_list_no_space = [str(n).replace(" ", "").replace("　", "").strip() for n in raw_hidden]
+
+        # 🛠️ 開発中のみ表示：除外リストがどうなっているか確認
+        with st.expander("🛠️ 除外設定の確認"):
+            st.write("設定された除外リスト:", raw_hidden)
+            st.write("比較用のクリーンリスト:", exclude_list_no_space)
+
         if not df_b.empty and not df_games.empty:
             total_games_count = len(df_games)
 
+            # 選手データの元データ（クリーニング）
             df_contrib = df_b[df_b["選手名"] != "チーム記録"].copy()
+            df_contrib["_clean_name"] = df_contrib["選手名"].astype(str).str.replace(r"\s+", "", regex=True)
             
-            hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
-            df_contrib["Hit"] = df_contrib["結果"].isin(hit_cols).astype(int)
-            df_contrib["BB"] = df_contrib["結果"].isin(["四球", "死球"]).astype(int)
-            df_contrib["AB"] = df_contrib["結果"].isin(hit_cols + ["凡退", "三振", "失策", "併殺打", "野選"]).astype(int)
+            # ★除外処理：ここで確実にカット★
+            df_contrib = df_contrib[~df_contrib["_clean_name"].isin(exclude_list_no_space)]
             
-            df_contrib["TB"] = 0
-            df_contrib.loc[df_contrib["結果"]=="単打", "TB"] = 1
-            df_contrib.loc[df_contrib["結果"]=="二塁打", "TB"] = 2
-            df_contrib.loc[df_contrib["結果"]=="三塁打", "TB"] = 3
-            df_contrib.loc[df_contrib["結果"]=="本塁打", "TB"] = 4
+            if df_contrib.empty:
+                st.warning("現在、除外設定により表示可能なデータがありません。")
+            else:
+                # 貢献度分析の計算
+                hit_cols = ["単打", "二塁打", "三塁打", "本塁打"]
+                df_contrib["Hit"] = df_contrib["結果"].isin(hit_cols).astype(int)
+                df_contrib["BB"] = df_contrib["結果"].isin(["四球", "死球"]).astype(int)
+                df_contrib["AB"] = df_contrib["結果"].isin(hit_cols + ["凡退", "三振", "失策", "併殺打", "野選"]).astype(int)
+                df_contrib["TB"] = 0
+                df_contrib.loc[df_contrib["結果"]=="単打", "TB"] = 1
+                df_contrib.loc[df_contrib["結果"]=="二塁打", "TB"] = 2
+                df_contrib.loc[df_contrib["結果"]=="三塁打", "TB"] = 3
+                df_contrib.loc[df_contrib["結果"]=="本塁打", "TB"] = 4
 
-            contrib_stats = df_contrib.groupby("選手名").agg({
-                "Date": "nunique", "Hit": "sum", "BB": "sum", "AB": "sum", "TB": "sum"
-            }).rename(columns={"Date": "出場試合数"}).reset_index()
+                contrib_stats = df_contrib.groupby("選手名").agg({
+                    "Date": "nunique", "Hit": "sum", "BB": "sum", "AB": "sum", "TB": "sum"
+                }).rename(columns={"Date": "出場試合数"}).reset_index()
 
-            contrib_stats["出席率"] = (contrib_stats["出場試合数"] / total_games_count) * 100
-            
-            contrib_stats["OBP"] = (contrib_stats["Hit"] + contrib_stats["BB"]) / (contrib_stats["AB"] + contrib_stats["BB"] + 1e-9)
-            contrib_stats["SLG"] = contrib_stats["TB"] / (contrib_stats["AB"] + 1e-9)
-            contrib_stats["OPS"] = contrib_stats["OBP"] + contrib_stats["SLG"]
+                contrib_stats["出席率"] = (contrib_stats["出場試合数"] / total_games_count) * 100
+                contrib_stats["OBP"] = (contrib_stats["Hit"] + contrib_stats["BB"]) / (contrib_stats["AB"] + contrib_stats["BB"] + 1e-9)
+                contrib_stats["SLG"] = contrib_stats["TB"] / (contrib_stats["AB"] + 1e-9)
+                contrib_stats["OPS"] = contrib_stats["OBP"] + contrib_stats["SLG"]
 
-            st.markdown("#### 💎 貢献度マトリクス")
-            st.markdown("""
-            - **右下 (Grassroots Hero)**: 成績は発展途上だが、**高い出席率でチームを支える重要人物**。
-            - **右上 (Core Player)**: 実力もあり参加率も高い、チームの中心。
-            - **左上 (Helper)**: 参加は少ないが、来れば活躍する助っ人タイプ。
-            """)
+                # 貢献度マトリクス表示
+                chart_contrib = alt.Chart(contrib_stats).mark_circle(size=150).encode(
+                    x=alt.X("出席率", title="出席率 (%)", scale=alt.Scale(domain=[0, 105])),
+                    y=alt.Y("OPS", title="OPS (打撃貢献度)"),
+                    color=alt.condition(alt.datum.出席率 >= 50, alt.value("#e11d48"), alt.value("#3b82f6")),
+                    tooltip=["選手名", "出場試合数", alt.Tooltip("出席率", format=".1f"), alt.Tooltip("OPS", format=".3f")]
+                ).interactive()
+                st.altair_chart(chart_contrib, use_container_width=True)
 
-            chart_contrib = alt.Chart(contrib_stats).mark_circle(size=150).encode(
-                x=alt.X("出席率", title="出席率 (%)", scale=alt.Scale(domain=[0, 105])),
-                y=alt.Y("OPS", title="OPS (打撃貢献度)"),
-                color=alt.condition(
-                    alt.datum.出席率 >= 50,
-                    alt.value("#e11d48"),
-                    alt.value("#3b82f6")
-                ),
-                tooltip=["選手名", "出場試合数", alt.Tooltip("出席率", format=".1f"), alt.Tooltip("OPS", format=".3f")]
-            ).interactive()
-
-            mean_att = contrib_stats["出席率"].mean()
-            mean_ops = contrib_stats["OPS"].mean()
-            
-            rule_x = alt.Chart(pd.DataFrame({'x': [mean_att]})).mark_rule(strokeDash=[3,3], color="gray").encode(x='x')
-            rule_y = alt.Chart(pd.DataFrame({'y': [mean_ops]})).mark_rule(strokeDash=[3,3], color="gray").encode(y='y')
-
-            st.altair_chart(chart_contrib + rule_x + rule_y, use_container_width=True)
-
-            st.divider()
-            c_rank1, c_rank2 = st.columns(2)
-
-            with c_rank1:
+                # 鉄人ランキング
                 st.markdown("#### 🏅 鉄人ランキング (出席数)")
                 iron_men = contrib_stats.sort_values(["出場試合数", "OPS"], ascending=[False, False]).head(10)
-                
                 display_df = iron_men[["選手名", "出場試合数", "出席率"]].copy()
                 display_df["出席率"] = display_df["出席率"].map("{:.1f}%".format)
-                
                 st.table(display_df.reset_index(drop=True))
 
-            with c_rank2:
-                high_attend_count = len(contrib_stats[contrib_stats["出席率"] >= 50])
-                st.info(f"""
-                **📊 分析インサイト**
-                        
-                出席率が **50%** を超えている選手は **{high_attend_count}** 名います。
-                この選手たちがチームの活動維持の基盤となっています。
-                """)
+            # =========================================================
+            # 長期未参加リスト
+            # =========================================================
+            st.divider()
+            st.markdown("#### ⚠️ 長期未参加・公式戦登録見直し候補")
+
+            # 背番号データ読み込み
+            player_numbers_dict = st.secrets.get("PLAYER_NUMBERS", {})
+            valid_numbered_players = {name for name, num in player_numbers_dict.items() 
+                                    if num is not None and str(num).strip() != ""}
+
+            # 生データ全期間
+            # ※df_batting, df_pitching が定義されていない場合は、
+            # ここで session_state から取得するか、関数に渡すようにしてください
+            df_all = pd.concat([
+                df_batting[df_batting["選手名"] != "チーム記録"],
+                df_pitching[df_pitching["選手名"] != "チーム記録"]
+            ]).copy()
+            df_all["Date_all"] = pd.to_datetime(df_all["日付"], errors='coerce')
+            df_all["_clean_name"] = df_all["選手名"].astype(str).str.replace(r"\s+", "", regex=True)
+
+            # 有効選手抽出
+            all_players = [p for p in df_all["選手名"].unique() if p in valid_numbered_players]
+
+            # ★ここで確実に除外★
+            all_players = [p for p in all_players if p.replace(" ", "").replace("　", "") not in exclude_list_no_space]
+
+            if not all_players:
+                st.info("対象となる選手（背番号登録あり）が見つかりません。")
+            else:
+                df_period = df_all[df_all["選手名"].isin(all_players)].copy()
+                df_last_act = df_period.groupby("選手名")["Date_all"].max().reset_index()
+                df_last_off = df_period[df_period["試合種別"].isin(OFFICIAL_GAME_TYPES)].groupby("選手名")["Date_all"].max().reset_index()
+                
+                df_res = pd.merge(df_last_act.rename(columns={"Date_all": "最終活動日"}), 
+                                df_last_off.rename(columns={"Date_all": "最終公式戦日"}), on="選手名", how="left")
+                
+                today = pd.Timestamp.now()
+                df_res["days_since_off"] = (today - df_res["最終公式戦日"]).dt.days
+                df_alert = df_res[(df_res["days_since_off"] >= 365) | (df_res["最終公式戦日"].isna())].copy()
+                
+                if not df_alert.empty:
+                    # 日付表示用文字列を作成
+                    df_alert["最終公式戦日_str"] = df_alert["最終公式戦日"].dt.strftime('%Y/%m/%d').fillna("公式戦出場なし")
+                    df_alert["最終活動日_str"] = df_alert["最終活動日"].dt.strftime('%Y/%m/%d').fillna("活動記録なし")
+                    
+                    # 不参加期間の計算ロジック
+                    df_alert["days_since_off"] = (today - df_alert["最終公式戦日"]).dt.days
+                    df_alert["days_since_act"] = (today - df_alert["最終活動日"]).dt.days
+                    
+                    def format_days_span(days):
+                        if pd.isna(days) or days < 0: return "未出場"
+                        years = days // 365
+                        months = (days % 365) // 30
+                        if years > 0: return f"{int(years)}年 {int(months)}ヶ月"
+                        elif months > 0: return f"{int(months)}ヶ月"
+                        else: return f"{int(days)}日"
+
+                    df_alert["公式戦未参加期間"] = df_alert["days_since_off"].apply(format_days_span)
+                    df_alert["全活動未参加期間"] = df_alert["days_since_act"].apply(format_days_span)
+                    
+                    # --- 参加試合数カウントのロジック（修正版） ---
+                    one_year_ago = today - pd.Timedelta(days=365)
+                    # 全データから直近1年を抽出
+                    df_last_year = df_all[df_all["Date_all"] >= one_year_ago]
+                    
+                    # .size() ではなく .nunique() を使用して、日付ベースでカウントする
+                    participation_counts = df_last_year.groupby("選手名")["Date_all"].nunique().reset_index(name="直近1年参加数")
+                    
+                    # df_alertに結合
+                    df_alert = pd.merge(df_alert, participation_counts, on="選手名", how="left")
+                    df_alert["直近1年参加数"] = df_alert["直近1年参加数"].fillna(0).astype(int)
+                    # --------------------------------------------
+                    
+                    # ソート処理
+                    df_alert = df_alert.sort_values(by="days_since_act", ascending=False)
+                    
+                    st.error(f"🚨 見直し候補選手が {len(df_alert)} 名います。")
+                    
+                    # 表示用列の定義
+                    display_cols = ["選手名", "最終公式戦日_str", "公式戦未参加期間", "最終活動日_str", "全活動未参加期間", "直近1年参加数"]
+                    display_names = {
+                        "最終公式戦日_str": "最後の公式戦",
+                        "公式戦未参加期間": "公式戦不参加期間",
+                        "最終活動日_str": "最後の活動日",
+                        "全活動未参加期間": "全活動不参加期間",
+                        "直近1年参加数": "直近1年参加数"
+                    }
+                    
+                    st.dataframe(
+                        df_alert[display_cols].rename(columns=display_names), 
+                        use_container_width=True, 
+                        hide_index=True
+                    )
+                else:
+                    st.success("🎉 2年以上公式戦に参加していない対象選手はいません。")
         else:
             st.warning("分析に必要なデータが不足しています。")
