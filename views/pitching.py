@@ -62,11 +62,11 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     st.session_state["opp_batter_index"] = (last_idx % st.session_state["opp_batter_count"]) + 1
                 except:
                     pass
-           else:
-                # ★修正: 初期値を「1回」から「1回表(または裏)」にする
-                st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
-                st.session_state["opp_batter_index"] = 1
-            st.session_state[sync_key] = True
+            else:
+                    # ★修正: 初期値を「1回」から「1回表(または裏)」にする
+                    st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
+                    st.session_state["opp_batter_index"] = 1
+                    st.session_state[sync_key] = True
 
         # --- 成績計算ロジック ---
         current_season_pitching = {}
