@@ -24,7 +24,8 @@ def show_team_stats(df_batting, df_pitching):
             runs = pd.to_numeric(team_rec_rows["得点"], errors='coerce').fillna(0).sum()
             is_team_record = True
         else:
-            runs = pd.to_numeric(group["得点"], errors='coerce').fillna(0).sum()
+            valid_batting = group[group["イニング"] != "まとめ入力"]
+            runs = pd.to_numeric(valid_batting["得点"], errors='coerce').fillna(0).sum()
             is_team_record = False
 
         # 2. スタッツの計算
@@ -43,14 +44,32 @@ def show_team_stats(df_batting, df_pitching):
             ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振"]
             total_ab = len(individuals[individuals["結果"].isin(ab_results)])
 
+        # ★追加: 打撃（攻撃）イニングから先攻後攻を判定
+        top_bottom = "不明"
+        if "イニング" in group.columns:
+            innings = group["イニング"].dropna().astype(str).tolist()
+            if any("表" in i for i in innings):
+                top_bottom = "先攻"
+            elif any("裏" in i for i in innings):
+                top_bottom = "後攻"
+        
+        # 従来のチーム記録からの判定（フォールバック用）
+        if top_bottom == "不明" and is_team_record:
+            p_info = str(team_rec_rows.iloc[0].get("位置", ""))
+            if "後攻" in p_info or "裏" in p_info:
+                top_bottom = "後攻"
+            elif "先攻" in p_info or "表" in p_info:
+                top_bottom = "先攻"
+
         gr = group["グラウンド"].iloc[0] if not group.empty else ""
         key = (d_str, opp, m_type)
 
         if key not in games_map:
             games_map[key] = {
                 "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
+                "先攻後攻": top_bottom, # ← 追加
                 "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
-                "自責点": 0, "投球回": 0.0, "失策": 0, # ← 追加
+                "自責点": 0, "投球回": 0.0, "失策": 0,
                 "has_team_record": False
             }
         
@@ -59,6 +78,7 @@ def show_team_stats(df_batting, df_pitching):
         games_map[key]["安打"] = total_hits
         games_map[key]["本塁打"] = total_hr
         games_map[key]["盗塁"] = total_sb
+        games_map[key]["先攻後攻"] = top_bottom # 上書き
         if is_team_record:
             games_map[key]["has_team_record"] = True
 
@@ -75,10 +95,7 @@ def show_team_stats(df_batting, df_pitching):
             runs_allowed = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
             col_errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum() if "失策" in group.columns else 0
             
-        # ★ 追加：詳細入力モードで「結果」列に「失策(ゴロ)」「失策(フライ)」などが記録されている数をカウント
         res_errors = group["結果"].astype(str).str.contains("失策").sum() if "結果" in group.columns else 0
-        
-        # 従来の列入力(col_errors)と、新しい結果文字列(res_errors)の合算を総失策とする
         errors = col_errors + res_errors
 
         if "投手名" in group.columns:
@@ -102,15 +119,28 @@ def show_team_stats(df_batting, df_pitching):
             gr = group["グラウンド"].iloc[0] if not group.empty else ""
             games_map[key] = {
                 "日付": d_str, "対戦相手": opp, "試合種別": m_type, "グラウンド": gr,
+                "先攻後攻": "不明", # ← 追加
                 "得点": 0, "失点": 0, "打数": 0, "安打": 0, "本塁打": 0, "盗塁": 0,
-                "自責点": 0, "投球回": 0.0, "失策": 0, # ← 追加
+                "自責点": 0, "投球回": 0.0, "失策": 0,
                 "has_team_record": False
             }
+            
+        # ★追加: 投手（守備）イニングから先攻後攻を判定（打撃データで判定できなかった場合）
+        if games_map[key]["先攻後攻"] == "不明":
+            tb_pitch = "不明"
+            if "イニング" in group.columns:
+                innings = group["イニング"].dropna().astype(str).tolist()
+                # 守備が「表」＝相手が先攻＝自チームは「後攻」
+                if any("表" in i for i in innings):
+                    tb_pitch = "後攻"
+                elif any("裏" in i for i in innings):
+                    tb_pitch = "先攻"
+            games_map[key]["先攻後攻"] = tb_pitch
         
         games_map[key]["失点"] = runs_allowed
         games_map[key]["自責点"] += er
         games_map[key]["投球回"] += outs
-        games_map[key]["失策"] = errors # ← 追加
+        games_map[key]["失策"] = errors
 
     match_results = list(games_map.values())
     df_team_stats = pd.DataFrame(match_results)
@@ -119,7 +149,7 @@ def show_team_stats(df_batting, df_pitching):
         df_team_stats["日付"] = pd.to_datetime(df_team_stats["日付"])
         df_team_stats = df_team_stats.sort_values("日付", ascending=False)
 
-    # 2. フィルタリング
+    # 2. フィルタリング (省略なし)
     if not df_team_stats.empty:
         df_team_stats["Year"] = df_team_stats["日付"].dt.year.astype(str)
         all_years = sorted(list(df_team_stats["Year"].unique()), reverse=True)
@@ -153,7 +183,7 @@ def show_team_stats(df_batting, df_pitching):
     wins = 0; losses = 0; draws = 0
     total_score = 0; total_lost = 0
     total_ab_sum = 0; total_hits = 0; total_hr = 0; total_sb = 0; total_er = 0; total_ip = 0.0
-    total_errors = 0 # ← 追加
+    total_errors = 0
     viewer_options = []
 
     if not df_display.empty:
@@ -167,7 +197,7 @@ def show_team_stats(df_batting, df_pitching):
             total_sb += row.get("盗塁", 0)
             total_er += row.get("自責点", 0)
             total_ip += row.get("投球回", 0)
-            total_errors += row.get("失策", 0) # ← 追加
+            total_errors += row.get("失策", 0)
 
             res_txt = "-"
             if s > l: wins += 1; res_txt = " 🔴 勝ち"
@@ -201,16 +231,17 @@ def show_team_stats(df_batting, df_pitching):
     a4.metric("盗塁数", f"{int(total_sb)} 個")
 
     st.markdown("#####   🛡️   守備スタッツ")
-    d1, d2, d3, d4 = st.columns(4) # ← 3から4列に変更
+    d1, d2, d3, d4 = st.columns(4)
     d1.metric("チーム防御率", f"{team_era:.2f}")
     d2.metric("平均失点", f"{runs_allowed_per_game:.2f}", delta=f"総: {int(total_lost)}", delta_color="inverse")
     d3.metric("得失点差", f"{int(total_score - total_lost):+d}")
-    d4.metric("総失策数", f"{int(total_errors)} 個") # ← 追加
+    d4.metric("総失策数", f"{int(total_errors)} 個")
 
     # 4. 試合履歴
     st.subheader(" 📋  試合履歴")
     if not df_display.empty:
-        cols = ["日付", "対戦相手", "得点", "失点", "失策", "勝敗", "試合種別", "グラウンド"] # Byzantium: "失策"を追加
+        # ★追加: 表示列に「先攻後攻」を含める
+        cols = ["日付", "対戦相手", "先攻後攻", "得点", "失点", "失策", "勝敗", "試合種別", "グラウンド"]
         st.dataframe(df_display[cols], use_container_width=True, hide_index=True)
     else:
         st.write("履歴データがありません")
@@ -234,32 +265,35 @@ def show_team_stats(df_batting, df_pitching):
             if target_date_str:
                 target_row = df_display[(df_display["日付"] == pd.to_datetime(target_date_str)) & (df_display["対戦相手"] == target_opp)].iloc[0]
                 has_team_rec = target_row["has_team_record"]
+                tb_val = target_row.get("先攻後攻", "不明") # ★追加
                 
                 match_bat = df_batting[(pd.to_datetime(df_batting["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & (df_batting["対戦相手"] == target_opp)].copy()
                 match_pit = df_pitching[(pd.to_datetime(df_pitching["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & (df_pitching["対戦相手"] == target_opp)].copy()
 
-                # ... 前略 ...
-                detected_top = True
-                tr_row = match_bat[match_bat["選手名"] == "チーム記録"]
-                if not tr_row.empty:
-                    p_info = str(tr_row.iloc[0]["位置"])
-                    if "後攻" in p_info or "裏" in p_info: detected_top = False
+                # ★修正: データから判定された「先攻後攻」フラグを優先適用
+                if tb_val == "先攻":
+                    detected_top = True
+                elif tb_val == "後攻":
+                    detected_top = False
+                else:
+                    detected_top = True
+                    tr_row = match_bat[match_bat["選手名"] == "チーム記録"]
+                    if not tr_row.empty:
+                        p_info = str(tr_row.iloc[0]["位置"])
+                        if "後攻" in p_info or "裏" in p_info: detected_top = False
 
-                # --- ★追加・修正箇所 ---
-                # 相手チームの失策数を、自チームの打撃結果（「失策」を含むもの）から算出
                 opp_errors = match_bat["結果"].astype(str).str.contains("失策").sum()
                 my_errors = target_row.get("失策", 0)
 
                 if has_team_rec:
                     sb_bat = match_bat[match_bat["選手名"] == "チーム記録"].copy()
                     sb_pit = match_pit[match_pit["選手名"] == "チーム記録"].copy()
-                    sb_pit["失策"] = my_errors     # 自チームの失策
-                    sb_bat["失策"] = opp_errors    # 相手チームの失策
+                    sb_pit["失策"] = my_errors
+                    sb_bat["失策"] = opp_errors
                 else:
                     sb_bat = match_bat.copy()
                     sb_pit = match_pit.copy()
                     
-                    # UI側が列の合計(sum)を取っているケースを想定し、先頭行に合計値を注入する
                     if "失策" not in sb_pit.columns:
                         sb_pit["失策"] = 0
                     if not sb_pit.empty:
@@ -269,13 +303,9 @@ def show_team_stats(df_batting, df_pitching):
                         sb_bat["失策"] = 0
                     if not sb_bat.empty:
                         sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
-                # ------------------------
 
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
-
-
-                # （以降のスタメン表示、打撃成績、投手成績ロジックはそのままです）
-
+                
                 # ここからスタメン表示ロジック) 
                 st.divider()
                 st.markdown("#### 🏏  打撃成績")
@@ -470,7 +500,8 @@ def show_team_stats(df_batting, df_pitching):
 
                     if not history_df.empty:
                         for inn in [f"{i}回" for i in range(1, 10)] + ["延長"]:
-                            inn_df = history_df[history_df["イニング"] == inn]
+                            # ⭕ 前方一致に変更
+                            inn_df = history_df[history_df["イニング"].astype(str).str.startswith(inn)]
                             if not inn_df.empty:
                                 st.write(f"**【{inn}】**")
                                 display_items = []

@@ -34,6 +34,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # 🧪 テストモード判定で書き込むシートを切り替え
     ws_batting = "打撃成績_テスト" if is_test_mode else "打撃成績"
     ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
+    # --- ★追加: 表裏の判定 (打撃=攻撃なので、先攻なら「表」) ---
+    b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 
     # ==========================================
     # 1. 日付変更時のリセット処理 & 初期化
@@ -64,8 +66,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state[f"sp{i}"] = "他"
             st.session_state["saved_lineup"] = {}
             st.session_state["persistent_bench"] = []
-            st.session_state["persistent_inn"] = "1回" 
-            st.session_state["persistent_scorer"] = "" # ★ 追加
+            # ★修正: 「1回」から「1回表/裏」にする
+            st.session_state["persistent_inn"] = f"1回{b_inning_suffix}" 
+            st.session_state["persistent_scorer"] = ""
         
         # 4. 管理フラグを更新してリラン
         st.session_state["last_selected_date"] = selected_date_str
@@ -77,7 +80,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if "persistent_bench" not in st.session_state:
         st.session_state["persistent_bench"] = []
     if "persistent_inn" not in st.session_state: 
-        st.session_state["persistent_inn"] = "1回"   
+        # ★修正: 「1回」から「1回表/裏」にする
+        st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
     if "persistent_scorer" not in st.session_state: # ★ 追加
         st.session_state["persistent_scorer"] = ""  # ★ 追加
 
@@ -536,11 +540,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True):
                 submit_everything()
 
-            c_inn, c_outs, c_scorer = st.columns([1.5, 2.5, 3.5]) # '_' を 'c_scorer' に変更
+            c_inn, c_outs, c_scorer = st.columns([1.5, 2.5, 3.5])
             with c_inn:
-                # ★ 変更：保管庫からイニングを読み込んで初期値にセットする
-                inn_list = [f"{i}回" for i in range(1, 10)] + ["延長"]
-                saved_inn = st.session_state.get("persistent_inn", "1回")
+                # ★修正: リストの文字列に表裏の文字を合体させる
+                inn_list = [f"{i}回{b_inning_suffix}" for i in range(1, 10)] + [f"延長{b_inning_suffix}"]
+                saved_inn = st.session_state.get("persistent_inn", f"1回{b_inning_suffix}")
                 def_inn_ix = inn_list.index(saved_inn) if saved_inn in inn_list else 0
                 curr_inn = st.selectbox("イニング", inn_list, index=def_inn_ix, key="current_inn_key")
             with c_outs:
@@ -625,8 +629,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             res = row['結果']
                             raw_dir = row['打球方向']
                             p_dir = str(raw_dir) if pd.notna(raw_dir) and raw_dir != "---" else ""
-                            rbi = int(pd.to_numeric(row['打点'], errors='coerce') or 0)
-                            total_runs += int(pd.to_numeric(row['得点'], errors='coerce') or 0)
+                            
+                            # ▼ 打点の処理（きれいに修正できています！）
+                            rbi_val = pd.to_numeric(row['打点'], errors='coerce')
+                            rbi = int(rbi_val) if pd.notna(rbi_val) else 0
+                            
+                            # ▼ 得点の処理（★ここを修正します）
+                            runs_val = pd.to_numeric(row['得点'], errors='coerce')
+                            total_runs += int(runs_val) if pd.notna(runs_val) else 0
                             
                             res_short = {
                                 "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 

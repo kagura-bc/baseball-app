@@ -41,10 +41,14 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             st.session_state["last_p_date"] = selected_date_str
 
 
+        # --- ★追加: 表裏の判定 (投手=守備なので、自チームが先攻なら「裏」) ---
+        p_inning_suffix = "裏" if is_kagura_top else "表"
+
         # 1. セッションステートの初期化
         if "opp_batter_index" not in st.session_state: st.session_state["opp_batter_index"] = 1
         if "opp_batter_count" not in st.session_state: st.session_state["opp_batter_count"] = 9
-        if "p_det_inn" not in st.session_state: st.session_state["p_det_inn"] = "1回"
+        # ★修正: 初期値を「1回」から「1回表(または裏)」にする
+        if "p_det_inn" not in st.session_state: st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
 
         # 2. 【復元ロジック】日付選択後の初回のみ、スプレッドシートから状態を復元
         sync_key = f"sync_{selected_date_str}"
@@ -58,8 +62,9 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     st.session_state["opp_batter_index"] = (last_idx % st.session_state["opp_batter_count"]) + 1
                 except:
                     pass
-            else:
-                st.session_state["p_det_inn"] = "1回"
+           else:
+                # ★修正: 初期値を「1回」から「1回表(または裏)」にする
+                st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
                 st.session_state["opp_batter_index"] = 1
             st.session_state[sync_key] = True
 
@@ -92,10 +97,11 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             st.session_state["needs_form_clear"] = False 
 
         # --- 【追加】イニング自動進行ロジック（フォーム描画前に計算） ---
-        inn_options = [f"{i}回" for i in range(1, 10)] + ["延長"]
+        # ★修正: リストの文字列に表裏の文字を合体させる
+        inn_options = [f"{i}回{p_inning_suffix}" for i in range(1, 10)] + [f"延長{p_inning_suffix}"]
         
-        # セッションステートから現在のイニングを取得（未設定なら1回）
-        current_inn_val = st.session_state.get("p_det_inn", "1回")
+        # セッションステートから現在のイニングを取得（未設定なら1回表/裏）
+        current_inn_val = st.session_state.get("p_det_inn", f"1回{p_inning_suffix}")
         
         # 1. 現在のイニングのアウト数を計算（前方一致判定）
         current_outs_total = 0
@@ -432,7 +438,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         if not today_pitching_df.empty:
             history_df = today_pitching_df[today_pitching_df["種別"].str.contains("詳細", na=False)].copy()
             if not history_df.empty:
-                for inn in [f"{i}回" for i in range(1, 10)] + ["延長"]:
+                # ★修正: 固定のリストではなく、上で定義した inn_options を使い回す
+                for inn in inn_options:
                     inn_df = history_df[history_df["イニング"] == inn]
                     if not inn_df.empty:
                         st.write(f"**【{inn}】**")

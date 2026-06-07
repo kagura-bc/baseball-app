@@ -28,12 +28,12 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     
     # 9回まで計算
     for i in range(1, 10):
-        inn = f"{i}回"
+        # ★変更: 「1回表」「1回裏」といった文字列が含まれるデータも正しく抽出
+        target_innings = [f"{i}回", f"{i}回表", f"{i}回裏"]
         
-        inn_bat_data = b_df[b_df["イニング"] == inn]
-        inn_pit_data = p_df[p_df["イニング"] == inn]
+        inn_bat_data = b_df[b_df["イニング"].isin(target_innings)]
+        inn_pit_data = p_df[p_df["イニング"].isin(target_innings)]
 
-        # データ内に「結果: ✖」が含まれていれば、表示を "✖" にする 
         if not inn_bat_data[inn_bat_data["結果"] == "✖"].empty:
             k_disp = "✖"
             k_runs = 0
@@ -48,11 +48,9 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
             opp_runs = int(inn_pit_data["失点"].sum())
             opp_disp = str(opp_runs)
 
-        # データが存在するイニングだけ数字を表示、なければ空文字
         k_exists = not inn_bat_data.empty
         opp_exists = not inn_pit_data.empty
         
-        # 計算した k_disp / opp_disp を使う 
         k_inning.append(k_disp if k_exists else "")
         opp_inning.append(opp_disp if opp_exists else "")
         
@@ -63,19 +61,14 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     k_h = b_df[b_df["結果"].isin(hit_list)].shape[0] if "結果" in b_df.columns else 0
     opp_h = p_df[p_df["結果"].isin(hit_list)].shape[0] if "結果" in p_df.columns else 0
 
-    # 【自チームの失策 (k_e)】
-    # 「失策」列の合計値と、「結果」列内の「失策(〜)」の数のうち、大きい方を確実に採用する
     k_e_col = int(pd.to_numeric(p_df["失策"], errors='coerce').fillna(0).sum()) if "失策" in p_df.columns else 0
     k_e_res = p_df["結果"].astype(str).str.contains("失策").sum() if "結果" in p_df.columns else 0
     k_e = max(k_e_col, k_e_res)
 
-    # 【相手チームの失策 (opp_e)】
     opp_e_col = int(pd.to_numeric(b_df["失策"], errors='coerce').fillna(0).sum()) if "失策" in b_df.columns else 0
     opp_e_res = b_df["結果"].astype(str).str.contains("失策").sum() if "結果" in b_df.columns else 0
     opp_e = max(opp_e_col, opp_e_res)
 
-    # KAGURAが先攻か後攻かで表示順を入れ替え
-    # my_team_fixed を MY_TEAM に変更
     if is_top_first:
         names = [MY_TEAM, opp_name]
         scores = [k_inning, opp_inning]
@@ -96,6 +89,8 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     score_dict.update({"R": R, "H": H, "E": E})
     
     st.table(pd.DataFrame(score_dict).set_index("チーム"))
+
+# --- 以下の風船・アウト表示ロジックは変更なし ---
 
 def show_homerun_effect():
     st.markdown("""

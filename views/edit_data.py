@@ -76,6 +76,7 @@ def show_edit_page(df_batting, df_pitching, is_test_mode=False):
         if st.button("チェックした行を削除 ＆ 修正内容を保存 ", type="primary", use_container_width=True, key="del_pitch_btn"):
             new_df_p = edited_p[edited_p["削除選択"] == False].drop(columns=["削除選択"])
             conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=new_df_p)
+            
             st.cache_data.clear()
             st.success("更新しました")
             st.rerun()
