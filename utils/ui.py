@@ -28,7 +28,7 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     
     # 9回まで計算
     for i in range(1, 10):
-        # ★変更: 「1回表」「1回裏」といった文字列が含まれるデータも正しく抽出
+        # ★ 「1回」「1回表」「1回裏」のどれで記録されていてもスコアボードに抽出する
         target_innings = [f"{i}回", f"{i}回表", f"{i}回裏"]
         
         inn_bat_data = b_df[b_df["イニング"].isin(target_innings)]
@@ -90,8 +90,6 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     
     st.table(pd.DataFrame(score_dict).set_index("チーム"))
 
-# --- 以下の風船・アウト表示ロジックは変更なし ---
-
 def show_homerun_effect():
     st.markdown("""
     <style>
@@ -130,11 +128,11 @@ def show_homerun_effect():
         <div style="font-size: 30px; font-weight: bold;">NICE BATTING!</div>
     </div>
     """, unsafe_allow_html=True)
-    st.balloons() # 風船も飛ばす
+    st.balloons()
 
 def render_out_indicator_3(count):
-    color_on = "#ff2b2b"   # 点灯色（赤）
-    color_off = "#e0e0e0"  # 消灯色（グレー）
+    color_on = "#ff2b2b"
+    color_off = "#e0e0e0"
     
     html = """
     <div style='font-family:sans-serif; font-weight:bold; display:flex; align-items:center;'>
