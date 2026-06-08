@@ -338,11 +338,25 @@ def show_team_stats(df_batting, df_pitching):
                             
                             pos_col = "守備" if "守備" in player_group.columns else ("位置" if "位置" in player_group.columns else None)
                             seen_pos = []
+
+                            # スコアアプリ等で「8」「9」のように守備番号でデータが出力されるケースも考慮した変換マップ
+                            pos_map = {"1":"投", "2":"捕", "3":"一", "4":"二", "5":"三", "6":"遊", "7":"左", "8":"中", "9":"右", "10":"指", "DH":"指"}
+
                             if pos_col:
                                 for p in player_group[pos_col].dropna().astype(str).tolist():
                                     p_clean = p.strip()
-                                    if p_clean and p_clean not in ["nan", "None", ""] and p_clean not in seen_pos:
-                                        seen_pos.append(p_clean)
+                                    
+                                    # もしデータが数字等であれば漢字に変換する（「8」→「中」など）
+                                    if p_clean in pos_map:
+                                        p_clean = pos_map[p_clean]
+                                        
+                                    if p_clean and p_clean not in ["nan", "None", ""]:
+                                        # 【修正点】全体での重複排除ではなく、「直前の守備位置」と異なる場合のみ追加する。
+                                        # これにより「中」から「右」への変更や、再度「中」に戻るような動きも正確にトラッキングされます。
+                                        if not seen_pos or seen_pos[-1] != p_clean:
+                                            seen_pos.append(p_clean)
+
+                            # 抽出した履歴を結合して「中右」の形式にする
                             pos_val = "".join(seen_pos)
                             
                             pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
