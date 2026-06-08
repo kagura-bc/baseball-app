@@ -336,7 +336,7 @@ def show_team_stats(df_batting, df_pitching):
                             player_name = player_group["選手名"].iloc[0]
                             order_val = player_group["打順"].iloc[0] if "打順" in player_group.columns else ""
                             
-                            pos_col = "守備" if "守備" in player_group.columns else ("位置" if "位置" in player_group.columns else None)
+                            pos_col = "守備位置" if "守備位置" in player_group.columns else ("守備" if "守備" in player_group.columns else ("位置" if "位置" in player_group.columns else None))
                             seen_pos = []
 
                             # スコアアプリ等で「8」「9」のように守備番号でデータが出力されるケースも考慮した変換マップ
