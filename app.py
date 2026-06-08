@@ -62,44 +62,54 @@ if not st.session_state["is_logged_in"]:
 # 📱 ここから下がログイン後のメインアプリ
 # ==========================================
 
-# --- サイドバー設定 (共通) ---
-st.sidebar.image(ICON_URL, use_container_width=True)
+# リストから安全にインデックス（何番目か）を取得する関数
+def safe_index(lst, val):
+    try:
+        return lst.index(val)
+    except (ValueError, TypeError):
+        return 0
+    
+# app.py のサイドバー設定部分
 
-# ログアウトボタン
-if st.sidebar.button("ログアウト", key="logout_btn"):
-    st.session_state["is_logged_in"] = False
-    st.rerun()
+# リストから安全にインデックス（何番目か）を取得する裏方関数
+def safe_index(lst, val):
+    return lst.index(val) if val in lst else 0
 
-# 🧪 テストモードのトグルスイッチを追加
-st.sidebar.markdown("---")
-is_test_mode = st.sidebar.toggle("🧪 テストモード", value=False)
-if is_test_mode:
-    st.sidebar.warning("現在テストモードです。入力データは本番環境(viewer)には反映されません。")
-st.sidebar.markdown("---")
+# ==========================================
+# 🔄 URLパラメータ保存用コールバック関数
+# ==========================================
+def sync_sidebar_state():
+    """ドロップダウン等が操作された瞬間に、ブラウザのURLに選択状態を記録する"""
+    st.query_params["game_date"] = str(st.session_state.app_date)
+    st.query_params["ground"] = st.session_state.app_ground
+    st.query_params["opp"] = st.session_state.app_opp
+    st.query_params["order"] = st.session_state.app_order
 
-# --- データ読み込み（引数でモードを渡す） ---
-df_batting = load_batting_data(is_test_mode=is_test_mode)
-df_pitching = load_pitching_data(is_test_mode=is_test_mode)
+# --- 1. 試合日の復元と表示 ---
+url_date = st.query_params.get("game_date", str(datetime.date.today()))
+try:
+    default_date = datetime.datetime.strptime(url_date, "%Y-%m-%d").date()
+except ValueError:
+    default_date = datetime.date.today()
 
-st.sidebar.header("⚙️ 試合設定")
+game_date = st.sidebar.date_input("試合日", value=default_date, key="app_date", on_change=sync_sidebar_state)
 
-match_category = st.sidebar.radio("試合区分", ["公式戦", "練習試合", "その他"], horizontal=True)
-if match_category == "公式戦":
-    match_type = st.sidebar.selectbox("大会名を選択", ["高松宮賜杯", "天皇杯", "ミズノ杯", "東日本", "会長杯", "市長杯"])
-else:
-    match_type = match_category
+# --- 2. グラウンドの復元と表示 ---
+url_ground = st.query_params.get("ground", GROUND_LIST[0])
+selected_ground_base = st.sidebar.selectbox("グラウンド", GROUND_LIST, index=safe_index(GROUND_LIST, url_ground), key="app_ground", on_change=sync_sidebar_state)
 
-game_date = st.sidebar.date_input("試合日", datetime.date.today())
-selected_date_str = game_date.strftime('%Y-%m-%d')
-
-selected_ground_base = st.sidebar.selectbox("グラウンド", GROUND_LIST)
 ground_name = st.sidebar.text_input("グラウンド名入力", value="グラウンド") if selected_ground_base == "その他" else selected_ground_base
 
-selected_opp = st.sidebar.selectbox("相手チーム", OPPONENTS_LIST)
+# --- 3. 相手チームの復元と表示 ---
+url_opp = st.query_params.get("opp", OPPONENTS_LIST[0])
+selected_opp = st.sidebar.selectbox("相手チーム", OPPONENTS_LIST, index=safe_index(OPPONENTS_LIST, url_opp), key="app_opp", on_change=sync_sidebar_state)
+
 opp_team = st.sidebar.text_input("相手名", value="相手チーム") if selected_opp == "その他" else selected_opp
 
-kagura_order = st.sidebar.radio(f"攻守", ["先攻 (表)", "後攻 (裏)"], horizontal=True)
-
+# --- 4. 攻守の復元と表示 ---
+order_list = ["先攻 (表)", "後攻 (裏)"]
+url_order = st.query_params.get("order", order_list[0])
+kagura_order = st.sidebar.radio("攻守", order_list, index=safe_index(order_list, url_order), horizontal=True, key="app_order", on_change=sync_sidebar_state)
 # --- ページ切り替え ---
 page = st.sidebar.radio("表示", [" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正"])
 
