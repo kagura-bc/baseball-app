@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from config.settings import OFFICIAL_GAME_TYPES
 from utils.ui import render_scoreboard
+import re
 
 def show_team_stats(df_batting, df_pitching):
     st.title(" 🏆 チーム成績ダッシュボード")
@@ -338,23 +339,57 @@ def show_team_stats(df_batting, df_pitching):
                             
                             pos_col = "守備位置" if "守備位置" in player_group.columns else ("守備" if "守備" in player_group.columns else ("位置" if "位置" in player_group.columns else None))
                             seen_pos = []
-
-                            # スコアアプリ等で「8」「9」のように守備番号でデータが出力されるケースも考慮した変換マップ
                             pos_map = {"1":"投", "2":"捕", "3":"一", "4":"二", "5":"三", "6":"遊", "7":"左", "8":"中", "9":"右", "10":"指", "DH":"指"}
 
+                            # イニング文字列（「1回表」「2回裏」など）を時系列で並び替えられる数字に変換する関数
+                            def get_inn_order(inn_str):
+                                m = re.search(r'(\d+)回(表|裏)', str(inn_str))
+                                if m:
+                                    # 表は0、裏は1を足すことで、完全に時間の流れに沿って並び替え可能にします
+                                    return int(m.group(1)) * 2 + (0 if m.group(2) == "表" else 1)
+                                return 999
+
+                            events = []
+
+                            # 1. 【打撃成績】からポジションを抽出
                             if pos_col:
-                                for p in player_group[pos_col].dropna().astype(str).tolist():
-                                    p_clean = p.strip()
+                                for _, row in player_group.iterrows():
+                                    inn = str(row.get("イニング", ""))
+                                    p_val = str(row.get(pos_col, ""))
+                                    events.append({"inning": inn, "order": get_inn_order(inn), "pos": p_val})
+
+                            # 2. 【守備・投手成績（match_pit）】からポジションを抽出
+                            for _, row in match_pit.iterrows():
+                                inn = str(row.get("イニング", ""))
+                                
+                                # ① 投手として出場している場合
+                                if str(row.get("選手名", "")) == player_name:
+                                    events.append({"inning": inn, "order": get_inn_order(inn), "pos": "投"})
                                     
-                                    # もしデータが数字等であれば漢字に変換する（「8」→「中」など）
-                                    if p_clean in pos_map:
-                                        p_clean = pos_map[p_clean]
-                                        
-                                    if p_clean and p_clean not in ["nan", "None", ""]:
-                                        # 【修正点】全体での重複排除ではなく、「直前の守備位置」と異なる場合のみ追加する。
-                                        # これにより「中」から「右」への変更や、再度「中」に戻るような動きも正確にトラッキングされます。
-                                        if not seen_pos or seen_pos[-1] != p_clean:
-                                            seen_pos.append(p_clean)
+                                # ② 野手として処理に関わった場合（例: 処理野手「古屋翔・中村卓歲」 / 守備位置「遊-二」）
+                                fielders = str(row.get("処理野手", "")).split("・")
+                                positions = str(row.get("守備位置", "")).split("-")
+                                
+                                if player_name in fielders:
+                                    idx = fielders.index(player_name)
+                                    if idx < len(positions):
+                                        p_val = positions[idx]
+                                        events.append({"inning": inn, "order": get_inn_order(inn), "pos": p_val})
+
+                            # ★両方から集めたデータを、イニング順（表・裏の時系列）で並び替え！
+                            events.sort(key=lambda x: x["order"])
+
+                            # 重複を排除しながらリストに追加していく
+                            for ev in events:
+                                p_clean = ev["pos"].strip().replace(".0", "")
+                                if p_clean in pos_map:
+                                    p_clean = pos_map[p_clean]
+                                
+                                # 空欄やハイフン（-）などの無効なデータは無視
+                                if p_clean and p_clean not in ["nan", "None", "", "-"]:
+                                    # 直前のポジションと異なる場合のみ追加
+                                    if not seen_pos or seen_pos[-1] != p_clean:
+                                        seen_pos.append(p_clean)
 
                             # 抽出した履歴を結合して「中右」の形式にする
                             pos_val = "".join(seen_pos)
