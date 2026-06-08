@@ -341,32 +341,28 @@ def show_team_stats(df_batting, df_pitching):
                             seen_pos = []
                             pos_map = {"1":"投", "2":"捕", "3":"一", "4":"二", "5":"三", "6":"遊", "7":"左", "8":"中", "9":"右", "10":"指", "DH":"指"}
 
-                            # イニング文字列（「1回表」「2回裏」など）を時系列で並び替えられる数字に変換する関数
                             def get_inn_order(inn_str):
                                 m = re.search(r'(\d+)回(表|裏)', str(inn_str))
                                 if m:
-                                    # 表は0、裏は1を足すことで、完全に時間の流れに沿って並び替え可能にします
                                     return int(m.group(1)) * 2 + (0 if m.group(2) == "表" else 1)
                                 return 999
 
                             events = []
 
-                            # 1. 【打撃成績】からポジションを抽出
+                            # 1. 【打撃成績】からポジションを抽出（source: "batting" という目印をつける）
                             if pos_col:
                                 for _, row in player_group.iterrows():
                                     inn = str(row.get("イニング", ""))
                                     p_val = str(row.get(pos_col, ""))
-                                    events.append({"inning": inn, "order": get_inn_order(inn), "pos": p_val})
+                                    events.append({"inning": inn, "order": get_inn_order(inn), "pos": p_val, "source": "batting"})
 
-                            # 2. 【守備・投手成績（match_pit）】からポジションを抽出
+                            # 2. 【守備・投手成績】からポジションを抽出（source: "fielding" という目印をつける）
                             for _, row in match_pit.iterrows():
                                 inn = str(row.get("イニング", ""))
                                 
-                                # ① 投手として出場している場合
                                 if str(row.get("選手名", "")) == player_name:
-                                    events.append({"inning": inn, "order": get_inn_order(inn), "pos": "投"})
+                                    events.append({"inning": inn, "order": get_inn_order(inn), "pos": "投", "source": "fielding"})
                                     
-                                # ② 野手として処理に関わった場合（例: 処理野手「古屋翔・中村卓歲」 / 守備位置「遊-二」）
                                 fielders = str(row.get("処理野手", "")).split("・")
                                 positions = str(row.get("守備位置", "")).split("-")
                                 
@@ -374,24 +370,34 @@ def show_team_stats(df_batting, df_pitching):
                                     idx = fielders.index(player_name)
                                     if idx < len(positions):
                                         p_val = positions[idx]
-                                        events.append({"inning": inn, "order": get_inn_order(inn), "pos": p_val})
+                                        events.append({"inning": inn, "order": get_inn_order(inn), "pos": p_val, "source": "fielding"})
 
-                            # ★両方から集めたデータを、イニング順（表・裏の時系列）で並び替え！
+                            # 時系列順に並び替え
                             events.sort(key=lambda x: x["order"])
 
-                            # 重複を排除しながらリストに追加していく
+                            # スタメン時のポジションを記憶する変数
+                            first_batting_pos = None
+
                             for ev in events:
                                 p_clean = ev["pos"].strip().replace(".0", "")
                                 if p_clean in pos_map:
                                     p_clean = pos_map[p_clean]
                                 
-                                # 空欄やハイフン（-）などの無効なデータは無視
                                 if p_clean and p_clean not in ["nan", "None", "", "-"]:
-                                    # 直前のポジションと異なる場合のみ追加
+                                    
+                                    # 最初に打撃成績から取得したポジションを「スタメンポジション」として記憶
+                                    if ev["source"] == "batting" and first_batting_pos is None:
+                                        first_batting_pos = p_clean
+                                    
+                                    # 【追加した賢いフィルター】
+                                    # 「打撃データ」から来た情報で、かつ「スタメン時」と同じであり、
+                                    # 「直前のポジション」と違う場合（＝一度別のポジションに移った後）は、古い打席データとみなして無視する
+                                    if ev["source"] == "batting" and len(seen_pos) > 0 and p_clean == first_batting_pos and p_clean != seen_pos[-1]:
+                                        continue
+                                        
                                     if not seen_pos or seen_pos[-1] != p_clean:
                                         seen_pos.append(p_clean)
 
-                            # 抽出した履歴を結合して「中右」の形式にする
                             pos_val = "".join(seen_pos)
                             
                             pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
