@@ -32,8 +32,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     # 🧪 テストモード判定で書き込むシートを切り替え
-    ws_batting = "打撃成績_テスト" if is_test_mode else "打撃成績"
-    ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
+    ws_batting = "打撃成績"
+    ws_pitching = "投手成績"
     # --- ★追加: 表裏の判定 (打撃=攻撃なので、先攻なら「表」) ---
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 

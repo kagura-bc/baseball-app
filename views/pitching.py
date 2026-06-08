@@ -11,7 +11,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     # 🧪 テストモード判定で書き込むシートを切り替え
-    ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
+    ws_pitching = "投手成績"
     is_kagura_top = (kagura_order == "先攻 (表)")
 
     # フィルタリング

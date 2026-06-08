@@ -63,8 +63,8 @@ if not st.session_state["is_logged_in"]:
 # ==========================================
 
 # --- ★ここが抜けていました：データの読み込み---
-df_batting = load_batting_data
-df_pitching = load_pitching_data
+df_batting = load_batting_data()
+df_pitching = load_pitching_data()
 
 st.sidebar.header("⚙️ 試合設定")
 

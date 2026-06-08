@@ -7,12 +7,12 @@ from config.settings import SPREADSHEET_URL
 def get_connection():
     return st.connection("gsheets", type=GSheetsConnection)
 
-def load_batting_data(is_test_mode=False):
+def load_batting_data():
     conn = get_connection()
     # ▼ 末尾に "Year" を追加しました
     expected_cols = ["日付", "打点", "盗塁", "得点", "位置", "グラウンド", "対戦相手", "試合種別", "イニング", "選手名", "結果", "種別", "Year"]
     
-    target_worksheet = "打撃成績_テスト" if is_test_mode else "打撃成績"
+    target_worksheet = "打撃成績"
     
     try:
         data = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=target_worksheet, ttl="10m")
@@ -34,12 +34,12 @@ def load_batting_data(is_test_mode=False):
         st.error(f"打撃データの読み込みに失敗しました ({target_worksheet}): {e}")
         return pd.DataFrame(columns=expected_cols)
 
-def load_pitching_data(is_test_mode=False):
+def load_pitching_data():
     conn = get_connection()
     # ▼ 末尾に "選手名" と "Year" を追加しました
     expected_cols = ["日付", "アウト数", "球数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "処理野手", "イニング", "投手名", "結果", "勝敗", "選手名", "Year"]
     
-    target_worksheet = "投手成績_テスト" if is_test_mode else "投手成績"
+    target_worksheet = "投手成績"
     
     try:
         data = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=target_worksheet, ttl="10m")
