@@ -66,4 +66,3 @@ def load_pitching_data(is_test_mode=False):
         st.error(f"投手データの読み込みに失敗しました ({target_worksheet}): {e}")
         return pd.DataFrame(columns=expected_cols)
 
-# ※ ここに delete_match_logic なども移動します
