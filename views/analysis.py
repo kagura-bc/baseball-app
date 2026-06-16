@@ -891,7 +891,7 @@ def show_analysis_page(df_batting, df_pitching):
 
                 # 鉄人ランキング
                 st.markdown("#### 🏅 鉄人ランキング (出席数)")
-                iron_men = contrib_stats.sort_values(["出場試合数", "OPS"], ascending=[False, False]).head(10)
+                iron_men = contrib_stats.sort_values(["出場試合数", "OPS"], ascending=[False, False]).head(20)
                 display_df = iron_men[["選手名", "出場試合数", "出席率"]].copy()
                 display_df["出席率"] = display_df["出席率"].map("{:.1f}%".format)
                 st.table(display_df.reset_index(drop=True))
