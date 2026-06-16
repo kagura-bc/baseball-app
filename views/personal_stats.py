@@ -266,7 +266,7 @@ def show_personal_stats(df_batting, df_pitching):
             df_p_tg = df_p_tg[df_p_tg["試合種別"] == "練習試合"]
 
         # 最後にタブを表示
-        st_bat, st_pit, st_fld = st.tabs(["打撃", "投手", "守備"])
+        st_bat, st_pit, st_fld, st_game = st.tabs(["打撃", "投手", "守備", "試合"])
 
         if target_year != "通算":
             df_b_tg = df_b_tg[df_b_tg["Year"] == target_year]
@@ -438,6 +438,110 @@ def show_personal_stats(df_batting, df_pitching):
                     st.info("守備記録なし")
             else:
                 st.info("データなし")
+
+        with st_game:
+            if not df_batting.empty or not df_pitching.empty:
+                # 対象年度データの抽出
+                df_b_target = df_batting[df_batting["Year"] == target_year] if target_year != "通算" else df_batting
+                df_p_target = df_pitching[df_pitching["Year"] == target_year] if target_year != "通算" else df_pitching
+
+                # 打撃・投手データをすべて縦に結合し、巨大な1つの「試合ログ」を作る
+                df_all_logs = pd.concat([df_b_target, df_p_target], ignore_index=True)
+
+                if not df_all_logs.empty:
+                    # 必須カラムの欠損値を補完し、前後の空白を取り除く（クレンジング）
+                    for col in ["日付", "試合種別", "選手名"]:
+                        if col in df_all_logs.columns:
+                            df_all_logs[col] = df_all_logs[col].fillna("").astype(str).str.strip()
+                    if "対戦相手" in df_all_logs.columns:
+                        df_all_logs["対戦相手"] = df_all_logs["対戦相手"].fillna("").astype(str).str.strip()
+                    else:
+                        df_all_logs["対戦相手"] = ""
+
+                    # 「チーム記録」は個人のランキング計算から除外
+                    df_all_logs = df_all_logs[df_all_logs["選手名"] != "チーム記録"]
+
+                    # 試合を一意に識別するIDを作る
+                    df_all_logs["Game_ID"] = df_all_logs["日付"] + "_" + df_all_logs["対戦相手"] + "_" + df_all_logs["試合種別"]
+
+                    # ==========================================
+                    # 1. チーム総試合数の計算
+                    # ==========================================
+                    team_games = df_all_logs[["Game_ID", "試合種別"]].drop_duplicates()
+                    
+                    official_games = len(team_games[team_games["試合種別"].isin(OFFICIAL_GAME_TYPES)])
+                    practice_games = len(team_games[team_games["試合種別"] == "練習試合"])
+                    # ★ 追加：公式戦でも練習試合でもない試合（その他・リーグ戦など）をカウント
+                    other_games = len(team_games[~team_games["試合種別"].isin(OFFICIAL_GAME_TYPES) & (team_games["試合種別"] != "練習試合")])
+                    
+                    total_games = official_games + practice_games + other_games
+
+                    # ==========================================
+                    # 2. 個人参加数の計算
+                    # ==========================================
+                    # 隠し選手（表示除外）のフィルタリング
+                    df_all_logs["_match_name"] = df_all_logs["選手名"].apply(normalize_name)
+                    df_valid_players = df_all_logs[~df_all_logs["_match_name"].isin(clean_hidden_list)].copy()
+
+                    if not df_valid_players.empty:
+                        # 試合種別ごとにデータを分割
+                        df_off = df_valid_players[df_valid_players["試合種別"].isin(OFFICIAL_GAME_TYPES)]
+                        df_prac = df_valid_players[df_valid_players["試合種別"] == "練習試合"]
+                        df_other = df_valid_players[~df_valid_players["試合種別"].isin(OFFICIAL_GAME_TYPES) & (df_valid_players["試合種別"] != "練習試合")]
+
+                        # nunique() で重複を防ぎつつカウント
+                        off_counts = df_off.groupby("選手名")["Game_ID"].nunique().reset_index(name="公式戦参加数")
+                        prac_counts = df_prac.groupby("選手名")["Game_ID"].nunique().reset_index(name="練習試合参加数")
+                        other_counts = df_other.groupby("選手名")["Game_ID"].nunique().reset_index(name="その他参加数")
+                        
+                        # 選手名ベースを作成（結合用）
+                        base_players = df_valid_players[["選手名"]].drop_duplicates()
+
+                        # データを結合
+                        game_stats = base_players.merge(off_counts, on="選手名", how="left") \
+                                                 .merge(prac_counts, on="選手名", how="left") \
+                                                 .merge(other_counts, on="選手名", how="left").fillna(0)
+
+                        # ★ 全試合参加数を「公式＋練習＋その他」の合算に強制
+                        game_stats["全試合参加数"] = game_stats["公式戦参加数"] + game_stats["練習試合参加数"] + game_stats["その他参加数"]
+
+                        # 参加記録が0の選手を除外
+                        game_stats = game_stats[game_stats["全試合参加数"] > 0]
+
+                        if not game_stats.empty:
+                            # 参加率の計算
+                            game_stats["公式戦参加率"] = game_stats["公式戦参加数"] / official_games if official_games > 0 else 0
+                            game_stats["練習試合参加率"] = game_stats["練習試合参加数"] / practice_games if practice_games > 0 else 0
+                            game_stats["その他参加率"] = game_stats["その他参加数"] / other_games if other_games > 0 else 0
+                            game_stats["全体参加率"] = game_stats["全試合参加数"] / total_games if total_games > 0 else 0
+
+                            # 表示形式の調整
+                            for c in ["全試合参加数", "公式戦参加数", "練習試合参加数", "その他参加数"]:
+                                game_stats[c] = game_stats[c].astype(int)
+
+                            game_stats["公式戦参加率"] = (game_stats["公式戦参加率"] * 100).map("{:.1f}%".format)
+                            game_stats["練習試合参加率"] = (game_stats["練習試合参加率"] * 100).map("{:.1f}%".format)
+                            game_stats["その他参加率"] = (game_stats["その他参加率"] * 100).map("{:.1f}%".format)
+                            game_stats["全体参加率"] = (game_stats["全体参加率"] * 100).map("{:.1f}%".format)
+
+                            # 並び替えと表示項目の指定
+                            game_stats = game_stats.sort_values(by=["全試合参加数", "公式戦参加数"], ascending=[False, False])
+                            
+                            # 表を見やすくするために列名を変更
+                            disp_game = game_stats[["選手名", "全試合参加数", "全体参加率", "公式戦参加数", "公式戦参加率", "練習試合参加数", "練習試合参加率", "その他参加数", "その他参加率"]]
+                            disp_game = disp_game.rename(columns={"その他参加数": "その他(リーグ等)数", "その他参加率": "その他参加率"})
+
+                            st.markdown(f"**対象期間のチーム総試合数**: 全 {total_games} 試合 (公式戦: {official_games} / 練習試合: {practice_games} / その他: {other_games})")
+                            st.caption("※ チームの全試合（公式戦・練習試合・その他リーグ戦等）を合算・分類して表示しています。")
+                            st.dataframe(disp_game, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("参加記録がありません")
+                    else:
+                        st.info("参加記録がありません")
+                else:
+                    st.info("データがありません")
+            else:
+                st.info("データがありません")
 
     # ----------------------------------------------------
     # 2. 個人年度別 + 通算
