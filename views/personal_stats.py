@@ -85,6 +85,7 @@ def show_personal_stats(df_batting, df_pitching):
     if not df_pitching.empty:
         # 日付からYearを作成 (2026.0問題の解消)
         df_pitching["Year"] = pd.to_datetime(df_pitching["日付"], errors='coerce').dt.strftime('%Y')
+        # もし日付が空欄のデータがある場合、"nan" になってしまうのを防ぐため補完します
         df_pitching["Year"] = df_pitching["Year"].fillna("不明")
         
         if "選手名" in df_pitching.columns:
@@ -1046,6 +1047,12 @@ def show_personal_stats(df_batting, df_pitching):
 
         # 投手部門
         if not df_pit_res.empty:
+            # ★ 最終表示の直前でラベルから「.0」を強制的に削り取る
+            if "Display" in df_pit_res.columns:
+                df_pit_res["Display"] = df_pit_res["Display"].astype(str).str.replace(r'\.0\)', ')', regex=True)
+            if "Display" in df_pit_rate_target.columns:
+                df_pit_rate_target["Display"] = df_pit_rate_target["Display"].astype(str).str.replace(r'\.0\)', ')', regex=True)
+
             st.markdown(f"##### 🛡️ 歴代投手トップ5")
             tp1, tp2, tp3, tp4 = st.columns(4)
             # 率系: 規定到達者 (df_pit_rate_target) を使用
