@@ -53,7 +53,6 @@ def show_team_stats(df_batting, df_pitching):
         return
 
     games_map = {}
-    debug_log = [] # ★ 一時的なデバッグ可視化用のリスト
 
     # --- A. 打撃データから集計 ---
     df_b_work = df_batting.copy()
@@ -83,11 +82,6 @@ def show_team_stats(df_batting, df_pitching):
             hit_results = ["単打", "二塁打", "三塁打", "本塁打", "安打"]
 
             for _, row in individuals.iterrows():
-                # ★ここで初期化を確実に行う
-                added_ab = 0
-                added_hits = 0
-                route = "スルー（空欄等）"
-
                 res_str = str(row.get("結果", "")).strip()
                 
                 # 数値の取得（空欄や文字列は0になる）
@@ -107,43 +101,18 @@ def show_team_stats(df_batting, df_pitching):
                     total_hits += hits
                     total_hr += hr
                     total_sb += sb
-                    
-                    added_ab = ab
-                    added_hits = hits
-                    route = "🟢 数値入力列から取得"
                 else:
                     # 詳細入力の場合：文字から判定して加算
                     # 「凡退」が含まれていれば打数カウント
                     if res_str in ab_results or "凡退" in res_str or "失策" in res_str:
                         total_ab += 1
-                        added_ab = 1
                     
                     if res_str in hit_results:
                         total_hits += 1
-                        added_hits = 1
                         if res_str == "本塁打":
                             total_hr += 1
                     
                     total_sb += sb
-                    
-                    if added_ab > 0 or added_hits > 0:
-                        route = "🔵 結果文字列から判定"
-                    elif res_str in ["四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "打撃妨害"]:
-                        route = "⚪ 打数除外（四死球・犠打等）"
-                    elif res_str != "" and res_str != "nan":
-                        route = f"⚠️ 不明な結果文字: {res_str}"
-
-                # デバッグログに記録
-                debug_log.append({
-                    "日付": d_str,
-                    "選手名": row.get("選手名", ""),
-                    "元データ_結果(文字)": res_str,
-                    "元データ_打数(数値)": ab,
-                    "元データ_安打(数値)": hits,
-                    "⇒チーム集計に追加した打数": added_ab,
-                    "⇒チーム集計に追加した安打": added_hits,
-                    "判定ルート": route
-                })
 
         # 先攻後攻の判定
         top_bottom = "不明"
@@ -246,23 +215,6 @@ def show_team_stats(df_batting, df_pitching):
     if not df_team_stats.empty:
         df_team_stats["日付"] = pd.to_datetime(df_team_stats["日付"])
         df_team_stats = df_team_stats.sort_values("日付", ascending=False)
-
-    # =========================================================
-    # ★ ここに一時的なデバッグ可視化パネルを追加
-    # =========================================================
-    with st.expander("🛠️ 【一時的】チーム打撃の計算内訳・判定ログを見る", expanded=False):
-        st.write("各選手のデータが、システムで「打数」「安打」としてどのようにカウントされたかを確認できます。")
-        st.info("🚨 **チェックポイント**: 「判定ルート」が『⚠️ 不明な結果文字』になっている行がないか、打数にカウントされるべき行が『スルー』になっていないかを確認してください。")
-        if debug_log:
-            df_debug = pd.DataFrame(debug_log)
-            # 表示フィルター用
-            show_only_errors = st.checkbox("⚠️ 不明な文字・スルーされた行のみ表示")
-            if show_only_errors:
-                df_debug = df_debug[df_debug["判定ルート"].str.contains("⚠️|スルー")]
-            st.dataframe(df_debug, use_container_width=True)
-        else:
-            st.write("ログがありません")
-    # =========================================================
 
     # 2. フィルタリング
     if not df_team_stats.empty:
@@ -586,7 +538,7 @@ def show_team_stats(df_batting, df_pitching):
                         total_hits = 0; total_so = 0; total_bb = 0
                         for _, row in group.iterrows():
                             raw_h = int(row.get("被安打", 0)) if pd.notna(row.get("被安打", 0)) else 0
-                            raw_so = int(row.get("奪三振", 0)) if pd.notna(row.get("奪三振", 0)) else 0
+                            raw_so = int(row.get("奪三振", 0)) if pd.notna(row.get("夺三振", 0)) else 0
                             raw_bb = int(row.get("与四球", 0)) if pd.notna(row.get("与四球", 0)) else 0
                             res = str(row.get("結果", ""))
                             r_type = str(row.get("種別", ""))
