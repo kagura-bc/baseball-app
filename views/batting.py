@@ -34,90 +34,119 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # 🧪 テストモード判定で書き込むシートを切り替え
     ws_batting = "打撃成績"
     ws_pitching = "投手成績"
+    # --- ★追加: 表裏の判定 (打撃=攻撃なので、先攻なら「表」) ---
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 
     # ==========================================
-    # 1. 日付変更時のリセット & 初期化
+    # 1. 日付変更時のリセット処理 & 初期化
     # ==========================================
+    
+    # 初回アクセス時またはリロード時のための初期値設定
     if "last_selected_date" not in st.session_state:
         st.session_state["last_selected_date"] = selected_date_str
     
+    # 日付が変更されたかどうかを判定
     date_changed = (st.session_state["last_selected_date"] != selected_date_str)
     
     if date_changed:
-        # 既存の状態をクリア
+        # 1. まず現在のセッション状態を完全にクリア
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "persistent_", "batting_inning_select", "scorer_name_ui"]
+        target_prefixes = ["sn", "sp", "sr", "si"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
         
-        # 必要な初期値をセット
-        st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
-        st.session_state["batting_inning_select"] = f"1回{b_inning_suffix}"
-        st.session_state["scorer_name_ui"] = ""
-        st.session_state["saved_lineup"] = {}
+        # 2. 選択された日付のデータをチェック
+        temp_today_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
+        
+        # 3. データが「存在しない」場合のみ、明示的に空をセットして残像を防ぐ
+        if temp_today_df.empty:
+            for i in range(15):
+                st.session_state[f"sn{i}"] = ""
+                st.session_state[f"sp{i}"] = "他"
+            st.session_state["saved_lineup"] = {}
+            st.session_state["persistent_bench"] = []
+            # ★修正: 「1回」から「1回表/裏」にする
+            st.session_state["persistent_inn"] = f"1回{b_inning_suffix}" 
+            st.session_state["persistent_scorer"] = ""
+        
+        # 4. 管理フラグを更新してリラン
         st.session_state["last_selected_date"] = selected_date_str
         st.rerun()
 
-    # セッションステート初期化（初回アクセス用）
+    # セッションステート変数の初期化（未定義の場合）
     if "saved_lineup" not in st.session_state:
         st.session_state["saved_lineup"] = {}
-    if "persistent_inn" not in st.session_state:
+    if "persistent_bench" not in st.session_state:
+        st.session_state["persistent_bench"] = []
+        
+    if "persistent_inn" not in st.session_state: 
+        # ★修正: 「1回」から「1回表/裏」にする
         st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
-    if "batting_inning_select" not in st.session_state:
-        st.session_state["batting_inning_select"] = f"1回{b_inning_suffix}"
-    if "scorer_name_ui" not in st.session_state:
-        st.session_state["scorer_name_ui"] = ""
+    if "persistent_scorer" not in st.session_state: # ★ 追加
+        st.session_state["persistent_scorer"] = ""  # ★ 追加
 
     # ==========================================
-    # 2. データの読み込み & 状態同期
+    # 2. データのフィルタリング & 読み込み
     # ==========================================
+    
+    is_kagura_top = (kagura_order == "先攻 (表)")
+    
+    # 選択された日付のデータを取得
     today_batting_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
+    today_pitching_df = df_pitching[df_pitching["日付"].astype(str) == selected_date_str]
 
-    # 初回読み込み(sn0がない)かつデータがある場合のみ復元
+    # ★★★ 自動読み込み処理 ★★★
     if "sn0" not in st.session_state and not today_batting_df.empty:
         try:
-            # 1. イニングの復元
+            # （イニング復元ロジック）
             valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
             if not valid_inn_df.empty:
-                last_inn = valid_inn_df.iloc[-1]["イニング"]
-                st.session_state["persistent_inn"] = last_inn
-                st.session_state["batting_inning_select"] = last_inn # UI同期
+                # 復元時は無条件で最新のイニングをセットする
+                st.session_state["persistent_inn"] = valid_inn_df.iloc[-1]["イニング"]
 
-            # 2. スコアラーの復元
-            valid_scorer_df = today_batting_df[
-                (today_batting_df["スコアラー"].astype(str).str.strip() != "") & 
-                (today_batting_df["スコアラー"].astype(str).str.strip() != "0") &
-                (today_batting_df["スコアラー"].astype(str).str.strip() != "nan")
-            ]
-            if not valid_scorer_df.empty:
-                scorer_name = valid_scorer_df.iloc[-1]["スコアラー"]
-                st.session_state["scorer_name_ui"] = scorer_name # UI同期
+            # ▼▼▼ 修正: スコアラーの復元（Pandas構文エラーと0除外の対応） ▼▼▼
+            if not st.session_state.get("scorer_name"):
+                valid_scorer_df = today_batting_df[
+                    (today_batting_df["スコアラー"].astype(str).str.strip() != "") & 
+                    (today_batting_df["スコアラー"].astype(str).str.strip() != "0") &
+                    (today_batting_df["スコアラー"].astype(str).str.strip() != "nan")
+                ]
+                if not valid_scorer_df.empty:
+                    st.session_state["scorer_name"] = valid_scorer_df.iloc[-1]["スコアラー"]
 
-            # 3. 打順の復元
             for i in range(15):
                 target_order = i + 1
                 rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
+                
                 if not rows.empty:
-                    last_row = rows.iloc[-1]
-                    saved_name = last_row["選手名"]
-                    saved_pos = last_row.get("位置", "")
-                    
-                    # UI用キー (sn0, sp0など) に値を反映
-                    st.session_state[f"sn{i}"] = saved_name
-                    st.session_state[f"sp{i}"] = saved_pos
-                    
-                    # 内部保存用ディクショナリ
-                    st.session_state["saved_lineup"][f"name_{i}"] = saved_name
-                    st.session_state["saved_lineup"][f"pos_{i}"] = saved_pos
-                    
-                    # 投手の連携
-                    if saved_pos == "投" and saved_name:
-                        st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
+                        # その打順の最後（最新）のデータを取得
+                        last_row = rows.iloc[-1]
+                        saved_name = last_row["選手名"]
+                        saved_pos = last_row.get("位置", "")
                         
+                        # ▼▼▼ ここから修正 ▼▼▼
+                        # 入力欄（session_state）にまだ値が存在しない場合のみセットする
+                        # （ユーザーが手動で選手を変更した直後の強制上書きを防ぐため）
+                        if f"sn{i}" not in st.session_state:
+                            st.session_state[f"sn{i}"] = saved_name
+                            st.session_state[f"sp{i}"] = saved_pos
+                        
+                        # 保存用の箱(saved_lineup)にも、まだ記録がなければ同期しておく
+                        if "saved_lineup" not in st.session_state:
+                            st.session_state["saved_lineup"] = {}
+                            
+                        if f"name_{i}" not in st.session_state["saved_lineup"]:
+                            st.session_state["saved_lineup"][f"name_{i}"] = saved_name
+                            st.session_state["saved_lineup"][f"pos_{i}"] = saved_pos
+                    
+                    # 投手の連携用データもセット
+                if saved_pos == "投" and saved_name:
+                        st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
+                         
         except Exception as e:
-            st.error(f"データ復元中にエラーが発生しました: {e}")
+            print(f"Data Loading Error: {e}")
+
     # ==========================================
     # 3. 画面表示 (モード選択など)
     # ==========================================
