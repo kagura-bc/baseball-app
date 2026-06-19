@@ -360,7 +360,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             new_records = []
             has_homerun = False
             
-            # ★ 修正: キーをUIと完全に一致させました
+            # フォーム外の最新のUI状態を取得
             current_inn = st.session_state.get("batting_inning_select", f"1回{b_inning_suffix}")
             current_scorer = st.session_state.get("scorer_name_ui", "")
             
@@ -465,8 +465,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=updated_df)
                     st.cache_data.clear()
                     
-                    # ★ 修正: イニング自動更新ロジックを正確に連動
-                    out_res_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打", "走塁死", "盗塁死"]
+                    # ▼▼▼ 修正1: アウトとなる結果を完全に網羅 ▼▼▼
+                    out_res_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振"]
                     inn_combined = pd.concat([today_batting_df[today_batting_df["イニング"] == current_inn], new_df])
                     total_outs = len(inn_combined[inn_combined["結果"].isin(out_res_list)])
                     total_outs += len(inn_combined[inn_combined["結果"] == "併殺打"]) * 2
@@ -479,12 +479,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                                 next_inn = inn_list[curr_idx + 1]
                                 st.session_state["batting_inning_select"] = next_inn
                                 st.session_state["persistent_inn"] = next_inn
-                                st.toast(f"3アウト交代！次イニングへ。")
+                                st.toast(f"3アウト交代！次イニング({next_inn})へ進みます。")
                         except: pass
 
                     # 打席結果部分だけリセット
                     for i in range(15):
-                        for k in [f"sr{i}", f"sd{i}", f"si{i}", f"st{i}"]: st.session_state[k] = "---"
+                        for k in [f"sr{i}", f"sd{i}", f"si{i}", f"st{i}"]: 
+                            if k in st.session_state:
+                                st.session_state[k] = "---"
                     
                     if has_homerun: st.session_state["show_homerun_flg"] = True
                     st.success(f"✅ 打席結果を保存しました")
@@ -510,35 +512,35 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         hit_results = ["単打", "二塁打", "三塁打", "本塁打"]
         ab_results = hit_results + ["凡退(ゴロ)", "凡退(フライ)", "失策", "走塁死", "盗塁死", "三振", "併殺打", "野選", "振り逃げ三振"]
 
-        # --- UI構築 ---
+        # ▼▼▼ 修正2: イニング等をフォーム(st.form)の「外」に配置し、画面ロックを解除 ▼▼▼
+        c_inn, c_outs, c_scorer = st.columns([1.5, 2.5, 3.5])
+        
+        with c_inn:
+            inn_list = [f"{i}回{b_inning_suffix}" for i in range(1, 10)] + [f"延長{b_inning_suffix}"]
+            saved_inn = st.session_state.get("persistent_inn", f"1回{b_inning_suffix}")
+            def_inn_ix = inn_list.index(saved_inn) if saved_inn in inn_list else 0
+            curr_inn = st.selectbox("イニング", inn_list, key="batting_inning_select")
+        
+        with c_outs:
+            disp_outs = 0
+            if not today_batting_df.empty:
+                inn_df = today_batting_df[today_batting_df["イニング"] == curr_inn]
+                s_outs = len(inn_df[inn_df["結果"].isin(["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振"])])
+                d_outs = len(inn_df[inn_df["結果"] == "併殺打"]) * 2
+                disp_outs = (s_outs + d_outs) % 3
+            st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
+        
+        with c_scorer: 
+            p_list = [""] + ALL_PLAYERS
+            saved_scorer = st.session_state.get("persistent_scorer", "")
+            def_scorer_ix = p_list.index(saved_scorer) if saved_scorer in p_list else 0
+            selected_scorer = st.selectbox("スコアラー", p_list, key="scorer_name_ui", format_func=local_fmt)
+            st.session_state["persistent_scorer"] = selected_scorer
+
+        # --- 打席入力フォーム ---
         with st.form(key='batting_form', clear_on_submit=False):
             if st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True):
                 submit_everything()
-
-            c_inn, c_outs, c_scorer = st.columns([1.5, 2.5, 3.5])
-            with c_inn:
-                # ★修正: イニングのキーを batting_inning_select に統一
-                inn_list = [f"{i}回{b_inning_suffix}" for i in range(1, 10)] + [f"延長{b_inning_suffix}"]
-                saved_inn = st.session_state.get("persistent_inn", f"1回{b_inning_suffix}")
-                def_inn_ix = inn_list.index(saved_inn) if saved_inn in inn_list else 0
-                curr_inn = st.selectbox("イニング", inn_list, index=def_inn_ix, key="batting_inning_select")
-            
-            with c_outs:
-                disp_outs = 0
-                if not today_batting_df.empty:
-                    inn_df = today_batting_df[today_batting_df["イニング"] == curr_inn]
-                    s_outs = len(inn_df[inn_df["結果"].isin(["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打", "走塁死", "盗塁死"])])
-                    d_outs = len(inn_df[inn_df["結果"] == "併殺打"]) * 2
-                    disp_outs = (s_outs + d_outs) % 3
-                st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
-            
-            with c_scorer: 
-                # ★修正: スコアラーのキーを scorer_name_ui に統一
-                p_list = [""] + ALL_PLAYERS
-                saved_scorer = st.session_state.get("persistent_scorer", "")
-                def_scorer_ix = p_list.index(saved_scorer) if saved_scorer in p_list else 0
-                selected_scorer = st.selectbox("スコアラー", p_list, index=def_scorer_ix, key="scorer_name_ui", format_func=local_fmt)
-                st.session_state["persistent_scorer"] = selected_scorer
 
             batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                                "失策(ゴロ)", "失策(フライ)", "野選", "併殺打",  "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
@@ -629,7 +631,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         
                         c[7].markdown(f"<div style='font-size:18px; line-height:1.2; padding-top:5px;'>{' '.join(history_html)}</div>", unsafe_allow_html=True)
 
-            st.divider()
-            with st.expander(" 🚌 ベンチ入りメンバー", expanded=True):
-                selected_bench = st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
-                st.session_state["persistent_bench"] = selected_bench
+        st.divider()
+        with st.expander(" 🚌 ベンチ入りメンバー", expanded=True):
+            selected_bench = st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
+            st.session_state["persistent_bench"] = selected_bench
