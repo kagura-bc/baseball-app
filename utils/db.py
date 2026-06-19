@@ -10,7 +10,7 @@ def get_connection():
 def load_batting_data():
     conn = get_connection()
     # ▼ 末尾に "Year" を追加しました
-    expected_cols = ["日付", "打点", "盗塁", "得点", "位置", "グラウンド", "対戦相手", "試合種別", "イニング", "選手名", "結果", "種別", "Year"]
+    expected_cols = ["日付", "打点", "盗塁", "得点", "位置", "グラウンド", "対戦相手", "試合種別", "イニング", "選手名", "結果", "種別", "Year", "スコアラー"]
     
     target_worksheet = "打撃成績"
     
@@ -37,7 +37,7 @@ def load_batting_data():
 def load_pitching_data():
     conn = get_connection()
     # ▼ 末尾に "選手名" と "Year" を追加しました
-    expected_cols = ["日付", "アウト数", "球数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "処理野手", "イニング", "投手名", "結果", "勝敗", "選手名", "Year"]
+    expected_cols = ["日付", "アウト数", "球数", "失点", "自責点", "グラウンド", "対戦相手", "試合種別", "処理野手", "イニング", "投手名", "結果", "勝敗", "選手名", "Year", "スコアラー"]
     
     target_worksheet = "投手成績"
     
@@ -48,7 +48,7 @@ def load_pitching_data():
 
         for col in expected_cols: 
             if col not in data.columns: 
-                if col in ["グラウンド", "対戦相手", "試合種別", "処理野手", "投手名", "選手名", "結果", "イニング", "勝敗", "Year"]:
+                if col in ["グラウンド", "対戦相手", "試合種別", "処理野手", "投手名", "選手名", "結果", "イニング", "勝敗", "Year", "スコアラー"]:
                     data[col] = ""
                 else:
                     data[col] = 0

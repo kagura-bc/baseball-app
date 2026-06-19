@@ -96,10 +96,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     today_pitching_df = df_pitching[df_pitching["日付"].astype(str) == selected_date_str]
 
     # ★★★ 自動読み込み処理 ★★★
-    # 「入力欄が空(sn0なし)」かつ「その日のデータが存在する」場合にデータを復元
-    # ※日付変更直後は上でクリアされているため、データがあればここが実行されます
     if "sn0" not in st.session_state and not today_batting_df.empty:
         try:
+            # （イニング復元ロジック）
+            valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
+            if not valid_inn_df.empty:
+                # 復元時は無条件で最新のイニングをセットする
+                st.session_state["persistent_inn"] = valid_inn_df.iloc[-1]["イニング"]
+
+            # ▼▼▼ 修正: スコアラーの復元（Pandas構文エラーと0除外の対応） ▼▼▼
+            if not st.session_state.get("scorer_name"):
+                valid_scorer_df = today_batting_df[
+                    (today_batting_df["スコアラー"].astype(str).str.strip() != "") & 
+                    (today_batting_df["スコアラー"].astype(str).str.strip() != "0") &
+                    (today_batting_df["スコアラー"].astype(str).str.strip() != "nan")
+                ]
+                if not valid_scorer_df.empty:
+                    st.session_state["scorer_name"] = valid_scorer_df.iloc[-1]["スコアラー"]
+
             for i in range(15):
                 target_order = i + 1
                 rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]

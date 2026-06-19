@@ -62,6 +62,19 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     st.session_state["opp_batter_index"] = (last_idx % st.session_state["opp_batter_count"]) + 1
                 except:
                     pass
+                
+                # ▼▼▼ 追加: 投手側でのスコアラー復元（タブを直接開いた時やリロード対策） ▼▼▼
+                if not st.session_state.get("scorer_name"):
+                    valid_scorer_df = today_pitching_df[
+                        (today_pitching_df["スコアラー"].astype(str).str.strip() != "") & 
+                        (today_pitching_df["スコアラー"].astype(str).str.strip() != "0") &
+                        (today_pitching_df["スコアラー"].astype(str).str.strip() != "nan")
+                    ]
+                    if not valid_scorer_df.empty:
+                        st.session_state["scorer_name"] = valid_scorer_df.iloc[-1]["スコアラー"]
+                
+                # ▼▼▼ 修正: データが存在する場合も同期完了フラグを立てる ▼▼▼
+                st.session_state[sync_key] = True
             else:
                     # ★修正: 初期値を「1回」から「1回表(または裏)」にする
                     st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
