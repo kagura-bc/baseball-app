@@ -93,9 +93,8 @@ if page == " 📝 試合データ入力":
     
     st.markdown("### 📝 試合データ入力")
     
-    # 🌟 試合設定をメイン画面上部にプルダウン(横並び3列)で配置
-    with st.container(border=True):
-        st.markdown("##### ⚙️ 試合設定")
+    # 🌟 修正: st.container を st.expander に変更し、折りたたみ可能にしました
+    with st.expander("⚙️ 試合設定 (クリックで開閉)", expanded=True):
         c1, c2, c3 = st.columns(3)
         
         with c1:
@@ -152,8 +151,8 @@ if page == " 📝 試合データ入力":
 
     st.write("") # 少し余白を空ける
 
-    # 🌟 画面上部で打撃と投手を切り替えるタブ
-    tab_batting, tab_pitching = st.tabs([" 🏠 打撃成績入力", " 🔥 投手成績入力"])
+    # 🌟 修正: 画面上部で打撃・投手・データ修正を切り替えるタブ（3つに変更）
+    tab_batting, tab_pitching, tab_edit = st.tabs([" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🔧 データ修正"])
     
     with tab_batting:
         batting.show_batting_page(
@@ -166,7 +165,12 @@ if page == " 📝 試合データ入力":
             df_batting, df_pitching, 
             selected_date_str, match_type, ground_name, opp_team, kagura_order
         )
+        
+    with tab_edit:
+        # ★追加: データ修正タブの中身
+        edit_data.show_edit_page(df_batting, df_pitching)
 
+# --- 他のページの処理（そのまま残します） ---
 elif page == " 🏆 チーム成績":
     team_stats.show_team_stats(df_batting, df_pitching)
 
@@ -177,4 +181,5 @@ elif page == " 📈 データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
 
 elif page == " 🔧 データ修正":
+    # サイドバーから「データ修正」が選ばれた場合も表示できるように残す
     edit_data.show_edit_page(df_batting, df_pitching)
