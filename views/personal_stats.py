@@ -307,17 +307,20 @@ def show_personal_stats(df_batting, df_pitching):
                 stats["OPS"] = stats["出塁率"] + stats["長打率"]
 
                 # 整数型への変換
-                # ★追加: is_so を追加
-                for c in ["is_hit", "is_ab", "is_hr", "is_bb", "打点", "盗塁", "is_so"]: 
+                # ★修正: is_1b, is_2b, is_3b, 得点 を追加
+                for c in ["is_hit", "is_ab", "is_1b", "is_2b", "is_3b", "is_hr", "is_bb", "打点", "得点", "盗塁", "is_so"]: 
                     stats[c] = stats[c].astype(int)
 
                 # 表示用データフレームの作成
                 disp = stats.rename(columns={
                     "is_hit": "安打", 
                     "is_ab": "打数", 
+                    "is_1b": "単打",      # ★追加
+                    "is_2b": "二塁打",    # ★追加
+                    "is_3b": "三塁打",    # ★追加
                     "is_hr": "本塁打",
                     "is_bb": "四死球",
-                    "is_so": "三振" # ★追加
+                    "is_so": "三振" 
                 }).sort_values("OPS", ascending=False)
                 
                 # 小数点フォーマット
@@ -326,9 +329,9 @@ def show_personal_stats(df_batting, df_pitching):
                 disp["長打率"] = disp["長打率"].map(lambda x: f"{x:.3f}")
                 disp["出塁率"] = disp["出塁率"].map(lambda x: f"{x:.3f}")
 
-                # データフレーム表示（四死球と三振を追加）
+                # データフレーム表示（得点、単打、二塁打、三塁打を追加）
                 st.dataframe(
-                    disp[["選手名", "打率", "OPS", "長打率", "出塁率", "打数", "安打", "本塁打", "打点", "盗塁", "四死球", "三振"]], 
+                    disp[["選手名", "打率", "OPS", "長打率", "出塁率", "打数", "得点", "安打", "単打", "二塁打", "三塁打", "本塁打", "打点", "盗塁", "四死球", "三振"]], 
                     use_container_width=True, 
                     hide_index=True
                 )

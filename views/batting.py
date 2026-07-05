@@ -124,7 +124,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     hit_results = ["単打", "二塁打", "三塁打", "本塁打"]
     ab_results = hit_results + ["凡退(ゴロ)", "凡退(フライ)", "失策", "走塁死", "盗塁死", "三振", "併殺打", "野選", "振り逃げ三振"]
 
-    # --- 【重要】イニング自動進行ロジック（フォーム描画前に計算） ---
+    # --- イニング自動進行ロジック ---
     inn_list = [f"{i}回{b_inning_suffix}" for i in range(1, 10)] + [f"延長{b_inning_suffix}"]
     current_inn_val = st.session_state.get("persistent_inn", f"1回{b_inning_suffix}")
     
@@ -201,6 +201,56 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if rbi_val == 0: rbi_val = 1
                 has_homerun = True
 
+            # --- 前回状態の取得 (スタメン・守備変更の検知用) ---
+            last_name = ""
+            last_pos = ""
+            if not today_batting_df.empty:
+                # この打順のこれまでの登録履歴を取得
+                order_records = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == i+1]
+                if not order_records.empty:
+                    last_record = order_records.iloc[-1]
+                    last_name = str(last_record.get("選手名", ""))
+                    if last_name == "nan": last_name = ""
+                    last_pos = str(last_record.get("位置", ""))
+                    if last_pos == "nan": last_pos = ""
+
+            # --- 自動反映 (スタメン / 守備変更 / 交代) ---
+            if p_name and p_pos:
+                if last_name == "":
+                    # まだ誰も登録されていない場合 -> スタメン
+                    record_dict = {
+                        "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                        "イニング": "試合前", "選手名": p_name, "位置": p_pos, "打順": i+1,
+                        "結果": "スタメン",
+                        "打点": 0, "得点": 0, "盗塁": 0, 
+                        "種別": "スタメン", "打球方向": "",
+                        "スコアラー": current_scorer
+                    }
+                    new_records.append(record_dict)
+                elif p_name == last_name and p_pos != last_pos:
+                    # 選手は同じで守備位置のみ変更された -> 守備変更
+                    record_dict = {
+                        "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                        "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
+                        "結果": "守備変更",
+                        "打点": 0, "得点": 0, "盗塁": 0, 
+                        "種別": "守備変更", "打球方向": "",
+                        "スコアラー": current_scorer
+                    }
+                    new_records.append(record_dict)
+                elif p_name != last_name and last_name != "":
+                    # 選手が変わった場合 -> 交代 (途中出場)
+                    record_dict = {
+                        "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
+                        "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
+                        "結果": "交代",
+                        "打点": 0, "得点": 0, "盗塁": 0, 
+                        "種別": "交代", "打球方向": "",
+                        "スコアラー": current_scorer
+                    }
+                    new_records.append(record_dict)
+
+            # --- 通常の打席成績の記録 ---
             if p_name and (p_res != "---" or run_val > 0):
                 record_dict = {
                     "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
@@ -239,14 +289,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             st.session_state[k] = "---"
                 
                 if has_homerun: st.session_state["show_homerun_flg"] = True
-                st.success(f"✅ 打席結果を保存しました")
+                st.success(f"✅ 入力内容を保存しました")
                 import time
                 time.sleep(1)
                 st.rerun() 
             except Exception as e:
                 st.error(f"保存エラー: {e}")
         else:
-            st.success("✅ スタメンとスコアラーの表示を保持しました（※打席結果は未入力です）")
+            st.success("✅ 表示状態を保持しました（※変更点はありません）")
             import time
             time.sleep(1)
             st.rerun()
@@ -261,7 +311,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         
         with c_inn:
             def_inn_ix = inn_list.index(current_inn_val) if current_inn_val in inn_list else 0
-            # ★【修正の核心】keyを削除して固着を防止し、初期値(index)で制御する
             curr_inn = st.selectbox("イニング", inn_list, index=def_inn_ix)
             st.session_state["persistent_inn"] = curr_inn # 手動変更に対応
         
@@ -283,7 +332,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
-        # 3. 打席入力テーブル
+        # 3. 打席入力テーブル (結果のプルダウンは通常のみに戻す)
         batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打",  "盗塁", "得点", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
         
@@ -334,7 +383,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if not today_batting_df.empty and sel_p_name:
                 p_df = today_batting_df[
                     (today_batting_df["選手名"] == sel_p_name) & 
-                    (~today_batting_df["結果"].isin(["スタメン"]))
+                    (~today_batting_df["結果"].isin(["スタメン", "守備変更", "交代"])) # 履歴には出さない
                 ]
                 if not p_df.empty:
                     history_html = []
@@ -356,7 +405,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         res_short = {
                             "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 
                             "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "失策(ゴロ)":"失", "失策(フライ)":"失", "野選":"野", "併殺打":"併", 
-                            "振り逃げ三振":"逃", "打撃妨害":"妨", "守備変更":"守"
+                            "振り逃げ三振":"逃", "打撃妨害":"妨"
                         }.get(res, res[:1])
                         
                         if res in pa_list_for_history:

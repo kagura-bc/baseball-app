@@ -333,29 +333,6 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             add_strikeouts = 1 if p_res in ["三振", "振り逃げ三振"] else 0 # ★三振と振り逃げ三振をカウント
             batter_idx_str = f"{st.session_state['opp_batter_index']}"
 
-            # --- データの作成 ---
-            rec = {
-                "日付": selected_date_str, 
-                "グラウンド": ground_name, 
-                "対戦相手": opp_team, 
-                "試合種別": match_type,
-                "イニング": current_inn, 
-                
-                "選手名": target_pitcher_name,   # 投手成績用
-                "守備位置": target_fielder_pos_str,  # ポジション（捕）
-                "打球方向": target_fielder_pos_str,  # 💡追加：データ分析用に打球方向列に保存
-                "処理野手": fielder_display,     # 個人成績用（久保田剛志）
-                
-                "結果": p_res,                   # 💡修正：計算エラーを防ぐため純粋な「単打」などを保存
-                "失点": p_run, 
-                "自責点": p_er,
-                "勝敗": "ー", 
-                "被安打": add_hits, 
-                "奪三振": add_strikeouts,        # ★辞書データに奪三振の数を追加
-                "アウト数": add_outs, 
-                "種別": f"詳細:{batter_idx_str}番打者"
-            }
-
             # --- 盗塁・盗塁死の場合の自動補正 ---
             # スプレッドシートの1行で「投手成績」かつ「捕手の守備記録」としてまとめる
             if p_res in ["盗塁", "盗塁死"]:
@@ -416,7 +393,10 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             else:
                 st.session_state["p_det_inn"] = current_inn
 
-            st.session_state["opp_batter_index"] = (st.session_state["opp_batter_index"] % st.session_state["opp_batter_count"]) + 1
+            # --- 💡修正: 打席完了時のみ打順を進める（盗塁や牽制死などは進めない） ---
+            non_batter_events = ["盗塁", "盗塁死", "牽制死", "暴投", "捕逸", "ボーク", "走塁死"]
+            if p_res not in non_batter_events:
+                st.session_state["opp_batter_index"] = (st.session_state["opp_batter_index"] % st.session_state["opp_batter_count"]) + 1
             
             st.success(f"✅ {target_pitcher_name}投手の記録を保存しました")
             import time

@@ -62,75 +62,119 @@ if not st.session_state["is_logged_in"]:
 # 📱 ここから下がログイン後のメインアプリ
 # ==========================================
 
-# --- ★ここが抜けていました：データの読み込み---
+# ==========================================
+# 📊 データ読み込み
+# ==========================================
 df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
-st.sidebar.header("⚙️ 試合設定")
-
-# 試合区分・大会名の選択
-match_category = st.sidebar.radio("試合区分", ["公式戦", "練習試合", "その他"], horizontal=True)
-if match_category == "公式戦":
-    match_type = st.sidebar.selectbox("大会名を選択", OFFICIAL_GAME_TYPES)
-else:
-    match_type = match_category
-
-# ==========================================
-# 🔄 URLパラメータ保存用関数とサイドバー設定
-# ==========================================
-def sync_sidebar_state():
-    st.query_params["game_date"] = str(st.session_state.app_date)
-    st.query_params["ground"] = st.session_state.app_ground
-    st.query_params["opp"] = st.session_state.app_opp
-    st.query_params["order"] = st.session_state.app_order
-
+# --- ヘルパー関数 (URLクエリパラメータとの同期用) ---
 def safe_index(lst, val):
-    return lst.index(val) if val in lst else 0
+    try:
+        return lst.index(val)
+    except ValueError:
+        return 0
 
-# --- 1. 試合日 ---
-url_date = st.query_params.get("game_date", str(datetime.date.today()))
-try:
-    default_date = datetime.datetime.strptime(url_date, "%Y-%m-%d").date()
-except ValueError:
-    default_date = datetime.date.today()
+# ==========================================
+# 🧭 ナビゲーション（サイドバー）
+# ==========================================
+st.sidebar.markdown("### ⚾️ KAGUSTA")
 
-game_date = st.sidebar.date_input("試合日", value=default_date, key="app_date", on_change=sync_sidebar_state)
-selected_date_str = game_date.strftime('%Y-%m-%d')
+# サイドバーにはメニューのみを配置（試合設定は削除）
+page = st.sidebar.radio(
+    "メニュー", 
+    [" 📝 試合データ入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正"]
+)
 
-# --- 2. グラウンド ---
-url_ground = st.query_params.get("ground", GROUND_LIST[0])
-selected_ground_base = st.sidebar.selectbox("グラウンド", GROUND_LIST, index=safe_index(GROUND_LIST, url_ground), key="app_ground", on_change=sync_sidebar_state)
-ground_name = st.sidebar.text_input("グラウンド名入力", value="グラウンド") if selected_ground_base == "その他" else selected_ground_base
+# ==========================================
+# 💻 メイン画面の表示制御
+# ==========================================
+if page == " 📝 試合データ入力":
+    
+    st.markdown("### 📝 試合データ入力")
+    
+    # 🌟 試合設定をメイン画面上部にプルダウン(横並び3列)で配置
+    with st.container(border=True):
+        st.markdown("##### ⚙️ 試合設定")
+        c1, c2, c3 = st.columns(3)
+        
+        with c1:
+            # 1. 試合区分
+            url_match = st.query_params.get("match", OFFICIAL_GAME_TYPES[0])
+            match_options = OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
+            match_type = st.selectbox(
+                "試合区分", 
+                match_options, 
+                index=safe_index(match_options, url_match),
+                key="main_match_type"
+            )
+            
+            # 2. 攻守
+            order_list = ["先攻 (表)", "後攻 (裏)"]
+            url_order = st.query_params.get("order", order_list[0])
+            kagura_order = st.selectbox(
+                "攻守", 
+                order_list, 
+                index=safe_index(order_list, url_order),
+                key="main_kagura_order"
+            )
+            
+        with c2:
+            # 3. 試合日
+            url_date = st.query_params.get("date", datetime.date.today().strftime("%Y-%m-%d"))
+            try:
+                default_date = datetime.datetime.strptime(url_date, "%Y-%m-%d").date()
+            except ValueError:
+                default_date = datetime.date.today()
+            selected_date = st.date_input("試合日", value=default_date, key="main_selected_date")
+            selected_date_str = selected_date.strftime("%Y-%m-%d")
+            
+        with c3:
+            # 4. グラウンド
+            url_ground = st.query_params.get("ground", GROUND_LIST[0])
+            selected_ground = st.selectbox(
+                "グラウンド", 
+                GROUND_LIST, 
+                index=safe_index(GROUND_LIST, url_ground),
+                key="main_selected_ground"
+            )
+            ground_name = st.text_input("グラウンド名入力", value="その他グラウンド", key="main_custom_ground") if selected_ground == "その他" else selected_ground
+            
+            # 5. 相手チーム
+            url_opp = st.query_params.get("opp", OPPONENTS_LIST[0])
+            selected_opp = st.selectbox(
+                "相手チーム", 
+                OPPONENTS_LIST, 
+                index=safe_index(OPPONENTS_LIST, url_opp),
+                key="main_selected_opp"
+            )
+            opp_team = st.text_input("相手チーム名入力", value="相手チーム", key="main_custom_opp") if selected_opp == "その他" else selected_opp
 
-# --- 3. 相手チーム ---
-url_opp = st.query_params.get("opp", OPPONENTS_LIST[0])
-selected_opp = st.sidebar.selectbox("相手チーム", OPPONENTS_LIST, index=safe_index(OPPONENTS_LIST, url_opp), key="app_opp", on_change=sync_sidebar_state)
-opp_team = st.sidebar.text_input("相手名", value="相手チーム") if selected_opp == "その他" else selected_opp
+    st.write("") # 少し余白を空ける
 
-# --- 4. 攻守 ---
-order_list = ["先攻 (表)", "後攻 (裏)"]
-url_order = st.query_params.get("order", order_list[0])
-kagura_order = st.sidebar.radio("攻守", order_list, index=safe_index(order_list, url_order), horizontal=True, key="app_order", on_change=sync_sidebar_state)
+    # 🌟 画面上部で打撃と投手を切り替えるタブ
+    tab_batting, tab_pitching = st.tabs([" 🏠 打撃成績入力", " 🔥 投手成績入力"])
+    
+    with tab_batting:
+        batting.show_batting_page(
+            df_batting, df_pitching, 
+            selected_date_str, match_type, ground_name, opp_team, kagura_order
+        )
+        
+    with tab_pitching:
+        pitching.show_pitching_page(
+            df_batting, df_pitching, 
+            selected_date_str, match_type, ground_name, opp_team, kagura_order
+        )
 
-# --- ページ切り替え ---
-page = st.sidebar.radio("表示", [" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正"])
-
-# --- 画面表示 ---
-if page == " 🏠 打撃成績入力":
-    batting.show_batting_page(
-        df_batting, df_pitching, 
-        selected_date_str, match_type, ground_name, opp_team, kagura_order,      
-    )
-elif page == " 🔥 投手成績入力":
-    pitching.show_pitching_page(
-        df_batting, df_pitching,
-        selected_date_str, match_type, ground_name, opp_team, kagura_order,    
-    )
 elif page == " 🏆 チーム成績":
     team_stats.show_team_stats(df_batting, df_pitching)
+
 elif page == " 📊 個人成績":
     personal_stats.show_personal_stats(df_batting, df_pitching)
+
 elif page == " 📈 データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
+
 elif page == " 🔧 データ修正":
     edit_data.show_edit_page(df_batting, df_pitching)
