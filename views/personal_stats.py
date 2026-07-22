@@ -237,7 +237,9 @@ def show_personal_stats(df_batting, df_pitching):
                     "is_hr": "本塁打",
                     "is_bb": "四死球",
                     "is_so": "三振" 
-                }).sort_values("OPS", ascending=False)
+                }).sort_values("OPS", ascending=False).reset_index(drop=True)
+                
+                disp.insert(0, "順位", range(1, len(disp) + 1))
                 
                 for col in ["打率", "OPS", "長打率", "出塁率", "三振率", "盗塁成功率", "BB/K", "IsoP", "IsoD"]:
                     disp[col] = disp[col].map(lambda x: f"{x:.3f}")
@@ -245,10 +247,11 @@ def show_personal_stats(df_batting, df_pitching):
                 st.caption("💡 ヒント: 列名（OPS、長打率、IsoP など）にマウスカーソルを合わせる（タップする）と、指標の解説が表示されます。")
 
                 st.dataframe(
-                    disp[["選手名", "打率", "OPS", "長打率", "出塁率", "IsoP", "IsoD", "打数", "安打", "本塁打", "打点", "四死球", "三振", "BB/K", "三振率", "盗塁", "盗塁成功率"]], 
+                    disp[["順位", "選手名", "打率", "OPS", "長打率", "出塁率", "IsoP", "IsoD", "打数", "安打", "本塁打", "打点", "四死球", "三振", "BB/K", "三振率", "盗塁", "盗塁成功率"]], 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
+                        "順位": st.column_config.TextColumn("順位", help="ランキング順位"),
                         "OPS": st.column_config.TextColumn("OPS", help="【OPS (On-base Plus Slugging)】\n出塁率と長打率を足した総合的な打撃指標です。\n得点との相関が非常に高く、0.800以上で優秀、1.000を超えると球界を代表する強打者とされます。"),
                         "長打率": st.column_config.TextColumn("長打率", help="【長打率 (SLG)】\n1打数あたりに平均して何塁打を稼げるかを示す指標です。"),
                         "出塁率": st.column_config.TextColumn("出塁率", help="【出塁率 (OBP)】\n打率に四死球を含めた「アウトにならずに出塁する確率」です。"),
@@ -270,9 +273,14 @@ def show_personal_stats(df_batting, df_pitching):
 
                 disp_p = stats_p[["選手名", "防御率", "is_win", "is_lose", "投球回", "TotalSO", "total_bb", "自責点"]].copy()
                 disp_p.columns = ["選手名", "防御率", "勝", "敗", "投球回", "奪三振", "四死球", "自責点"]
-                disp_p = disp_p.sort_values("防御率")
+                disp_p = disp_p.sort_values("防御率").reset_index(drop=True)
+                
+                disp_p.insert(0, "順位", range(1, len(disp_p) + 1))
+                
                 disp_p["防御率"] = disp_p["防御率"].map(lambda x: f"{x:.2f}")
-                st.dataframe(disp_p, use_container_width=True, hide_index=True)
+                st.dataframe(disp_p, use_container_width=True, hide_index=True, column_config={
+                    "順位": st.column_config.TextColumn("順位", help="ランキング順位")
+                })
             else: st.info("データなし")
 
         with st_fld:
@@ -300,7 +308,6 @@ def show_personal_stats(df_batting, df_pitching):
 
                     fld_expanded["is_error"] = fld_expanded["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
 
-                    # 修正: プレイ単位(Original_Idx)と選手・ポジション単位でユニーク化
                     group_keys = ["Original_Idx", "FielderName", "FielderPos"]
 
                     fld_unique = fld_expanded.groupby(group_keys).agg(
@@ -321,14 +328,18 @@ def show_personal_stats(df_batting, df_pitching):
                     stats_f["SortKey"] = stats_f["FielderPos"].apply(
                         lambda x: pos_order.index(x) if x in pos_order else 99
                     )
-                    stats_f = stats_f.sort_values(["SortKey", "守備機会"], ascending=[True, False])
+                    stats_f = stats_f.sort_values(["SortKey", "守備機会"], ascending=[True, False]).reset_index(drop=True)
                     
                     disp_df = stats_f[["FielderPos", "FielderName", "守備機会", "失策数", "守備率"]].copy()
                     disp_df.columns = ["守備位置", "選手名", "守備機会", "失策", "守備率"]
                     disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
-                    disp_df = disp_df[disp_df["選手名"] != ""]
+                    disp_df = disp_df[disp_df["選手名"] != ""].reset_index(drop=True)
                     
-                    st.dataframe(disp_df, use_container_width=True, hide_index=True)
+                    disp_df.insert(0, "順位", range(1, len(disp_df) + 1))
+                    
+                    st.dataframe(disp_df, use_container_width=True, hide_index=True, column_config={
+                        "順位": st.column_config.TextColumn("順位", help="ランキング順位")
+                    })
                 else:
                     st.info("守備記録なし")
             else:
@@ -396,14 +407,18 @@ def show_personal_stats(df_batting, df_pitching):
                             game_stats["その他参加率"] = (game_stats["その他参加率"] * 100).map("{:.1f}%".format)
                             game_stats["全体参加率"] = (game_stats["全体参加率"] * 100).map("{:.1f}%".format)
 
-                            game_stats = game_stats.sort_values(by=["全試合参加数", "公式戦参加数"], ascending=[False, False])
+                            game_stats = game_stats.sort_values(by=["全試合参加数", "公式戦参加数"], ascending=[False, False]).reset_index(drop=True)
                             
                             disp_game = game_stats[["選手名", "全試合参加数", "全体参加率", "公式戦参加数", "公式戦参加率", "練習試合参加数", "練習試合参加率", "その他参加数", "その他参加率"]]
                             disp_game = disp_game.rename(columns={"その他参加数": "その他(リーグ等)数", "その他参加率": "その他参加率"})
+                            
+                            disp_game.insert(0, "順位", range(1, len(disp_game) + 1))
 
                             st.markdown(f"**対象期間のチーム総試合数**: 全 {total_games} 試合 (公式戦: {official_games} / 練習試合: {practice_games} / その他: {other_games})")
                             st.caption("※ チームの全試合（公式戦・練習試合・その他リーグ戦等）を合算・分類して表示しています。")
-                            st.dataframe(disp_game, use_container_width=True, hide_index=True)
+                            st.dataframe(disp_game, use_container_width=True, hide_index=True, column_config={
+                                "順位": st.column_config.TextColumn("順位", help="ランキング順位")
+                            })
                         else:
                             st.info("参加記録がありません")
                     else:
@@ -557,7 +572,6 @@ def show_personal_stats(df_batting, df_pitching):
                         if not my_f.empty:
                             my_f["is_error"] = my_f["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
 
-                            # 修正: 総合タブと同様に、プレイ単位(Original_Idx)と選手・ポジション単位でユニーク化して正確な守備機会を抽出
                             group_keys = ["Original_Idx", "FielderName", "FielderPos"]
 
                             fld_unique = my_f.groupby(group_keys).agg(
@@ -950,22 +964,29 @@ def show_personal_stats(df_batting, df_pitching):
                     merged_saber["投手_防御率"] = merged_saber["投手_防御率"].fillna(99.0)
 
                 # ==========================================
-                # 6. 部門別貢献度 ＆ 総合MVPスコアの算出（バランス調整版）
+                # 6. 部門別貢献度 ＆ 総合MVPスコアの算出（バランス調整＆投手純粋評価版）
                 # ==========================================
                 def calc_batting_score(row):
-                    # OPS(率)の比重を少し下げ、RC(量・総貢献)の価値を高める
                     return (row.get("OPS", 0) * 50.0) + (row.get("RC", 0) * 3.0) + (row.get("盗塁", 0) * 1.0)
 
                 def calc_pitching_score(row):
-                    p_wins = row.get("投手_勝利", 0)
                     p_inn = row.get("投球回", 0)
                     p_era = row.get("投手_防御率", 99.0)
                     p_so = row.get("投手_奪三振", 0)
                     
-                    # 勝利と投球回のインフレを抑え、「奪三振」を加味してアウトの質を評価
-                    base_pts = (p_wins * 10.0) + (p_inn * 1.5) + (p_so * 0.5)
-                    era_bonus = max(0, 9.0 - p_era) * 2.0 if p_inn > 0 else 0
-                    return base_pts + era_bonus
+                    if p_inn <= 0 or p_era >= 90:
+                        return 0.0
+                    
+                    inn_pts = p_inn * 1.0
+                    so_pts = p_so * 0.3
+                    
+                    if p_era <= 3.50:
+                        era_pts = (3.50 - p_era) * p_inn * 0.5
+                    else:
+                        era_pts = (3.50 - p_era) * p_inn * 0.2
+                    
+                    total_score = inn_pts + so_pts + era_pts
+                    return max(0.0, total_score)
 
                 def calc_defense_score(row):
                     f_opp = row.get("守備機会", 0)
@@ -973,7 +994,6 @@ def show_personal_stats(df_batting, df_pitching):
                     f_pct = row.get("守備率", 1.0)
                     catcher_opp = row.get("捕手守備機会", 0)
                     
-                    # 守備機会単体による過剰なポイント増を防ぎつつ、捕手補正(2.5倍)は維持
                     non_catcher_opp = max(0, f_opp - catcher_opp)
                     defense_pts = (non_catcher_opp * 1.0 + catcher_opp * 2.5) * f_pct - (f_err * 2.0)
                     return max(0.0, defense_pts)
@@ -1004,12 +1024,9 @@ def show_personal_stats(df_batting, df_pitching):
                 # --- サブタブ（部門別の可視化） ---
                 sub_tab_mvp, sub_tab_bat, sub_tab_pit, sub_tab_fld = st.tabs(["🏆 総合MVP", "⚔️ 打撃部門", "🛡️ 投手部門", "🧤 守備部門"])
 
-                # 最低試合数スライダー（通算はデフォルト5試合、単年はデフォルト2試合）
+                # 最低試合数スライダー（すべてデフォルト2試合に設定）
                 max_games_val = int(merged_saber["試合参加数"].max()) if not merged_saber.empty else 1
-                if str(target_saber_year).strip() == "通算":
-                    target_default = 5
-                else:
-                    target_default = 2
+                target_default = 2
                     
                 default_games_val = min(target_default, max_games_val)
                 
@@ -1022,13 +1039,14 @@ def show_personal_stats(df_batting, df_pitching):
                     with sub_tab_mvp:
                         st.markdown(f"##### 🏆 総合MVPランキング ({target_saber_year})")
                         df_mvp_sort = saber_filtered.sort_values("MVP_Score", ascending=False).reset_index(drop=True)
+                        df_mvp_sort.insert(0, "順位", range(1, len(df_mvp_sort) + 1))
                         
                         if has_defense_data:
-                            disp_cols = ["選手名", "MVP_Score", "試合参加数", "Batting_Score", "Pitching_Score", "Defense_Score", "RC", "OPS", "投手_勝利", "投球回", "守備率"]
-                            col_names = ["選手名", "総合貢献度点数", "試合数", "打撃P", "投手P", "守備P", "RC", "OPS", "勝利", "投球回", "守備率"]
+                            disp_cols = ["順位", "選手名", "MVP_Score", "試合参加数", "Batting_Score", "Pitching_Score", "Defense_Score", "RC", "OPS", "投手_勝利", "投球回", "守備率"]
+                            col_names = ["順位", "選手名", "総合貢献度点数", "試合数", "打撃P", "投手P", "守備P", "RC", "OPS", "勝利", "投球回", "守備率"]
                         else:
-                            disp_cols = ["選手名", "MVP_Score", "試合参加数", "Batting_Score", "Pitching_Score", "RC", "OPS", "投手_勝利", "投球回"]
-                            col_names = ["選手名", "総合貢献度点数", "試合数", "打撃P", "投手P", "RC", "OPS", "勝利", "投球回"]
+                            disp_cols = ["順位", "選手名", "MVP_Score", "試合参加数", "Batting_Score", "Pitching_Score", "RC", "OPS", "投手_勝利", "投球回"]
+                            col_names = ["順位", "選手名", "総合貢献度点数", "試合数", "打撃P", "投手P", "RC", "OPS", "勝利", "投球回"]
                             st.info("💡 ※この年度（または期間）は守備機会の記録がないため、打撃・投手・試合指標のみで総合MVPを算出しています。")
 
                         disp_mvp = df_mvp_sort[disp_cols].copy()
@@ -1045,9 +1063,10 @@ def show_personal_stats(df_batting, df_pitching):
                         disp_mvp["投球回"] = disp_mvp["投球回"].map(lambda x: f"{x:.1f}")
 
                         column_config_dict = {
+                            "順位": st.column_config.TextColumn("順位", help="ランキング順位"),
                             "総合貢献度点数": st.column_config.TextColumn("総合貢献度点数", help="打撃・投手・守備・試合参加の全貢献度を合算した総合得点です。"),
                             "打撃P": st.column_config.TextColumn("打撃P", help="打撃による獲得ポイント（OPS/RC等）"),
-                            "投手P": st.column_config.TextColumn("投手P", help="投手による獲得ポイント（勝利/イニング/三振/防御率等）"),
+                            "投手P": st.column_config.TextColumn("投手P", help="投手による獲得ポイント（防御率/イニング/三振）※勝利数は除外して実力を評価しています。"),
                         }
                         if has_defense_data:
                             column_config_dict["守備P"] = st.column_config.TextColumn("守備P", help="守備による獲得ポイント（守備機会×守備率。捕手は高係数補正あり）")
@@ -1058,10 +1077,10 @@ def show_personal_stats(df_batting, df_pitching):
                     with sub_tab_bat:
                         st.markdown(f"##### ⚔️ 打撃部門・貢献度ランキング ({target_saber_year})")
                         df_bat_sort = saber_filtered.sort_values("Batting_Score", ascending=False).reset_index(drop=True)
+                        df_bat_sort.insert(0, "順位", range(1, len(df_bat_sort) + 1))
                         
-                        # ※ XRを除外し、RC中心の構成にしています
-                        disp_bat = df_bat_sort[["選手名", "Batting_Score", "RC", "OPS", "打率", "is_ab", "is_hit", "is_hr", "打点", "盗塁"]].copy()
-                        disp_bat.columns = ["選手名", "打撃貢献点数", "RC (得点創出)", "OPS", "打率", "打数", "安打", "本塁打", "打点", "盗塁"]
+                        disp_bat = df_bat_sort[["順位", "選手名", "Batting_Score", "RC", "OPS", "打率", "is_ab", "is_hit", "is_hr", "打点", "盗塁"]].copy()
+                        disp_bat.columns = ["順位", "選手名", "打撃貢献点数", "RC (得点創出)", "OPS", "打率", "打数", "安打", "本塁打", "打点", "盗塁"]
                         
                         disp_bat["打撃貢献点数"] = disp_bat["打撃貢献点数"].map(lambda x: f"{x:.1f}")
                         disp_bat["RC (得点創出)"] = disp_bat["RC (得点創出)"].map(lambda x: f"{x:.2f}")
@@ -1074,9 +1093,10 @@ def show_personal_stats(df_batting, df_pitching):
                     with sub_tab_pit:
                         st.markdown(f"##### 🛡️ 投手部門・貢献度ランキング ({target_saber_year})")
                         df_pit_sort = saber_filtered.sort_values("Pitching_Score", ascending=False).reset_index(drop=True)
+                        df_pit_sort.insert(0, "順位", range(1, len(df_pit_sort) + 1))
                         
-                        disp_pit = df_pit_sort[["選手名", "Pitching_Score", "投手_勝利", "投球回", "投手_防御率", "投手_奪三振"]].copy()
-                        disp_pit.columns = ["選手名", "投手貢献点数", "勝利", "投球回", "防御率", "奪三振"]
+                        disp_pit = df_pit_sort[["順位", "選手名", "Pitching_Score", "投手_勝利", "投球回", "投手_防御率", "投手_奪三振"]].copy()
+                        disp_pit.columns = ["順位", "選手名", "投手貢献点数", "勝利", "投球回", "防御率", "奪三振"]
                         
                         disp_pit["投手貢献点数"] = disp_pit["投手貢献点数"].map(lambda x: f"{x:.1f}")
                         disp_pit["投球回"] = disp_pit["投球回"].map(lambda x: f"{x:.1f}")
@@ -1092,9 +1112,10 @@ def show_personal_stats(df_batting, df_pitching):
                         
                         if has_fld_players:
                             df_fld_sort = saber_filtered[saber_filtered["守備機会"] > 0].sort_values("Defense_Score", ascending=False).reset_index(drop=True)
+                            df_fld_sort.insert(0, "順位", range(1, len(df_fld_sort) + 1))
                             
-                            disp_fld = df_fld_sort[["選手名", "Defense_Score", "守備機会", "捕手守備機会", "失策数", "守備率"]].copy()
-                            disp_fld.columns = ["選手名", "守備貢献点数", "総守備機会", "うち捕手機会", "失策", "守備率"]
+                            disp_fld = df_fld_sort[["順位", "選手名", "Defense_Score", "守備機会", "捕手守備機会", "失策数", "守備率"]].copy()
+                            disp_fld.columns = ["順位", "選手名", "守備貢献点数", "総守備機会", "うち捕手機会", "失策", "守備率"]
                             
                             disp_fld["守備貢献点数"] = disp_fld["守備貢献点数"].map(lambda x: f"{x:.1f}")
                             disp_fld["守備率"] = disp_fld["守備率"].map(lambda x: f"{x:.3f}")
@@ -1112,46 +1133,36 @@ def show_personal_stats(df_batting, df_pitching):
 
                         #### ⚔️ 1. 打撃系指標（チームにどれだけ得点をもたらしたか！）
                         * **OPS (On-base Plus Slugging)**
-                          * **算出式:** $OPS = 出塁率 + 長打率$
+                          * **算出式:** OPS = 出塁率 + 長打率
+                          * **概念:** 「出塁能力 ＋ 長打力」
                           * **解説:** 打者の総合的な攻撃力を表す最もポピュラーな指標！0.8超えで優秀、1.0超えなら超スター選手です✨
                         * **RC (Runs Created / 得点創出)**
-                          * **算出式:** $RC = \frac{(安打 + 四死球) \times 塁打}{打数 + 四死球}$
-                          * **解説:** 安打や四球、長打の組み合わせから「チームに何点分の得点を生み出したか」の**総量（累積）**を推計します！チーム全員のRCを足すと、チームの総得点にほぼ一致するロマンあふれる指標です🔥
+                          * **算出式:** RC = (安打 + 四球) × 塁打 ÷ (打数 + 四球)
+                          * **概念:** 「出塁能力 × 進塁能力 ÷ 出塁機会」
+                          * **解説:** 安打や四球、長打の組み合わせから「チームに何点分の得点を生み出したか」の総量を推計します！チーム全員のRCを足すと、チームの総得点にほぼ一致するロマンあふれる指標です🔥
                         * **打撃貢献点数 (Batting_Score)**
-                          * **算出式:** $Batting\_Score = (OPS \times 50.0) + (RC \times 3.0) + (盗塁 \times 1.0)$
-                          * **算出の内訳:**
-                            * **OPS評価:** （OPS ✕ 50.0ポイント）で打撃の質（確率）を評価！
-                            * **RC評価:** （得点創出数 ✕ 3.0ポイント）でチームに稼いだ得点量を評価！
-                            * **盗塁評価:** （盗塁数 ✕ 1.0ポイント）で機動力の貢献をプラス！
+                          * **算出式:** Batting_Score = (OPS × 50.0) + (RC × 3.0) + (盗塁 × 1.0)
                           * **解説:** 率の高さと、実際に試合に出て稼いだ得点総量（RC）のバランスを重視したスコアです！
 
                         #### 🛡️ 2. 投手系指標（マウンドでの絶対的守護神！）
                         * **投手貢献点数 (Pitching_Score)**
-                          * **算出式:** $Pitching\_Score = (勝利 \times 10.0) + (投球回 \times 1.5) + (奪三振 \times 0.5) + (\max(0, 9.0 - 防御率) \times 2.0)$
-                          * **算出の内訳:**
-                            * **勝利評価:** （勝利数 ✕ 10.0ポイント）でチームを勝利に導いた実績を評価！
-                            * **イニング評価:** （投球回 ✕ 1.5ポイント）で長くマウンドを守ったイーターとしての貢献を評価！
-                            * **奪三振評価:** （奪三振数 ✕ 0.5ポイント）でアウトを奪う圧倒的な球威を評価！（※インフレ防止と純粋な空振り奪取能力のスパイス）
-                            * **防御率ボーナス:** （9.0 - 防御率 ✕ 2.0ポイント）※防御率が9.0より良い場合のみプラス！
-                          * **解説:** チームの勝利への直結度や、マウンドでのタフさをトータルで評価します🔥
+                          * **算出式:** 
+                            * 防御率が3.50以下（優秀）の場合: `投球回 + (奪三振 × 0.3) + ((3.50 - 防御率) × 投球回 × 0.5)`
+                            * 防御率が3.50より悪い場合: `投球回 + (奪三振 × 0.3) + ((3.50 - 防御率) × 投球回 × 0.2)`
+                          * **概念:** 「イニング消化 ＋ 球威 ＋ 防御率ボーナス(ペナルティ・係数付き)」
+                          * **解説:** 基準の防御率 **3.50** に対し、良ければ **0.5倍** の係数で強力プラス！悪くても **0.2倍** の緩やかなマイナスにとどめ、長いイニングを支えたタフさをしっかり評価するエースモデルです🔥 *(※勝敗は運や打線の影響を受けるため除外)*
 
                         #### 🧤 3. 守備系指標（鉄壁の守り & キャッチャー補正！）
                         * **守備貢献点数 (Defense_Score)**
-                          * **算出式:** $Defense\_Score = ((通常守備機会 \times 1.0 + 捕手守備機会 \times 2.5) \times 守備率) - (失策数 \times 2.0)$
-                          * **算出の内訳:**
-                            * **通常守備機会:** （機会数 ✕ 1.0ポイント ✕ 守備率）で打球処理の貢献を評価！
-                            * **捕手補正:** （捕手機会 ✕ 2.5ポイント ✕ 守備率）で、負担の大きいキャッチャーの守備を高く評価！
-                            * **失策ペナルティ:** （失策数 ✕ 2.0ポイントのマイナス）でミスのリスクを反映！
-                          * **解説:** 守備機会の多さと確実性を掛け合わせ、エラーで減点する本格的な守備評価モデルです🛡️✨
+                          * **算出式:** Defense_Score = ((通常守備機会 × 1.0 + 捕手守備機会 × 2.5) × 守備率) - (失策数 × 2.0)
+                          * **概念:** 「(通常守備 ＋ キャッチャー高補正) × 確実性 － ミス減点」
+                          * **解説:** 守備機会の多さと確実性を掛け合わせ、負担の大きいキャッチャーには2.5倍の高いウェイトをかけています🛡️✨
                           *(※守備機会がある年度のみ算入されます)*
 
                         #### 🏆 4. 総合MVPスコア（チームの真のMVPを決定！）
-                        * **算出式:** $MVP\_Score = Batting\_Score + Pitching\_Score + Defense_Score + (試合参加数 \times 1.0)$
+                        * **算出式:** MVP_Score = Batting_Score + Pitching_Score + Defense_Score + (試合参加数 × 1.0)
                           *(※守備機会が誰もいない年は Defense_Score を除外して算出)*
-                        * **算出の内訳:**
-                          * **打撃・投手・守備の各貢献点数**の合算に加え、
-                          * **試合参加ボーナス:** （試合参加数 ✕ 1.0ポイント）で、チームへのコミットメント（皆勤賞的な泥臭い貢献）をプラス！
-                        * **解説:** すべての部門とチームへの参加度を公平にミックスした、栄誉ある総合得点です🎉
+                        * **解説:** 打撃・投手・守備の各貢献度に加え、チームへのコミットメント（試合参加数）をプラスした栄誉ある総合得点です🎉
                         """)
                 else:
                     st.info("指定した最低試合数以上の選手がいません。スライダーの値を下げてください。")
