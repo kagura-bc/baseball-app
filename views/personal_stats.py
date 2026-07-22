@@ -827,7 +827,7 @@ def show_personal_stats(df_batting, df_pitching):
     # ----------------------------------------------------
     with t_saber:
         st.markdown("#### 📈 総合貢献度・セイバーメトリクス指標")
-        st.caption("※ 打撃・投手・守備（捕手補正あり）・試合参加数を総合的に評価したチーム貢献度ランキングです。年度ごとに切り替えて確認できます。")
+        st.caption("※ 打撃・投手・守備・試合参加数を総合的に評価したチーム貢献度ランキングです。年度ごとに切り替えて確認できます。")
 
         if not df_batting.empty or not df_pitching.empty:
             # --- 年度リストの取得 ---
