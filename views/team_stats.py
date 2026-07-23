@@ -480,14 +480,27 @@ def show_team_stats(df_batting, df_pitching):
                                         
                                         disp_text = f"{p_dir}{res_short}"
                                         
-                                        if rbi_val > 0:
-                                            history_texts.append(f"🔴{count}({disp_text}･{rbi_val}打点)")
+                                        # 🌟 安打系（単打・二塁打・三塁打・本塁打・安打）かどうかの判定に基づく色分け
+                                        is_hit = res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
+                                        
+                                        if is_hit:
+                                            if rbi_val > 0:
+                                                # タイムリー（赤文字・🔴マーク削除）
+                                                item_str = f"<span style='color: #dc2626; font-weight: bold;'>{count}({disp_text}･{rbi_val}打点)</span>"
+                                            else:
+                                                # ただの安打・長打（青文字）
+                                                item_str = f"<span style='color: #2563eb; font-weight: bold;'>{count}({disp_text})</span>"
                                         else:
-                                            history_texts.append(f"{count}({disp_text})")
+                                            # 凡退や四球など（通常黒文字）
+                                            item_str = f"{count}({disp_text})"
+                                            
+                                        history_texts.append(item_str)
                             
                             extra = []
                             if sb > 0: extra.append(f"盗{sb}")
-                            if run > 0: extra.append(f"得{run}")
+                            if run > 0: 
+                                # 🌟 得点の表記を緑色（#16a34a）などの別の色に変更
+                                extra.append(f"<span style='color: #16a34a; font-weight: bold;'>得{run}</span>")
                             extra_str = f" [{', '.join(extra)}]" if extra else ""
                             
                             summary_str = " ".join(history_texts) + extra_str
@@ -509,7 +522,35 @@ def show_team_stats(df_batting, df_pitching):
                         df_summary["打順"] = temp_orders
                         df_summary = df_summary.sort_values("打順")
                         df_summary["打順"] = df_summary["打順"].astype(int).astype(str)
-                        st.table(df_summary.set_index("打順")[["守備", "選手名", "打席", "成績詳細"]])
+                        
+                        # 🌟 インデントによるコードブロック化を防ぐため、文字列を括弧で繋いで空白を排除
+                        table_html = (
+                            "<div style='overflow-x: auto;'>"
+                            "<table style='border-collapse: collapse; border: 2px solid #000000; width: 100%; margin-bottom: 20px; font-family: sans-serif; background-color: white;'>"
+                            "<thead><tr style='background-color: #e0e0e0;'>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>打順</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>守備</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>選手名</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>打席</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: left; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>成績詳細</th>"
+                            "</tr></thead><tbody>"
+                        )
+                        
+                        for _, row in df_summary.iterrows():
+                            table_html += (
+                                "<tr>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold;'><b>{row['打順']}</b></td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['守備']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['選手名']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['打席']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: left; color: #000000;'>{row['成績詳細']}</td>"
+                                "</tr>"
+                            )
+                            
+                        table_html += "</tbody></table></div>"
+                        
+                        # 🌟 unsafe_allow_html=True を指定してHTMLとして描画
+                        st.markdown(table_html, unsafe_allow_html=True)
                     else:
                         st.info("出場選手の記録がありません")
 
@@ -538,7 +579,7 @@ def show_team_stats(df_batting, df_pitching):
                         total_hits = 0; total_so = 0; total_bb = 0
                         for _, row in group.iterrows():
                             raw_h = int(row.get("被安打", 0)) if pd.notna(row.get("被安打", 0)) else 0
-                            raw_so = int(row.get("奪三振", 0)) if pd.notna(row.get("夺三振", 0)) else 0
+                            raw_so = int(row.get("奪三振", 0)) if pd.notna(row.get("奪三振", 0)) else 0
                             raw_bb = int(row.get("与四球", 0)) if pd.notna(row.get("与四球", 0)) else 0
                             res = str(row.get("結果", ""))
                             r_type = str(row.get("種別", ""))
@@ -602,6 +643,10 @@ def show_team_stats(df_batting, df_pitching):
                         for inn in [f"{i}回" for i in range(1, 10)] + ["延長"]:
                             inn_df = history_df[history_df["イニング"].astype(str).str.startswith(inn)]
                             if not inn_df.empty:
+                                # 🌟 scroll-margin-top を指定して、ジャンプ時に【2回】が隠れないように余白を確保
+                                inn_id = inn.replace("回", "")
+                                st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
+                                
                                 st.write(f"**【{inn}】**")
                                 display_items = []
                                 for _, row in inn_df.iterrows():

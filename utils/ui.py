@@ -28,7 +28,6 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     
     # 9回まで計算
     for i in range(1, 10):
-        # ★ 「1回」「1回表」「1回裏」のどれで記録されていてもスコアボードに抽出する
         target_innings = [f"{i}回", f"{i}回表", f"{i}回裏"]
         
         inn_bat_data = b_df[b_df["イニング"].isin(target_innings)]
@@ -82,13 +81,60 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         H = [int(opp_h), int(k_h)]
         E = [int(opp_e), int(k_e)]
 
-    score_dict = {"チーム": names}
+    # 🌟 イニング番号にアンカーリンク（#inning-X）を付与したHTMLテーブルでレンダリング
+    html_content = """
+    <style>
+    .clickable-scoreboard {
+        border-collapse: collapse !important;
+        border: 2px solid #000000 !important;
+        width: 100%;
+        margin-bottom: 20px;
+        text-align: center;
+        font-family: sans-serif;
+    }
+    .clickable-scoreboard th, .clickable-scoreboard td {
+        border: 1px solid #444444 !important;
+        font-size: 20px !important;
+        padding: 10px !important;
+        color: #000000 !important;
+        font-weight: bold !important;
+    }
+    .clickable-scoreboard th {
+        background-color: #e0e0e0 !important;
+        border-bottom: 2px solid #000000 !important;
+    }
+    .clickable-scoreboard th a {
+        color: #1e3a8a !important;
+        text-decoration: none !important;
+    }
+    .clickable-scoreboard th a:hover {
+        text-decoration: underline !important;
+    }
+    </style>
+    <table class="clickable-scoreboard">
+        <thead>
+            <tr>
+                <th>チーム</th>
+    """
+    for i in range(1, 10):
+        html_content += f"<th><a href='#inning-{i}' title='{i}回詳細へジャンプ'>{i}</a></th>"
+    html_content += "<th>R</th><th>H</th><th>E</th></tr></thead><tbody>"
+
+    # 1行目（先攻または相手チーム）
+    html_content += f"<tr><td>{names[0]}</td>"
     for i in range(9):
-        score_dict[str(i+1)] = [scores[0][i], scores[1][i]]
-    
-    score_dict.update({"R": R, "H": H, "E": E})
-    
-    st.table(pd.DataFrame(score_dict).set_index("チーム"))
+        html_content += f"<td>{scores[0][i]}</td>"
+    html_content += f"<td>{R[0]}</td><td>{H[0]}</td><td>{E[0]}</td></tr>"
+
+    # 2行目（後攻または自チーム）
+    html_content += f"<tr><td>{names[1]}</td>"
+    for i in range(9):
+        html_content += f"<td>{scores[1][i]}</td>"
+    html_content += f"<td>{R[1]}</td><td>{H[1]}</td><td>{E[1]}</td></tr>"
+
+    html_content += "</tbody></table>"
+
+    st.markdown(html_content, unsafe_allow_html=True)
 
 def show_homerun_effect():
     st.markdown("""
