@@ -790,7 +790,7 @@ def show_analysis_page(df_batting, df_pitching):
 
         # --- サブタブ2: チーム全打者対象の機械的オーダー算出 ---
         with sub_ideal2:
-            st.markdown("### 🤖 チーム全打者の統計データに基づく推奨オーダー（投手最優先 ＆ 守備位置考慮版）")
+            st.markdown("### 🤖 チーム全打者の統計データに基づく推奨オーダー（投手も含めたベストオーダー選出）")
 
             raw_hidden = st.secrets.get("HIDDEN_PLAYERS_TOTAL", [])
             fixed_list = st.secrets.get("FIXED_EXCLUDE_LIST", [])
@@ -915,7 +915,7 @@ def show_analysis_page(df_batting, df_pitching):
                             - candidates["K_rate"] * 0.6
                         )
 
-                        # 🌟 1. 通算の「投手部門・貢献度ランキング」に基づいてエースを特定
+                        # 🌟 1. 通算の「投手部門・貢献度ランキング」に基づいてエースを特定 (candidates内の選手に限定)
                         ace_player = None
                         if not df_p_total_base.empty:
                             df_p_calc = df_p_total_base[df_p_total_base["選手名"] != "チーム記録"].copy()
@@ -952,16 +952,21 @@ def show_analysis_page(df_batting, df_pitching):
                                     return max(0.0, inn_pts + so_pts + era_pts)
 
                                 p_agg["Pitching_Score"] = p_agg.apply(calc_pitching_score, axis=1)
-                                p_sorted = p_agg.sort_values(by="Pitching_Score", ascending=False)
+                                
+                                # candidates（規定打席到達者）に存在する選手のみから投手を決定
+                                valid_candidates = set(candidates["選手名"])
+                                p_agg_filtered = p_agg[p_agg["選手名"].isin(valid_candidates)]
+                                
+                                p_sorted = p_agg_filtered.sort_values(by="Pitching_Score", ascending=False)
                                 if not p_sorted.empty and p_sorted.iloc[0]["Pitching_Score"] > 0:
                                     ace_player = p_sorted.iloc[0]["選手名"]
+                                elif not p_sorted.empty and p_sorted["outs"].max() > 0:
+                                    p_sorted_by_outs = p_agg_filtered.sort_values(by="outs", ascending=False)
+                                    ace_player = p_sorted_by_outs.iloc[0]["選手名"]
 
                         used_players = []
                         lineup = {}
                         assigned_positions = {}
-
-                        if ace_player:
-                            assigned_positions[ace_player] = "投"
 
                         def assign_player(order, sort_col, force_ace=False):
                             if force_ace and ace_player and ace_player not in used_players:
@@ -979,7 +984,7 @@ def show_analysis_page(df_batting, df_pitching):
                             else:
                                 lineup[order] = None
 
-                        # 打順は打撃成績に応じて決定（3 → 1 → 2 → 4 → 5 → 6 → 7 → 8 → 9番）
+                        # 🌟 打順は打撃成績に応じて決定（上位から順に評価し、投手が未選出の場合は最後に9番に配置）
                         assign_player(3, "Score_3")  # 3番
                         assign_player(1, "Score_1")  # 1番
                         assign_player(2, "Score_2")  # 2番
@@ -988,23 +993,28 @@ def show_analysis_page(df_batting, df_pitching):
                         assign_player(6, "Score_6")  # 6番
                         assign_player(7, "Score_7")  # 7番
                         assign_player(8, "Score_8")  # 8番
-                        assign_player(9, "Score_9", force_ace=True)  # 9番（未選出ならエースを強制配置）
+                        assign_player(9, "Score_9", force_ace=True)
 
                         # ==========================================
-                        # 残りの守備位置の自動推論と割り当て
+                        # 残りの守備位置の自動推論と割り当て (必ず9ポジションを使用)
                         # ==========================================
-                        valid_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右"]
+                        FIELD_POSITIONS = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                        available_positions = set(FIELD_POSITIONS)
+                        
+                        if ace_player:
+                            assigned_positions[ace_player] = "投"
+                            if "投" in available_positions:
+                                available_positions.remove("投")
+
                         other_used = [p for p in used_players if p != ace_player]
                         
-                        p_df = df_calc[df_calc["選手名"].isin(other_used) & df_calc["位置"].isin(valid_positions)] if "位置" in df_calc.columns else pd.DataFrame()
+                        p_df = df_calc[df_calc["選手名"].isin(other_used) & df_calc["位置"].isin(FIELD_POSITIONS)] if "位置" in df_calc.columns else pd.DataFrame()
                         
                         if not p_df.empty:
                             pos_counts = p_df.groupby(["選手名", "位置"]).size().reset_index(name="count")
                             pos_counts = pos_counts.sort_values("count", ascending=False)
                         else:
                             pos_counts = pd.DataFrame(columns=["選手名", "位置", "count"])
-                        
-                        available_positions = set(valid_positions)
                         
                         for _, row in pos_counts.iterrows():
                             player = row["選手名"]

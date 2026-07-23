@@ -142,6 +142,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
         else:
             lineup[order] = None
 
+    # 🌟 打順は打撃成績に応じて決定（上位から順に評価し、投手が未選出の場合は最後に9番に配置）
     assign_player(3, "Score_3")
     assign_player(1, "Score_1")
     assign_player(2, "Score_2")
