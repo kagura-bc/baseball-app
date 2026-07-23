@@ -844,7 +844,7 @@ def show_analysis_page(df_batting, df_pitching):
                         stats["SO"] = 0
 
                     max_ab = int(stats["AB"].max()) if not stats.empty else 0
-                    default_ab = min(15, max_ab)
+                    default_ab = min(30, max_ab)
                     min_ab = st.slider("対象とする最低打数", 0, max_ab, default_ab, key="analysis_tab4_min_ab_slider")
                     stats = stats[stats["AB"] >= min_ab]
 
