@@ -3,8 +3,8 @@ import datetime
 from config.settings import MY_TEAM, GROUND_LIST, OPPONENTS_LIST, OFFICIAL_GAME_TYPES
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
-# 各ページ（View）の読み込み
-from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
+# 各ページ（View）の読み込みに ideal_order を追加[cite: 1]
+from views import batting, pitching, team_stats, personal_stats, edit_data, analysis, ideal_order
 
 # 1. GitHub上の実際のファイル名 (logo-192.png) に合わせる
 ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/logo-192.png?v=3"
@@ -93,7 +93,7 @@ if page == " 📝 試合データ入力":
     
     st.markdown("### 📝 試合データ入力")
     
-    # 🌟 修正: st.container を st.expander に変更し、折りたたみ可能にしました
+    # 試合設定部分はそのまま維持[cite: 1]
     with st.expander("⚙️ 試合設定 (クリックで開閉)", expanded=True):
         c1, c2, c3 = st.columns(3)
         
@@ -152,7 +152,7 @@ if page == " 📝 試合データ入力":
     st.write("") # 少し余白を空ける
 
     # 🌟 修正: 画面上部で打撃・投手・データ修正を切り替えるタブ（3つに変更）
-    tab_batting, tab_pitching, tab_edit = st.tabs([" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🔧 データ修正"])
+    tab_batting, tab_pitching, tab_ideal, tab_edit = st.tabs([" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🎯 理想オーダー作成", " 🔧 データ修正"])
     
     with tab_batting:
         batting.show_batting_page(
@@ -165,6 +165,10 @@ if page == " 📝 試合データ入力":
             df_batting, df_pitching, 
             selected_date_str, match_type, ground_name, opp_team, kagura_order
         )
+
+    with tab_ideal:
+        # ★追加: 理想オーダー作成タブの中身
+        ideal_order.show_ideal_order_tab(df_batting)
         
     with tab_edit:
         # ★追加: データ修正タブの中身
