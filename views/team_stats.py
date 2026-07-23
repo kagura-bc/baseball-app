@@ -362,6 +362,9 @@ def show_team_stats(df_batting, df_pitching):
                     if not sb_bat.empty:
                         sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
 
+                # 🌟 スコアボード用トップアンカー
+                st.markdown("<div id='viewer-top' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
+
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
 
                 st.divider()
@@ -480,18 +483,14 @@ def show_team_stats(df_batting, df_pitching):
                                         
                                         disp_text = f"{p_dir}{res_short}"
                                         
-                                        # 🌟 安打系（単打・二塁打・三塁打・本塁打・安打）かどうかの判定に基づく色分け
                                         is_hit = res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
                                         
                                         if is_hit:
                                             if rbi_val > 0:
-                                                # タイムリー（赤文字・🔴マーク削除）
                                                 item_str = f"<span style='color: #dc2626; font-weight: bold;'>{count}({disp_text}･{rbi_val}打点)</span>"
                                             else:
-                                                # ただの安打・長打（青文字）
                                                 item_str = f"<span style='color: #2563eb; font-weight: bold;'>{count}({disp_text})</span>"
                                         else:
-                                            # 凡退や四球など（通常黒文字）
                                             item_str = f"{count}({disp_text})"
                                             
                                         history_texts.append(item_str)
@@ -499,7 +498,6 @@ def show_team_stats(df_batting, df_pitching):
                             extra = []
                             if sb > 0: extra.append(f"盗{sb}")
                             if run > 0: 
-                                # 🌟 得点の表記を緑色（#16a34a）などの別の色に変更
                                 extra.append(f"<span style='color: #16a34a; font-weight: bold;'>得{run}</span>")
                             extra_str = f" [{', '.join(extra)}]" if extra else ""
                             
@@ -523,7 +521,6 @@ def show_team_stats(df_batting, df_pitching):
                         df_summary = df_summary.sort_values("打順")
                         df_summary["打順"] = df_summary["打順"].astype(int).astype(str)
                         
-                        # 🌟 インデントによるコードブロック化を防ぐため、文字列を括弧で繋いで空白を排除
                         table_html = (
                             "<div style='overflow-x: auto;'>"
                             "<table style='border-collapse: collapse; border: 2px solid #000000; width: 100%; margin-bottom: 20px; font-family: sans-serif; background-color: white;'>"
@@ -548,8 +545,6 @@ def show_team_stats(df_batting, df_pitching):
                             )
                             
                         table_html += "</tbody></table></div>"
-                        
-                        # 🌟 unsafe_allow_html=True を指定してHTMLとして描画
                         st.markdown(table_html, unsafe_allow_html=True)
                     else:
                         st.info("出場選手の記録がありません")
@@ -635,6 +630,36 @@ def show_team_stats(df_batting, df_pitching):
                     st.write("")
                     st.markdown("##### 📊 全イニング 対戦詳細履歴（守備）")
                     
+                    # 🌟 画面右下に追従（フローティング）表示する「スコア画面に戻る」ボタン
+                    st.markdown(
+                        """
+                        <style>
+                        .floating-top-btn {
+                            position: fixed;
+                            bottom: 30px;
+                            right: 30px;
+                            z-index: 99999;
+                            background-color: #1e3a8a;
+                            color: white !important;
+                            padding: 12px 20px;
+                            border-radius: 30px;
+                            text-decoration: none !important;
+                            font-weight: bold;
+                            font-size: 15px;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                            transition: all 0.2s ease-in-out;
+                        }
+                        .floating-top-btn:hover {
+                            background-color: #2563eb;
+                            transform: scale(1.05);
+                            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+                        }
+                        </style>
+                        <a href="#viewer-top" class="floating-top-btn">⬆ スコア画面に戻る</a>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    
                     history_df = match_pit[
                         match_pit["種別"].str.contains("詳細", na=False)
                     ].copy()
@@ -643,7 +668,6 @@ def show_team_stats(df_batting, df_pitching):
                         for inn in [f"{i}回" for i in range(1, 10)] + ["延長"]:
                             inn_df = history_df[history_df["イニング"].astype(str).str.startswith(inn)]
                             if not inn_df.empty:
-                                # 🌟 scroll-margin-top を指定して、ジャンプ時に【2回】が隠れないように余白を確保
                                 inn_id = inn.replace("回", "")
                                 st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
                                 
