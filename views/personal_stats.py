@@ -376,6 +376,16 @@ def show_personal_stats(df_batting, df_pitching):
                     df_valid_players = df_personal_logs[~df_personal_logs["_match_name"].isin(clean_hidden_list)].copy()
 
                     if not df_valid_players.empty:
+                        # 🌟 日付型への変換と最新活動日の特定
+                        df_valid_players["Date_dt"] = pd.to_datetime(df_valid_players["日付"], errors='coerce')
+                        df_all_logs["Date_dt"] = pd.to_datetime(df_all_logs["日付"], errors='coerce')
+                        
+                        latest_game_date = df_all_logs["Date_dt"].max()
+                        ref_date = latest_game_date if pd.notna(latest_game_date) else pd.to_datetime(datetime.date.today())
+                        
+                        # 直近1年間（365日以内）の境界日
+                        one_year_ago = ref_date - pd.Timedelta(days=365)
+
                         df_off = df_valid_players[df_valid_players["試合種別"].isin(OFFICIAL_GAME_TYPES)]
                         df_prac = df_valid_players[df_valid_players["試合種別"] == "練習試合"]
                         df_other = df_valid_players[~df_valid_players["試合種別"].isin(OFFICIAL_GAME_TYPES) & (df_valid_players["試合種別"] != "練習試合")]
@@ -384,11 +394,23 @@ def show_personal_stats(df_batting, df_pitching):
                         prac_counts = df_prac.groupby("選手名")["Game_ID"].nunique().reset_index(name="練習試合参加数")
                         other_counts = df_other.groupby("選手名")["Game_ID"].nunique().reset_index(name="その他参加数")
                         
+                        # 🌟 直近1年参加数と最終参加日の集計
+                        df_1y = df_valid_players[df_valid_players["Date_dt"] >= one_year_ago]
+                        counts_1y = df_1y.groupby("選手名")["Game_ID"].nunique().reset_index(name="直近1年参加数")
+                        last_dates = df_valid_players.groupby("選手名")["Date_dt"].max().reset_index(name="最終参加日")
+
                         base_players = df_valid_players[["選手名"]].drop_duplicates()
 
                         game_stats = base_players.merge(off_counts, on="選手名", how="left") \
                                                  .merge(prac_counts, on="選手名", how="left") \
-                                                 .merge(other_counts, on="選手名", how="left").fillna(0)
+                                                 .merge(other_counts, on="選手名", how="left") \
+                                                 .merge(counts_1y, on="選手名", how="left") \
+                                                 .merge(last_dates, on="選手名", how="left")
+                        
+                        # 数値カラムの欠損値を0補完
+                        game_stats = game_stats.fillna({
+                            "公式戦参加数": 0, "練習試合参加数": 0, "その他参加数": 0, "直近1年参加数": 0
+                        })
 
                         game_stats["全試合参加数"] = game_stats["公式戦参加数"] + game_stats["練習試合参加数"] + game_stats["その他参加数"]
                         game_stats = game_stats[game_stats["全試合参加数"] > 0]
@@ -399,7 +421,26 @@ def show_personal_stats(df_batting, df_pitching):
                             game_stats["その他参加率"] = game_stats["その他参加数"] / other_games if other_games > 0 else 0
                             game_stats["全体参加率"] = game_stats["全試合参加数"] / total_games if total_games > 0 else 0
 
-                            for c in ["全試合参加数", "公式戦参加数", "練習試合参加数", "その他参加数"]:
+                            # 🌟 活動未参加期間の計算とフォーマット生成
+                            def format_inactive_period(last_d):
+                                if pd.isna(last_d):
+                                    return "-"
+                                days = (ref_date - last_d).days
+                                if days <= 0:
+                                    return "直近参加"
+                                elif days < 30:
+                                    return f"{days}日"
+                                elif days < 365:
+                                    months = days // 30
+                                    return f"{months}ヶ月 ({days}日)"
+                                else:
+                                    years = days // 365
+                                    months = (days % 365) // 30
+                                    return f"{years}年{months}ヶ月 ({days}日)"
+
+                            game_stats["活動未参加期間"] = game_stats["最終参加日"].apply(format_inactive_period)
+
+                            for c in ["全試合参加数", "公式戦参加数", "練習試合参加数", "その他参加数", "直近1年参加数"]:
                                 game_stats[c] = game_stats[c].astype(int)
 
                             game_stats["公式戦参加率"] = (game_stats["公式戦参加率"] * 100).map("{:.1f}%".format)
@@ -409,15 +450,21 @@ def show_personal_stats(df_batting, df_pitching):
 
                             game_stats = game_stats.sort_values(by=["全試合参加数", "公式戦参加数"], ascending=[False, False]).reset_index(drop=True)
                             
-                            disp_game = game_stats[["選手名", "全試合参加数", "全体参加率", "公式戦参加数", "公式戦参加率", "練習試合参加数", "練習試合参加率", "その他参加数", "その他参加率"]]
+                            # 🌟 表示テーブルに「直近1年参加数」と「活動未参加期間」を配置
+                            disp_game = game_stats[[
+                                "選手名", "全試合参加数", "全体参加率", "公式戦参加数", "公式戦参加率",
+                                 "練習試合参加数", "練習試合参加率", "その他参加数", "その他参加率", "直近1年参加数", "活動未参加期間"
+                            ]]
                             disp_game = disp_game.rename(columns={"その他参加数": "その他(リーグ等)数", "その他参加率": "その他参加率"})
                             
                             disp_game.insert(0, "順位", range(1, len(disp_game) + 1))
 
                             st.markdown(f"**対象期間のチーム総試合数**: 全 {total_games} 試合 (公式戦: {official_games} / 練習試合: {practice_games} / その他: {other_games})")
-                            st.caption("※ チームの全試合（公式戦・練習試合・その他リーグ戦等）を合算・分類して表示しています。")
+                            st.caption("※ チームの全試合（公式戦・練習試合・その他リーグ戦等）を合算・分類して表示しています。活動未参加期間はチーム最終試合日からの経過期間です。")
                             st.dataframe(disp_game, use_container_width=True, hide_index=True, column_config={
-                                "順位": st.column_config.TextColumn("順位", help="ランキング順位")
+                                "順位": st.column_config.TextColumn("順位", help="ランキング順位"),
+                                "直近1年参加数": st.column_config.NumberColumn("直近1年参加数", help="過去1年間（365日以内）に参加した試合数"),
+                                "活動未参加期間": st.column_config.TextColumn("活動未参加期間", help="チームの最新活動日からの未参加経過期間"),
                             })
                         else:
                             st.info("参加記録がありません")
