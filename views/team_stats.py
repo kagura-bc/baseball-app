@@ -518,6 +518,10 @@ def show_team_stats(df_batting, df_pitching):
                             current_val = df_summary.at[i, "打順"]
                             temp_orders.append(i + 1 if current_val == 999 else current_val)
                         df_summary["打順"] = temp_orders
+                        # 打順カラムを数値型に変換（数値にできないエラー値はNaNにする）
+                        df_summary["打順"] = pd.to_numeric(df_summary["打順"], errors='coerce')
+                        
+                        # その上で並び替えを実行
                         df_summary = df_summary.sort_values("打順")
                         df_summary["打順"] = df_summary["打順"].astype(int).astype(str)
                         
