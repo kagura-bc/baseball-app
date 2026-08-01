@@ -114,19 +114,17 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     # セッションステートから現在のイニングを取得（未設定なら1回表/裏）
     current_inn_val = st.session_state.get("p_det_inn", f"1回{p_inning_suffix}")
     
-    # 1. 現在のイニングのアウト数を計算（前方一致判定）
+    # 1. 現在のイニングのアウト数を計算（完全一致判定に統一）
     current_outs_total = 0
     if not today_pitching_df.empty:
-        # 現在のイニングのデータのみ抽出
         p_inn_df_check = today_pitching_df[today_pitching_df["イニング"] == current_inn_val]
         
-        # 1アウト系（三振、凡退など）
-        out_keywords = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "打撃妨害"]
-        # str(x)で文字列化してからstartswithで判定
-        single_outs = len(p_inn_df_check[p_inn_df_check["結果"].apply(lambda x: any(str(x).startswith(k) for k in out_keywords))])
+        # 1アウト系
+        single_out_list = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"]
+        single_outs = len(p_inn_df_check[p_inn_df_check["結果"].isin(single_out_list)])
         
-        # 2アウト系（併殺打）
-        double_outs = len(p_inn_df_check[p_inn_df_check["結果"].apply(lambda x: str(x).startswith("併殺打"))]) * 2
+        # 2アウト系
+        double_outs = len(p_inn_df_check[p_inn_df_check["結果"] == "併殺打"]) * 2
         
         current_outs_total = single_outs + double_outs
 
@@ -158,18 +156,13 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             st.session_state["p_det_inn"] = current_inn
         
         with c_top2:
-            # current_outs_total は上で計算済み（イニング進行時は0、継続時はその数）
-            # 手動でイニングを変更した場合に対応するため、ここでも再計算するのがベストだが
-            # 基本的には上のロジックで整合性が取れる。念のため表示用に再取得ロジックを入れる。
-            
             disp_outs = 0
             if not today_pitching_df.empty:
-                # selectboxで選ばれているイニング（current_inn）に基づいて計算
                 p_inn_df_disp = today_pitching_df[today_pitching_df["イニング"] == current_inn]
                 
-                out_keywords = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛", "牽制死", "盗塁死", "走塁死"]
-                s_outs = len(p_inn_df_disp[p_inn_df_disp["結果"].apply(lambda x: any(str(x).startswith(k) for k in out_keywords))])
-                d_outs = len(p_inn_df_disp[p_inn_df_disp["結果"].apply(lambda x: str(x).startswith("併殺打"))]) * 2
+                single_out_list = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"]
+                s_outs = len(p_inn_df_disp[p_inn_df_disp["結果"].isin(single_out_list)])
+                d_outs = len(p_inn_df_disp[p_inn_df_disp["結果"] == "併殺打"]) * 2
                 
                 disp_outs = (s_outs + d_outs) % 3
             
@@ -328,7 +321,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             add_outs = 0
             if p_res == "併殺打":
                 add_outs = 2
-            elif p_res in ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛", "牽制死", "盗塁死", "走塁死"]:
+            elif p_res in ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "牽制死", "盗塁死", "走塁死", "振り逃げ三振", "野選"]:
                 add_outs = 1
             
             add_hits = 1 if p_res in ["単打", "二塁打", "三塁打", "本塁打"] else 0
@@ -380,7 +373,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             
             # --- 3アウトチェンジ判定 ---
             p_inn_df = today_pitching_df[today_pitching_df["イニング"] == current_inn]
-            existing_single_outs = len(p_inn_df[p_inn_df["結果"].isin(["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打", "犠飛"])])
+            single_out_list = ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"]
+            existing_single_outs = len(p_inn_df[p_inn_df["結果"].isin(single_out_list)])
             existing_double_outs = len(p_inn_df[p_inn_df["結果"] == "併殺打"]) * 2
             total_outs_after = existing_single_outs + existing_double_outs + add_outs
             

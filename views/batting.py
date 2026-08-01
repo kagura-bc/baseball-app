@@ -153,7 +153,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     if not today_batting_df.empty:
         inn_df_check = today_batting_df[today_batting_df["イニング"] == current_inn_val]
-        s_outs = len(inn_df_check[inn_df_check["結果"].isin(["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振"])])
+        single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振", "野選", "牽制死"]
+        s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
         d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
         
         # もし3アウト以上になっていれば次のイニングへ
@@ -338,7 +339,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             disp_outs = 0
             if not today_batting_df.empty:
                 inn_df = today_batting_df[today_batting_df["イニング"] == curr_inn]
-                s_outs = len(inn_df[inn_df["結果"].isin(["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振"])])
+                single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振", "野選", "牽制死"]
+                s_outs = len(inn_df[inn_df["結果"].isin(single_out_list)])
                 d_outs = len(inn_df[inn_df["結果"] == "併殺打"]) * 2
                 disp_outs = (s_outs + d_outs) % 3
             st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
