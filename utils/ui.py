@@ -23,6 +23,18 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     st.markdown(f"### 📅 {date_txt} ({m_type}) &nbsp;&nbsp; 🏟️ {g_name}")
     st.subheader(f"⚾ {MY_TEAM} vs {opp_name}")
     
+    # --- 追加: 試合終了（勝敗確定）の判定 ---
+    is_game_finished = False
+    if "勝敗" in p_df.columns and p_df["勝敗"].astype(str).str.contains("勝利|敗戦|勝|負").any():
+        is_game_finished = True
+        
+    # --- 追加: 最終イニング（データが存在する最大のイニング）を特定 ---
+    max_inning_played = 0
+    for i in range(1, 10):
+        target_innings = [f"{i}回", f"{i}回表", f"{i}回裏"]
+        if not b_df[b_df["イニング"].isin(target_innings)].empty or not p_df[p_df["イニング"].isin(target_innings)].empty:
+            max_inning_played = i
+
     k_inning, opp_inning = [], []
     total_k, total_opp = 0, 0
     
@@ -44,17 +56,34 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
             opp_disp = "✖"
             opp_runs = 0
         else:
-            opp_runs = int(inn_pit_data["失点"].sum())
+            opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum())
             opp_disp = str(opp_runs)
 
         k_exists = not inn_bat_data.empty
         opp_exists = not inn_pit_data.empty
         
-        k_inning.append(k_disp if k_exists else "")
-        opp_inning.append(opp_disp if opp_exists else "")
-        
         total_k += k_runs
         total_opp += opp_runs
+        
+        # --- 追加: 試合終了時の「✖」追加ロジック (後攻チームの最終イニング) ---
+        if is_game_finished and i == max_inning_played:
+            if is_top_first:
+                # KAGURA先攻、相手チーム後攻の場合
+                if not opp_exists: # 裏の攻撃がない場合
+                    opp_disp = "✖"
+                    opp_exists = True
+                elif total_opp > total_k: # サヨナラの場合
+                    opp_disp = f"{opp_disp}✖"
+            else:
+                # 相手チーム先攻、KAGURA後攻の場合
+                if not k_exists: 
+                    k_disp = "✖"
+                    k_exists = True
+                elif total_k > total_opp: 
+                    k_disp = f"{k_disp}✖"
+
+        k_inning.append(k_disp if k_exists else "")
+        opp_inning.append(opp_disp if opp_exists else "")
 
     hit_list = ["単打", "二塁打", "三塁打", "本塁打", "安打"]
     k_h = b_df[b_df["結果"].isin(hit_list)].shape[0] if "結果" in b_df.columns else 0
@@ -81,7 +110,7 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         H = [int(opp_h), int(k_h)]
         E = [int(opp_e), int(k_e)]
 
-    # 🌟 イニング番号にアンカーリンク（#inning-X）を付与したHTMLテーブルでレンダリング
+    # HTMLテーブルでレンダリング
     html_content = """
     <style>
     .clickable-scoreboard {

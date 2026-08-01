@@ -25,16 +25,18 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     # 詳細入力モード (1打席ごと)
     # ---------------------------------------------------------
 
-    # 0. 日付変更の検知とクリア (別の日付のデータが混ざるのを防ぐ)
-    if "last_p_date" not in st.session_state:
-        st.session_state["last_p_date"] = selected_date_str
+    # 0. 試合設定変更の検知とクリア (別試合のデータが混ざるのを防ぐ)
+    current_match_id = f"{selected_date_str}_{opp_team}_{match_type}"
+    if "last_p_match_id" not in st.session_state:
+        st.session_state["last_p_match_id"] = current_match_id
     
-    if st.session_state["last_p_date"] != selected_date_str:
-        # 日付が変わった場合、関連するセッション状態をリセット
-        keys_to_reset = ["p_det_inn", "opp_batter_index", f"sync_{st.session_state['last_p_date']}"]
-        for k in keys_to_reset:
-            if k in st.session_state: del st.session_state[k]
-        st.session_state["last_p_date"] = selected_date_str
+    if st.session_state["last_p_match_id"] != current_match_id:
+        keys_to_reset = ["p_det_inn", "opp_batter_index"]
+        for k in list(st.session_state.keys()):
+            # 過去のsyncキーも含めて全てリセット
+            if k in keys_to_reset or k.startswith("sync_"): 
+                del st.session_state[k]
+        st.session_state["last_p_match_id"] = current_match_id
 
 
     # --- ★追加: 表裏の判定 (投手=守備なので、自チームが先攻なら「裏」) ---

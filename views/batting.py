@@ -40,16 +40,21 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["needs_batting_clear"] = False
 
     # ==========================================
-    # 1. 日付変更時のリセット & 初期化
+    # 1. 試合設定変更時のリセット & 初期化
     # ==========================================
-    if "last_selected_date" not in st.session_state:
-        st.session_state["last_selected_date"] = selected_date_str
+    # 日付・対戦相手・試合種別を組み合わせた識別IDを作成
+    current_match_id = f"{selected_date_str}_{opp_team}_{match_type}"
     
-    date_changed = (st.session_state["last_selected_date"] != selected_date_str)
+    if "last_match_id" not in st.session_state:
+        st.session_state["last_match_id"] = current_match_id
     
-    if date_changed:
+    # 識別IDが変わった（＝設定が変更された）かを判定
+    match_changed = (st.session_state["last_match_id"] != current_match_id)
+    
+    if match_changed:
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "persistent_", "batting_inning_select", "scorer_name_ui"]
+        # saved_lineup なども含めて関連データを一掃する
+        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
@@ -57,7 +62,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
         st.session_state["scorer_name_ui"] = ""
         st.session_state["saved_lineup"] = {}
-        st.session_state["last_selected_date"] = selected_date_str
+        st.session_state["last_match_id"] = current_match_id
         st.rerun()
 
     if "saved_lineup" not in st.session_state:
