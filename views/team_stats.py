@@ -523,7 +523,8 @@ def show_team_stats(df_batting, df_pitching):
                         
                         # その上で並び替えを実行
                         df_summary = df_summary.sort_values("打順")
-                        df_summary["打順"] = df_summary["打順"].astype(int).astype(str)
+                        # 空欄(NaN)を一時的に0にしてから整数化し、文字列化後に0を空欄に戻す
+                        df_summary["打順"] = df_summary["打順"].fillna(0).astype(int).astype(str).replace("0", "")
                         
                         table_html = (
                             "<div style='overflow-x: auto;'>"
