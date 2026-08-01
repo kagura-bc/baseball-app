@@ -76,8 +76,18 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # 2. データの読み込み & 状態同期
     # ==========================================
     is_kagura_top = (kagura_order == "先攻 (表)")
-    today_batting_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
-    today_pitching_df = df_pitching[df_pitching["日付"].astype(str) == selected_date_str]
+    
+    # 【修正】日付だけでなく、対戦相手と試合種別も一致するデータのみ抽出する
+    today_batting_df = df_batting[
+        (df_batting["日付"].astype(str) == selected_date_str) & 
+        (df_batting["対戦相手"] == opp_team) & 
+        (df_batting["試合種別"] == match_type)
+    ]
+    today_pitching_df = df_pitching[
+        (df_pitching["日付"].astype(str) == selected_date_str) & 
+        (df_pitching["対戦相手"] == opp_team) & 
+        (df_pitching["試合種別"] == match_type)
+    ]
 
     if "sn0" not in st.session_state and not today_batting_df.empty:
         try:
