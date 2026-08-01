@@ -31,6 +31,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ws_pitching = "投手成績"
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 
+    # ▼▼▼ 追加: フォームクリアのフラグ処理 (投手成績と同じ仕組み) ▼▼▼
+    if st.session_state.get("needs_batting_clear"):
+        for i in range(15):
+            for k in [f"sr{i}", f"sd{i}", f"si{i}", f"st{i}"]:
+                if k in st.session_state:
+                    st.session_state[k] = "---"
+        st.session_state["needs_batting_clear"] = False
+
     # ==========================================
     # 1. 日付変更時のリセット & 初期化
     # ==========================================
@@ -283,10 +291,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             st.toast(f"3アウトチェンジ！次イニング({next_inn})へ進みます。")
                     except: pass
 
-                for i in range(15):
-                    for k in [f"sr{i}", f"sd{i}", f"si{i}", f"st{i}"]: 
-                        if k in st.session_state:
-                            st.session_state[k] = "---"
+                st.session_state["needs_batting_clear"] = True
                 
                 if has_homerun: st.session_state["show_homerun_flg"] = True
                 st.success(f"✅ 入力内容を保存しました")
