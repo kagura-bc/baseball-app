@@ -1,5 +1,5 @@
-import streamlit as str_lib
 import streamlit as st
+import pandas as pd
 import datetime
 from streamlit_gsheets import GSheetsConnection
 from config.settings import MY_TEAM, OFFICIAL_GAME_TYPES, SPREADSHEET_URL
@@ -119,7 +119,6 @@ if page == " 📝 試合データ入力":
     def_order = ""
 
     if not df_batting.empty:
-        # 日付が一致するデータを抽出
         date_matched_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
         if not date_matched_df.empty:
             first_row = date_matched_df.iloc[0]
@@ -130,7 +129,6 @@ if page == " 📝 試合データ入力":
             if pd.notna(first_row.get("対戦相手")):
                 def_opp_team = str(first_row["対戦相手"])
             
-            # イニング情報から先攻/後攻を推測
             innings = date_matched_df["イニング"].astype(str).tolist()
             if any("表" in inn for inn in innings if inn not in ["試合前", "まとめ入力", "試合終了", "nan", ""]):
                 def_order = "先攻 (表)"
@@ -141,9 +139,7 @@ if page == " 📝 試合データ入力":
         c1, c2, c3 = st.columns(3)
         
         with c1:
-            # 1. 試合区分
             match_options = [""] + OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
-            # 既存データがあればそれを優先、なければURLパラメータ
             initial_match = def_match_type if def_match_type in match_options else st.query_params.get("match", "")
             match_type = st.selectbox(
                 "試合区分", 
@@ -152,7 +148,6 @@ if page == " 📝 試合データ入力":
                 key="main_match_type"
             )
             
-            # 2. 攻守
             order_list = ["", "先攻 (表)", "後攻 (裏)"]
             initial_order = def_order if def_order in order_list else st.query_params.get("order", "")
             kagura_order = st.selectbox(
@@ -166,7 +161,6 @@ if page == " 📝 試合データ入力":
             st.info(f"📅 選択中の日付: **{selected_date_str}**\n\n※日付を変更すると、過去に登録がある場合は設定が自動で呼び出されます。")
             
         with c3:
-            # 3. グラウンド
             ground_options = [""] + GROUND_LIST
             initial_ground = def_ground_name if def_ground_name in ground_options else ("その他" if def_ground_name else st.query_params.get("ground", ""))
             selected_ground = st.selectbox(
@@ -177,7 +171,6 @@ if page == " 📝 試合データ入力":
             )
             ground_name = st.text_input("グラウンド名入力", value=def_ground_name if def_ground_name not in ground_options and def_ground_name else "その他グラウンド", key="main_custom_ground") if selected_ground == "その他" else selected_ground
             
-            # 4. 相手チーム
             opp_options = [""] + OPPONENTS_LIST
             initial_opp = def_opp_team if def_opp_team in opp_options else ("その他" if def_opp_team else st.query_params.get("opp", ""))
             selected_opp = st.selectbox(
