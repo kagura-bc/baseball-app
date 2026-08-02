@@ -1,6 +1,6 @@
 import streamlit as st
 import datetime
-from config.settings import MY_TEAM, GROUND_LIST, OPPONENTS_LIST, OFFICIAL_GAME_TYPES
+from config.settings import MY_TEAM, OFFICIAL_GAME_TYPES
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
 from streamlit_option_menu import option_menu
