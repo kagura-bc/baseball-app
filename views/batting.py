@@ -100,6 +100,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         (df_pitching["試合種別"] == match_type)
     ]
 
+    # 初回読み込み時、またはセッションにデータがない場合にスプレッドシートからスタメン情報を復元
     if "sn0" not in st.session_state and not today_batting_df.empty:
         try:
             valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
@@ -115,22 +116,26 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if not valid_scorer_df.empty:
                 st.session_state["scorer_name_ui"] = valid_scorer_df.iloc[-1]["スコアラー"]
 
+            # 1〜15打順それぞれの最新スタメン情報を取得
             for i in range(15):
                 target_order = i + 1
-                # スタメン行を優先的に取得するように修正
-                rows = today_batting_df[
-                    (pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order) & 
-                    (today_batting_df["結果"].astype(str) == "スタメン")
-                ]
-                if rows.empty:
-                    rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
                 
-                if not rows.empty:
-                    last_row = rows.iloc[-1]
+                # 「スタメン」として記録されている行、または「試合前」イニングの行を最優先で取得
+                lineup_rows = today_batting_df[
+                    (pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order) & 
+                    ((today_batting_df["結果"].astype(str) == "スタメン") | (today_batting_df["イニング"].astype(str) == "試合前"))
+                ]
+                
+                if lineup_rows.empty:
+                    # 見つからない場合は該当打順の最後の行をフォールバックとして利用
+                    lineup_rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
+
+                if not lineup_rows.empty:
+                    last_row = lineup_rows.iloc[-1]
                     saved_name = str(last_row["選手名"])
                     saved_pos = str(last_row.get("位置", ""))
                     
-                    # 選手名が選択肢に含まれるか、または名前部分が一致するか照合
+                    # 選手名の完全一致または名前部分（背番号除く）の一致を確認
                     matched_name = None
                     if saved_name in player_options:
                         matched_name = saved_name
@@ -139,10 +144,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
                     matched_pos = saved_pos if saved_pos in pos_options else None
 
-                    st.session_state[f"sn{i}"] = matched_name
-                    st.session_state[f"sp{i}"] = matched_pos
-                    st.session_state["saved_lineup"][f"name_{i}"] = matched_name if matched_name else ""
-                    st.session_state["saved_lineup"][f"pos_{i}"] = matched_pos if matched_pos else ""
+                    if matched_name:
+                        st.session_state[f"sn{i}"] = matched_name
+                        st.session_state["saved_lineup"][f"name_{i}"] = matched_name
+                    if matched_pos:
+                        st.session_state[f"sp{i}"] = matched_pos
+                        st.session_state["saved_lineup"][f"pos_{i}"] = matched_pos
                     
                     if matched_pos == "投" and matched_name:
                         st.session_state["shared_starting_pitcher"] = matched_name.split(" (")[0]
@@ -452,8 +459,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c = st.columns(col_ratios)
             c[0].markdown(f"<div style='text-align:center; line-height:2.5;'>{i+1}</div>", unsafe_allow_html=True)
             
-            s_pos = st.session_state["saved_lineup"].get(f"pos_{i}", "")
-            s_name = st.session_state["saved_lineup"].get(f"name_{i}", "")
+            # セッションステートから値を取得（未設定時はNoneにしてplaceholderを表示させる）
+            s_pos = st.session_state.get(f"sp{i}")
+            s_name = st.session_state.get(f"sn{i}")
             
             def_pos_ix = pos_options.index(s_pos) if s_pos in pos_options else None
             def_name_ix = player_options.index(s_name) if s_name in player_options else None
