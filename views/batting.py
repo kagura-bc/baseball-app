@@ -41,11 +41,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ▼▼▼ フォームクリアのフラグ処理 ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(15):
-            for k in [f"sp{i}", f"sn{i}", f"sr{i}", f"si{i}", f"st{i}"]:
+            # 守備(sp)と選手名(sn)はクリア対象から除外し、画面に維持する
+            for k in [f"sr{i}", f"si{i}", f"st{i}"]:
                 if k in st.session_state:
-                    st.session_state[k] = "---" if k.startswith("si") else None
+                    st.session_state[k] = None
             if f"sd{i}" in st.session_state:
                 st.session_state[f"sd{i}"] = []
+                
         if "quick_sr" in st.session_state:
             st.session_state["quick_sr"] = None
         if "quick_sd" in st.session_state:
