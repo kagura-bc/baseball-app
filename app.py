@@ -173,16 +173,6 @@ if page == " 📝 試合データ入力":
                 key="main_selected_opp"
             )
             opp_team = st.text_input("相手チーム名入力", value="相手チーム", key="main_custom_opp") if selected_opp == "その他" else selected_opp
-            
-            # 5. 相手チーム
-            url_opp = st.query_params.get("opp", OPPONENTS_LIST[0] if OPPONENTS_LIST else "その他")
-            selected_opp = st.selectbox(
-                "相手チーム", 
-                OPPONENTS_LIST, 
-                index=safe_index(OPPONENTS_LIST, url_opp),
-                key="main_selected_opp"
-            )
-            opp_team = st.text_input("相手チーム名入力", value="相手チーム", key="main_custom_opp") if selected_opp == "その他" else selected_opp
 
     st.write("") # 少し余白を空ける
 
