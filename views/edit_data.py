@@ -1,9 +1,23 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
-# ★ 追加: GROUND_LIST と OPPONENTS_LIST をインポート
-from config.settings import SPREADSHEET_URL, GROUND_LIST, OPPONENTS_LIST
+from config.settings import SPREADSHEET_URL
 from utils.players import get_active_players
+
+# スプレッドシートからグラウンドと対戦相手のリストを動的に取得
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+try:
+    df_ground = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="グラウンド登録")
+    GROUND_LIST = df_ground["グラウンド名"].dropna().tolist() if "グラウンド名" in df_ground.columns else ["その他"]
+except Exception:
+    GROUND_LIST = ["その他"]
+
+try:
+    df_opp = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録")
+    OPPONENTS_LIST = df_opp["チーム名"].dropna().tolist() if "チーム名" in df_opp.columns else ["その他"]
+except Exception:
+    OPPONENTS_LIST = ["その他"]
 
 # --- 各種プルダウン用の選択肢を定義 ---
 RESULT_OPTIONS = [
@@ -19,9 +33,8 @@ WIN_LOSE_OPTIONS = ["ー", "勝利", "敗戦", "セーブ", "ホールド"]
 
 def show_edit_page(df_batting, df_pitching, is_test_mode=False):
     st.title(" 🔧 データ修正")
-    conn = st.connection("gsheets", type=GSheetsConnection)
 
-    # ▼▼▼ スプレッドシートから最新の選手一覧と背番号を取得 ▼▼▼
+    # スプレッドシートから最新の選手一覧と背番号を取得
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
 
     # 🧪 テストモード判定で書き込むシートを切り替え
