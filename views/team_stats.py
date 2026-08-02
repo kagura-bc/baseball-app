@@ -517,13 +517,22 @@ def show_team_stats(df_batting, df_pitching):
                         for i in range(len(df_summary)):
                             current_val = df_summary.at[i, "打順"]
                             temp_orders.append(i + 1 if current_val == 999 else current_val)
-                        df_summary["打順"] = temp_orders
-                        # 打順カラムを数値型に変換（数値にできないエラー値はNaNにする）
+                        # 1. 選手の登場順（元のデータフレームで最初に記録された行番号）を取得
+                        first_app = df_batting.reset_index().groupby("選手名")["index"].min()
+                        
+                        # 2. サマリー用の表に「登場順」を一時的に追加
+                        if "選手名" in df_summary.columns:
+                            df_summary["登場順"] = df_summary["選手名"].map(first_app)
+                        else:
+                            df_summary["登場順"] = df_summary.index.map(first_app)
+                            
+                        # 3. 打順を数値化（前回の修正通り）
                         df_summary["打順"] = pd.to_numeric(df_summary["打順"], errors='coerce')
                         
-                        # その上で並び替えを実行
-                        df_summary = df_summary.sort_values("打順")
-                        # 空欄(NaN)を一時的に0にしてから整数化し、文字列化後に0を空欄に戻す
+                        # 4. 「打順」でソートし、打順が同じ場合は「登場順」でソートする（複数条件）
+                        df_summary = df_summary.sort_values(["打順", "登場順"])
+                        
+                        # 5. 打順の文字列化（前回の修正通り）
                         df_summary["打順"] = df_summary["打順"].fillna(0).astype(int).astype(str).replace("0", "")
                         
                         table_html = (
