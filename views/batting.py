@@ -449,7 +449,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
+        # ▼ 追加修正：行のプルダウンに「打席結果」もすべて表示できるように統合 ▼
         run_results = ["盗塁", "盗塁死", "走塁死"]
+        all_results_options = batting_results + run_results
 
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
         h = st.columns(col_ratios)
@@ -489,7 +491,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 else:
                     c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>.000 0点 0本</div>", unsafe_allow_html=True)
 
-            c[3].selectbox(f"r{i}", run_results, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
+            # ▼ 追加修正：all_results_optionsに変更し、placeholderを「結果」に変更 ▼
+            c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="結果", index=None, label_visibility="collapsed")
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
             if not today_batting_df.empty and sel_p_name:
