@@ -16,13 +16,20 @@ def _load_players_df():
         return pd.DataFrame(columns=["選手名", "背番号", "成績非表示", "オーダー非表示"])
 
 def _parse_bool(val):
-    """チェックボックスの値を安全にTrue/Falseに変換するヘルパー関数"""
+    """チェックボックスや文字列の値を安全にTrue/Falseに変換するヘルパー関数"""
     if pd.isna(val):
         return False
     if isinstance(val, bool):
         return val
+    if isinstance(val, (int, float)):
+        return val == 1
+    
     s = str(val).strip().lower()
-    return s in ["true", "1", "yes", "t", "y"]
+    # 明示的な「偽」を表す文字列はすべて False にする
+    if s in ["false", "f", "no", "n", "0", "none", "nan", ""]:
+        return False
+    # 「真」を表す文字列のみ True にする
+    return s in ["true", "1", "yes", "t", "y", "checked", "on"]
 
 def _extract_lists(df):
     if df.empty or "選手名" not in df.columns:
