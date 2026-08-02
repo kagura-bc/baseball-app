@@ -1,32 +1,27 @@
+import streamlit as str_lib
 import streamlit as st
 import datetime
 from streamlit_gsheets import GSheetsConnection
 from config.settings import MY_TEAM, OFFICIAL_GAME_TYPES, SPREADSHEET_URL
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
-# 各ページ（View）の読み込みに ideal_order を追加
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis, ideal_order, player_management
 
-# 1. GitHub上の実際のファイル名 (logo-192.png) に合わせる
 ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/logo-192.png?v=3"
 
-# 2. set_page_config の設定 (必ず一番最初に記述)
 st.set_page_config(
     page_title="KAGUSTA",
     page_icon=ICON_URL,
     layout="wide"
 )
 
-# 3. Apple用アイコンの設定
 st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_html=True)
 
-load_css() # CSS読み込み
+load_css()
 
 # ==========================================
 # 🔐 ログイン機能の実装
 # ==========================================
-
-# セッションステートの初期化（ログイン状態を管理）
 if "is_logged_in" not in st.session_state:
     st.session_state["is_logged_in"] = False
 
@@ -35,7 +30,6 @@ def show_login_screen():
     with center:
         st.write("")
         st.write("")
-        # ロゴのみを中央配置
         st.markdown(f"""
 <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px;">
     <img src="{ICON_URL}" style="width: 350px; height: 350px; object-fit: contain;">
@@ -53,15 +47,9 @@ def show_login_screen():
                 else:
                     st.error("パスワードが違います")
 
-# --- ログイン判定 ---
 if not st.session_state["is_logged_in"]:
-    # 未ログイン時はログイン画面を表示して終了
     show_login_screen()
     st.stop()
-
-# ==========================================
-# 📱 ここから下がログイン後のメインアプリ
-# ==========================================
 
 # ==========================================
 # 📊 データ読み込み
@@ -69,7 +57,6 @@ if not st.session_state["is_logged_in"]:
 df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
-# 🌟 キャッシュを利用してAPIリクエスト制限（429エラー）を回避
 @st.cache_data(ttl=60)
 def get_cached_grounds():
     conn = st.connection("gsheets", type=GSheetsConnection)
@@ -91,7 +78,6 @@ def get_cached_opponents():
 GROUND_LIST = get_cached_grounds()
 OPPONENTS_LIST = get_cached_opponents()
 
-# --- ヘルパー関数 (URLクエリパラメータとの同期用) ---
 def safe_index(lst, val):
     try:
         return lst.index(val)
@@ -103,7 +89,6 @@ def safe_index(lst, val):
 # ==========================================
 st.sidebar.markdown("### ⚾️ KAGUSTA")
 
-# サイドバーにはメニューのみを配置（選手管理を追加）
 page = st.sidebar.radio(
     "メニュー", 
     [" 📝 試合データ入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正", " 👥 選手管理"]
@@ -116,67 +101,95 @@ if page == " 📝 試合データ入力":
     
     st.markdown("### 📝 試合データ入力")
     
-    # 試合設定部分はそのまま維持[cite: 1]
-    with st.expander("⚙️ 試合設定 (クリックで開閉)", expanded=True):
+    # 🌟 日付を最優先で取得（デフォルトは今日）
+    url_date = st.query_params.get("date", datetime.date.today().strftime("%Y-%m-%d"))
+    try:
+        default_date = datetime.datetime.strptime(url_date, "%Y-%m-%d").date()
+    except ValueError:
+        default_date = datetime.date.today()
+    
+    # 先に日付入力ボックスを配置
+    selected_date = st.date_input("試合日 (日付を選択すると設定が連動します)", value=default_date, key="main_selected_date")
+    selected_date_str = selected_date.strftime("%Y-%m-%d")
+
+    # 🌟 選択された日付に紐づく既存データをスプレッドシートから自動検索
+    def_match_type = ""
+    def_ground_name = ""
+    def_opp_team = ""
+    def_order = ""
+
+    if not df_batting.empty:
+        # 日付が一致するデータを抽出
+        date_matched_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
+        if not date_matched_df.empty:
+            first_row = date_matched_df.iloc[0]
+            if pd.notna(first_row.get("試合種別")):
+                def_match_type = str(first_row["試合種別"])
+            if pd.notna(first_row.get("グラウンド")):
+                def_ground_name = str(first_row["グラウンド"])
+            if pd.notna(first_row.get("対戦相手")):
+                def_opp_team = str(first_row["対戦相手"])
+            
+            # イニング情報から先攻/後攻を推測
+            innings = date_matched_df["イニング"].astype(str).tolist()
+            if any("表" in inn for inn in innings if inn not in ["試合前", "まとめ入力", "試合終了", "nan", ""]):
+                def_order = "先攻 (表)"
+            elif any("裏" in inn for inn in innings if inn not in ["試合前", "まとめ入力", "試合終了", "nan", ""]):
+                def_order = "後攻 (裏)"
+
+    with st.expander("⚙️ 試合設定 (日付連動・クリックで開閉)", expanded=True):
         c1, c2, c3 = st.columns(3)
         
         with c1:
-            # 1. 試合区分（先頭に空欄 "" を追加）
-            url_match = st.query_params.get("match", "")
+            # 1. 試合区分
             match_options = [""] + OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
+            # 既存データがあればそれを優先、なければURLパラメータ
+            initial_match = def_match_type if def_match_type in match_options else st.query_params.get("match", "")
             match_type = st.selectbox(
                 "試合区分", 
                 match_options, 
-                index=safe_index(match_options, url_match),
+                index=safe_index(match_options, initial_match),
                 key="main_match_type"
             )
             
-            # 2. 攻守（先頭に空欄 "" を追加）
+            # 2. 攻守
             order_list = ["", "先攻 (表)", "後攻 (裏)"]
-            url_order = st.query_params.get("order", "")
+            initial_order = def_order if def_order in order_list else st.query_params.get("order", "")
             kagura_order = st.selectbox(
                 "攻守", 
                 order_list, 
-                index=safe_index(order_list, url_order),
+                index=safe_index(order_list, initial_order),
                 key="main_kagura_order"
             )
             
         with c2:
-            # 3. 試合日はそのままで日付を保持
-            url_date = st.query_params.get("date", datetime.date.today().strftime("%Y-%m-%d"))
-            try:
-                default_date = datetime.datetime.strptime(url_date, "%Y-%m-%d").date()
-            except ValueError:
-                default_date = datetime.date.today()
-            selected_date = st.date_input("試合日", value=default_date, key="main_selected_date")
-            selected_date_str = selected_date.strftime("%Y-%m-%d")
+            st.info(f"📅 選択中の日付: **{selected_date_str}**\n\n※日付を変更すると、過去に登録がある場合は設定が自動で呼び出されます。")
             
         with c3:
-            # 4. グラウンド（先頭に空欄 "" を追加）
-            url_ground = st.query_params.get("ground", "")
+            # 3. グラウンド
             ground_options = [""] + GROUND_LIST
+            initial_ground = def_ground_name if def_ground_name in ground_options else ("その他" if def_ground_name else st.query_params.get("ground", ""))
             selected_ground = st.selectbox(
                 "グラウンド", 
                 ground_options, 
-                index=safe_index(ground_options, url_ground),
+                index=safe_index(ground_options, initial_ground),
                 key="main_selected_ground"
             )
-            ground_name = st.text_input("グラウンド名入力", value="その他グラウンド", key="main_custom_ground") if selected_ground == "その他" else selected_ground
+            ground_name = st.text_input("グラウンド名入力", value=def_ground_name if def_ground_name not in ground_options and def_ground_name else "その他グラウンド", key="main_custom_ground") if selected_ground == "その他" else selected_ground
             
-            # 5. 相手チーム（先頭に空欄 "" を追加）
-            url_opp = st.query_params.get("opp", "")
+            # 4. 相手チーム
             opp_options = [""] + OPPONENTS_LIST
+            initial_opp = def_opp_team if def_opp_team in opp_options else ("その他" if def_opp_team else st.query_params.get("opp", ""))
             selected_opp = st.selectbox(
                 "相手チーム", 
                 opp_options, 
-                index=safe_index(opp_options, url_opp),
+                index=safe_index(opp_options, initial_opp),
                 key="main_selected_opp"
             )
-            opp_team = st.text_input("相手チーム名入力", value="相手チーム", key="main_custom_opp") if selected_opp == "その他" else selected_opp
+            opp_team = st.text_input("相手チーム名入力", value=def_opp_team if def_opp_team not in opp_options and def_opp_team else "相手チーム", key="main_custom_opp") if selected_opp == "その他" else selected_opp
 
-    st.write("") # 少し余白を空ける
+    st.write("")
 
-    # 🌟 修正: 画面上部で打撃・投手・データ修正を切り替えるタブ（3つに変更）
     tab_batting, tab_pitching, tab_ideal, tab_edit = st.tabs([" 🏠 打撃成績入力", " 🔥 投手成績入力", " 🎯 理想オーダー作成", " 🔧 データ修正"])
     
     with tab_batting:
@@ -192,14 +205,11 @@ if page == " 📝 試合データ入力":
         )
 
     with tab_ideal:
-        # ★追加: 理想オーダー作成タブの中身
         ideal_order.show_ideal_order_tab(df_batting)
         
     with tab_edit:
-        # ★追加: データ修正タブの中身
         edit_data.show_edit_page(df_batting, df_pitching)
 
-# --- 他のページの処理（そのまま残します） ---
 elif page == " 🏆 チーム成績":
     team_stats.show_team_stats(df_batting, df_pitching)
 
@@ -210,9 +220,7 @@ elif page == " 📈 データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
 
 elif page == " 🔧 データ修正":
-    # サイドバーから「データ修正」が選ばれた場合も表示できるように残す
     edit_data.show_edit_page(df_batting, df_pitching)
 
 elif page == " 👥 選手管理":
-    # ★追加: 選手管理ページの中身
     player_management.show_player_management()

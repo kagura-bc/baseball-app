@@ -41,7 +41,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ▼▼▼ フォームクリアのフラグ処理 ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(15):
-            # 守備(sp)と選手名(sn)はクリア対象から除外し、画面に維持する
             for k in [f"sr{i}", f"si{i}", f"st{i}"]:
                 if k in st.session_state:
                     st.session_state[k] = None
@@ -102,7 +101,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         (df_pitching["試合種別"] == match_type)
     ]
 
-    # 初回読み込み時、またはセッションにデータがない場合にスプレッドシートからスタメン情報を復元
     if "sn0" not in st.session_state and not today_batting_df.empty:
         try:
             valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
@@ -118,18 +116,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if not valid_scorer_df.empty:
                 st.session_state["scorer_name_ui"] = valid_scorer_df.iloc[-1]["スコアラー"]
 
-            # 1〜15打順それぞれの最新スタメン情報を取得
             for i in range(15):
                 target_order = i + 1
-                
-                # 「スタメン」として記録されている行、または「試合前」イニングの行を最優先で取得
                 lineup_rows = today_batting_df[
                     (pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order) & 
                     ((today_batting_df["結果"].astype(str) == "スタメン") | (today_batting_df["イニング"].astype(str) == "試合前"))
                 ]
                 
                 if lineup_rows.empty:
-                    # 見つからない場合は該当打順の最後の行をフォールバックとして利用
                     lineup_rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
 
                 if not lineup_rows.empty:
@@ -137,7 +131,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     saved_name = str(last_row["選手名"])
                     saved_pos = str(last_row.get("位置", ""))
                     
-                    # 選手名の完全一致または名前部分（背番号除く）の一致を確認
                     matched_name = None
                     if saved_name in player_options:
                         matched_name = saved_name
@@ -225,12 +218,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         for i in range(15):
             p_name_raw = st.session_state.get(f"sn{i}")
-            # バリデーション用にも背番号なしの名前を抽出
             p_name_clean = p_name_raw.split(" (")[0] if p_name_raw else None
             p_res = st.session_state.get(f"sr{i}")
             p_dir_raw = st.session_state.get(f"sd{i}", [])
             
-            # クイック入力を上書き適用
             if q_res_val and i == cur_batter_idx:
                 p_res = q_res_val
                 p_dir_raw = q_sd_val
@@ -259,11 +250,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         for i in range(15):
             p_name_raw = st.session_state.get(f"sn{i}", "")
-            # ▼ 背番号なしの選手名を取り出す（記録用）
             p_name_clean = p_name_raw.split(" (")[0] if p_name_raw else ""
             p_pos = st.session_state.get(f"sp{i}", "")
             
-            # 画面状態の維持には元の名前(背番号あり)を使用
             st.session_state["saved_lineup"][f"name_{i}"] = p_name_raw if p_name_raw else ""
             st.session_state["saved_lineup"][f"pos_{i}"] = p_pos if p_pos else ""
             
@@ -274,7 +263,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             p_dir_raw = st.session_state.get(f"sd{i}", [])
             rbi_val_raw = st.session_state.get(f"si{i}")
             
-            # クイック入力を上書き適用
             if q_res_val and i == cur_batter_idx:
                 p_res = q_res_val
                 p_dir_raw = q_sd_val
@@ -297,58 +285,58 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if rbi_val == 0: rbi_val = 1
                 has_homerun = True
 
-            last_name = ""
+            # ==========================================
+            # 🌟 修正: 2巡目以降も「交代」扱いにならないように判定を改善
+            # ==========================================
+            target_order = i + 1
+            order_history_df = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order] if not today_batting_df.empty else pd.DataFrame()
+            
+            has_appeared_before = False
             last_pos = ""
-            if not today_batting_df.empty:
-                order_records = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == i+1]
-                if not order_records.empty:
-                    last_record = order_records.iloc[-1]
-                    last_name = str(last_record.get("選手名", ""))
-                    if last_name == "nan": last_name = ""
-                    last_pos = str(last_record.get("位置", ""))
-                    if last_pos == "nan": last_pos = ""
+            if not order_history_df.empty:
+                # 過去にこの打順に登場したことがある選手名の一覧を取得
+                historical_players = order_history_df["選手名"].astype(str).unique().tolist()
+                if p_name_clean in historical_players:
+                    has_appeared_before = True
+                
+                last_record = order_history_df.iloc[-1]
+                last_pos = str(last_record.get("位置", ""))
+                if last_pos == "nan": last_pos = ""
 
             if p_name_clean and p_pos:
-                if last_name == "":
+                if order_history_df.empty:
+                    # 1. この試合でこの打順に全くデータがない場合（完全な新規スタメン）
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
-                        "イニング": "試合前", "選手名": p_name_clean, "位置": p_pos, "打順": i+1,
-                        "結果": "スタメン",
-                        "打点": 0, "得点": 0, "盗塁": 0, 
-                        "種別": "スタメン", "打球方向": "",
-                        "スコアラー": current_scorer
+                        "イニング": "試合前", "選手名": p_name_clean, "位置": p_pos, "打順": target_order,
+                        "結果": "スタメン", "打点": 0, "得点": 0, "盗塁": 0, "種別": "スタメン", "打球方向": "", "スコアラー": current_scorer
                     }
                     new_records.append(record_dict)
-                elif p_name_clean == last_name and p_pos != last_pos:
+                elif has_appeared_before and p_pos != last_pos:
+                    # 2. すでに登場している選手だが、守備位置が変わった場合（守備変更）
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
-                        "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": i+1,
-                        "結果": "守備変更",
-                        "打点": 0, "得点": 0, "盗塁": 0, 
-                        "種別": "守備変更", "打球方向": "",
-                        "スコアラー": current_scorer
+                        "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": target_order,
+                        "結果": "守備変更", "打点": 0, "得点": 0, "盗塁": 0, "種別": "守備変更", "打球方向": "", "スコアラー": current_scorer
                     }
                     new_records.append(record_dict)
-                elif p_name_clean != last_name and last_name != "":
+                elif not has_appeared_before:
+                    # 3. この試合でこの打順に初めて入る、別の人（選手交代）
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
-                        "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": i+1,
-                        "結果": "交代",
-                        "打点": 0, "得点": 0, "盗塁": 0, 
-                        "種別": "交代", "打球方向": "",
-                        "スコアラー": current_scorer
+                        "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": target_order,
+                        "結果": "交代", "打点": 0, "得点": 0, "盗塁": 0, "種別": "交代", "打球方向": "", "スコアラー": current_scorer
                     }
                     new_records.append(record_dict)
+                # ※すでに登場しており、かつ選手も守備位置も同じ（2巡目の打席など）の場合は、余計なスタメン・交代行を追加しません！
 
             if p_name_clean and (p_res is not None or run_val > 0):
                 actual_res = p_res if p_res is not None else "得点"
                 record_dict = {
                     "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
-                    "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": i+1,
-                    "結果": actual_res,
-                    "打点": rbi_val, "得点": run_val, "盗塁": 0, 
-                    "種別": "打席", "打球方向": p_dir if p_dir != "---" else "",
-                    "スコアラー": current_scorer
+                    "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": target_order,
+                    "結果": actual_res, "打点": rbi_val, "得点": run_val, "盗塁": 0, 
+                    "種別": "打席", "打球方向": p_dir if p_dir != "---" else "", "スコアラー": current_scorer
                 }
                 new_records.append(record_dict)
 
@@ -416,9 +404,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             selected_scorer = st.selectbox("スコアラー", p_list, key="scorer_name_ui", format_func=local_fmt, index=def_scorer_ix)
             st.session_state["persistent_scorer"] = selected_scorer
 
-        # ==========================================
-        # 📍 現在の打順・打者インジケータ ＋ クイック入力欄（打席結果・方向・打点）
-        # ==========================================
         active_orders = 9
         for i in range(14, -1, -1):
             if st.session_state.get(f"sn{i}"):
@@ -459,7 +444,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.multiselect("方向(クイック)", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", label_visibility="collapsed", max_selections=2, placeholder="方向選択")
         with qc[3]:
             st.selectbox("打点(クイック)", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
-        # ==========================================
 
         st.divider()
 
@@ -476,7 +460,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c = st.columns(col_ratios)
             c[0].markdown(f"<div style='text-align:center; line-height:2.5;'>{i+1}</div>", unsafe_allow_html=True)
             
-            # セッションステートから値を取得（未設定時はNoneにしてplaceholderを表示させる）
             s_pos = st.session_state.get(f"sp{i}")
             s_name = st.session_state.get(f"sn{i}")
             
@@ -488,7 +471,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             sel_p_name_raw = st.session_state.get(f"sn{i}")
             if sel_p_name_raw and not df_this_season.empty:
-                # 統計情報の抽出も背番号なしの名前で照合
                 clean_name = sel_p_name_raw.split(" (")[0]
                 p_stats_df = df_this_season[df_this_season["選手名"] == clean_name]
                 
@@ -509,7 +491,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
             if not today_batting_df.empty and sel_p_name_raw:
-                # 今日の成績の履歴抽出も背番号なしの名前で照合
                 clean_name = sel_p_name_raw.split(" (")[0]
                 p_df = today_batting_df[
                     (today_batting_df["選手名"] == clean_name) & 
