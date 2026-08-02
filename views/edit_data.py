@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 # ★ 追加: GROUND_LIST と OPPONENTS_LIST をインポート
-from config.settings import SPREADSHEET_URL, ALL_PLAYERS, GROUND_LIST, OPPONENTS_LIST
+from config.settings import SPREADSHEET_URL, GROUND_LIST, OPPONENTS_LIST
+from utils.players import get_active_players
 
 # --- 各種プルダウン用の選択肢を定義 ---
 RESULT_OPTIONS = [
@@ -19,6 +20,9 @@ WIN_LOSE_OPTIONS = ["ー", "勝利", "敗戦", "セーブ", "ホールド"]
 def show_edit_page(df_batting, df_pitching, is_test_mode=False):
     st.title(" 🔧 データ修正")
     conn = st.connection("gsheets", type=GSheetsConnection)
+
+    # ▼▼▼ スプレッドシートから最新の選手一覧と背番号を取得 ▼▼▼
+    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
 
     # 🧪 テストモード判定で書き込むシートを切り替え
     ws_batting = "打撃成績_テスト" if is_test_mode else "打撃成績"
