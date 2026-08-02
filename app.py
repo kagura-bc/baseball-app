@@ -121,9 +121,9 @@ if page == " 📝 試合データ入力":
         c1, c2, c3 = st.columns(3)
         
         with c1:
-            # 1. 試合区分
-            url_match = st.query_params.get("match", OFFICIAL_GAME_TYPES[0])
-            match_options = OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
+            # 1. 試合区分（先頭に空欄 "" を追加）
+            url_match = st.query_params.get("match", "")
+            match_options = [""] + OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
             match_type = st.selectbox(
                 "試合区分", 
                 match_options, 
@@ -131,9 +131,9 @@ if page == " 📝 試合データ入力":
                 key="main_match_type"
             )
             
-            # 2. 攻守
-            order_list = ["先攻 (表)", "後攻 (裏)"]
-            url_order = st.query_params.get("order", order_list[0])
+            # 2. 攻守（先頭に空欄 "" を追加）
+            order_list = ["", "先攻 (表)", "後攻 (裏)"]
+            url_order = st.query_params.get("order", "")
             kagura_order = st.selectbox(
                 "攻守", 
                 order_list, 
@@ -142,7 +142,7 @@ if page == " 📝 試合データ入力":
             )
             
         with c2:
-            # 3. 試合日
+            # 3. 試合日はそのままで日付を保持
             url_date = st.query_params.get("date", datetime.date.today().strftime("%Y-%m-%d"))
             try:
                 default_date = datetime.datetime.strptime(url_date, "%Y-%m-%d").date()
@@ -152,15 +152,27 @@ if page == " 📝 試合データ入力":
             selected_date_str = selected_date.strftime("%Y-%m-%d")
             
         with c3:
-            # 4. グラウンド
-            url_ground = st.query_params.get("ground", GROUND_LIST[0] if GROUND_LIST else "その他")
+            # 4. グラウンド（先頭に空欄 "" を追加）
+            url_ground = st.query_params.get("ground", "")
+            ground_options = [""] + GROUND_LIST
             selected_ground = st.selectbox(
                 "グラウンド", 
-                GROUND_LIST, 
-                index=safe_index(GROUND_LIST, url_ground),
+                ground_options, 
+                index=safe_index(ground_options, url_ground),
                 key="main_selected_ground"
             )
             ground_name = st.text_input("グラウンド名入力", value="その他グラウンド", key="main_custom_ground") if selected_ground == "その他" else selected_ground
+            
+            # 5. 相手チーム（先頭に空欄 "" を追加）
+            url_opp = st.query_params.get("opp", "")
+            opp_options = [""] + OPPONENTS_LIST
+            selected_opp = st.selectbox(
+                "相手チーム", 
+                opp_options, 
+                index=safe_index(opp_options, url_opp),
+                key="main_selected_opp"
+            )
+            opp_team = st.text_input("相手チーム名入力", value="相手チーム", key="main_custom_opp") if selected_opp == "その他" else selected_opp
             
             # 5. 相手チーム
             url_opp = st.query_params.get("opp", OPPONENTS_LIST[0] if OPPONENTS_LIST else "その他")
