@@ -15,26 +15,29 @@ def _load_players_df():
         st.error(f"選手情報の読み込みに失敗しました: {e}")
         return pd.DataFrame(columns=["選手名", "背番号", "成績非表示", "オーダー非表示"])
 
+def _parse_bool(val):
+    """チェックボックスの値を安全にTrue/Falseに変換するヘルパー関数"""
+    if pd.isna(val):
+        return False
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    return s in ["true", "1", "yes", "t", "y"]
+
 def _extract_lists(df):
     if df.empty or "選手名" not in df.columns:
         return [], {}
     
-    # 欠損値を除外
     valid_df = df.dropna(subset=["選手名"]).copy()
     valid_df["選手名"] = valid_df["選手名"].astype(str).str.strip()
     
-    # オーダー非表示・成績非表示の列が存在する場合の処理
-    if "オーダー非表示" in valid_df.columns:
-        active_order_df = valid_df[~valid_df["オーダー非表示"].astype(str).str.lower().isin(["true", "1", "yes"])]
-    else:
-        active_order_df = valid_df
+    # 非表示フラグを安全にブール値へ変換
+    valid_df["オーダー非表示_bool"] = valid_df["オーダー非表示"].apply(_parse_bool) if "オーダー非表示" in valid_df.columns else False
+    valid_df["成績非表示_bool"] = valid_df["成績非表示"].apply(_parse_bool) if "成績非表示" in valid_df.columns else False
 
-    if "成績非表示" in valid_df.columns:
-        active_stats_df = valid_df[~valid_df["成績非表示"].astype(str).str.lower().isin(["true", "1", "yes"])]
-    else:
-        active_stats_df = valid_df
+    # オーダー非表示でない選手のみを抽出
+    active_order_df = valid_df[~valid_df["オーダー非表示_bool"]]
 
-    # 背番号の整形
     def fmt_num(num_val):
         if pd.isna(num_val) or str(num_val).strip() in ["nan", "None", ""]:
             return ""
@@ -43,7 +46,6 @@ def _extract_lists(df):
         except:
             return str(num_val).strip()
 
-    # 背番号付きの表示名リストを作成
     all_players = []
     player_numbers = {}
     for _, row in active_order_df.iterrows():
@@ -70,11 +72,10 @@ def get_stats_active_players():
     valid_df = df.dropna(subset=["選手名"]).copy()
     valid_df["選手名"] = valid_df["選手名"].astype(str).str.strip()
     
-    if "成績非表示" in valid_df.columns:
-        stats_df = valid_df[~valid_df["成績非表示"].astype(str).str.lower().isin(["true", "1", "yes"])]
-    else:
-        stats_df = valid_df
-
+    valid_df["成績非表示_bool"] = valid_df["成績非表示"].apply(_parse_bool) if "成績非表示" in valid_df.columns else False
+    
+    # 成績非表示でない選手のみを抽出
+    stats_df = valid_df[~valid_df["成績非表示_bool"]]
     stats_players = stats_df["選手名"].tolist()
     
     def fmt_num(num_val):
