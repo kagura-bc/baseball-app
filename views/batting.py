@@ -20,14 +20,12 @@ def save_lineup_item(i, item_type):
 
 # --- ヘルパー関数 ---
 def local_fmt(name):
-    # 初期化時に読み込まれた PLAYER_NUMBERS を利用してフォーマット
     return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
 
 # ==========================================
 # メイン表示関数
 # ==========================================
 def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
-    # 最新の選手リストを取得してセッションに保持（local_fmtで使うため）
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
@@ -37,20 +35,20 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ws_pitching = "投手成績"
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 
-    # ▼▼▼ フォームクリアのフラグ処理 (クイック入力もクリア対象に追加) ▼▼▼
+    # ▼▼▼ フォームクリアのフラグ処理 ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(15):
-            for k in [f"sr{i}", f"si{i}"]:
+            for k in [f"sp{i}", f"sn{i}", f"sr{i}", f"si{i}", f"st{i}"]:
                 if k in st.session_state:
-                    st.session_state[k] = "---"
+                    st.session_state[k] = "---" if k.startswith("si") else None
             if f"sd{i}" in st.session_state:
                 st.session_state[f"sd{i}"] = []
         if "quick_sr" in st.session_state:
-            st.session_state["quick_sr"] = "---"
+            st.session_state["quick_sr"] = None
         if "quick_sd" in st.session_state:
             st.session_state["quick_sd"] = []
         if "quick_si" in st.session_state:
-            st.session_state["quick_si"] = "---"
+            st.session_state["quick_si"] = None
         st.session_state["needs_batting_clear"] = False
 
     # ==========================================
@@ -122,8 +120,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     saved_name = last_row["選手名"]
                     saved_pos = last_row.get("位置", "")
                     
-                    st.session_state[f"sn{i}"] = saved_name
-                    st.session_state[f"sp{i}"] = saved_pos
+                    st.session_state[f"sn{i}"] = saved_name if saved_name else None
+                    st.session_state[f"sp{i}"] = saved_pos if saved_pos else None
                     st.session_state["saved_lineup"][f"name_{i}"] = saved_name
                     st.session_state["saved_lineup"][f"pos_{i}"] = saved_pos
                     
@@ -157,7 +155,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     hit_results = ["単打", "二塁打", "三塁打", "本塁打"]
     ab_results = hit_results + ["凡退(ゴロ)", "凡退(フライ)", "失策", "走塁死", "盗塁死", "三振", "併殺打", "野選", "振り逃げ三振"]
 
-    # --- イニング自動進行ロジック ---
     inn_list = [f"{i}回{b_inning_suffix}" for i in range(1, 10)] + [f"延長{b_inning_suffix}"]
     current_inn_val = st.session_state.get("persistent_inn", f"1回{b_inning_suffix}")
     
@@ -180,7 +177,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     def submit_everything(selected_inn):
         if "sn0" not in st.session_state: return 
 
-        # ▼ クイック入力で値が選ばれている場合、現在の打者の行に自動反映させる
         active_orders_temp = 9
         for idx_temp in range(14, -1, -1):
             if st.session_state.get(f"sn{idx_temp}"):
@@ -192,23 +188,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         ] if not today_batting_df.empty else pd.DataFrame()
         cur_batter_idx = len(valid_pa_temp) % active_orders_temp
 
-        q_res_val = st.session_state.get("quick_sr", "---")
-        if q_res_val != "---":
+        q_res_val = st.session_state.get("quick_sr")
+        if q_res_val:
             st.session_state[f"sr{cur_batter_idx}"] = q_res_val
             st.session_state[f"sd{cur_batter_idx}"] = st.session_state.get("quick_sd", [])
-            st.session_state[f"si{cur_batter_idx}"] = st.session_state.get("quick_si", "---")
+            q_si_val = st.session_state.get("quick_si")
+            if q_si_val is not None:
+                st.session_state[f"si{cur_batter_idx}"] = q_si_val
 
         require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打(ゴロ)", "犠打(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打"]
         validation_errors = []
 
         for i in range(15):
             p_name = st.session_state.get(f"sn{i}")
-            p_res = st.session_state.get(f"sr{i}", "---")
+            p_res = st.session_state.get(f"sr{i}")
             
             p_dir_raw = st.session_state.get(f"sd{i}", [])
             p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
             
-            if p_name and p_res != "---":
+            if p_name and p_res:
                 if p_res in require_direction_results and p_dir == "---":
                     validation_errors.append(f"打順{i+1} ({p_name}): 「{p_res}」の打球方向を選択してください。")
 
@@ -232,24 +230,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             p_name = st.session_state.get(f"sn{i}", "")
             p_pos = st.session_state.get(f"sp{i}", "")
             
-            st.session_state["saved_lineup"][f"name_{i}"] = p_name
-            st.session_state["saved_lineup"][f"pos_{i}"] = p_pos
+            st.session_state["saved_lineup"][f"name_{i}"] = p_name if p_name else ""
+            st.session_state["saved_lineup"][f"pos_{i}"] = p_pos if p_pos else ""
             
             if p_pos == "投" and p_name != "":
                 st.session_state["saved_pitcher_name"] = p_name
             
-            p_res = st.session_state.get(f"sr{i}", "---")
+            p_res = st.session_state.get(f"sr{i}")
             
             p_dir_raw = st.session_state.get(f"sd{i}", [])
             p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
             
             def to_int(val):
-                if val == "---" or val is None: return 0
+                if val is None: return 0
                 try: return int(val)
                 except: return 0
 
             rbi_val = to_int(st.session_state.get(f"si{i}"))
-            run_val = to_int(st.session_state.get(f"st{i}"))
+            run_val_raw = st.session_state.get(f"st{i}")
+            run_val = int(run_val_raw) if run_val_raw is not None else 0
 
             if p_res == "本塁打":
                 run_val = 1
@@ -299,12 +298,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
                     new_records.append(record_dict)
 
-            if p_name and (p_res != "---" or run_val > 0):
+            if p_name and (p_res is not None or run_val > 0):
+                actual_res = p_res if p_res is not None else "得点"
                 record_dict = {
                     "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                     "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
-                    "結果": p_res if p_res != "---" else "得点",
-                    "打点": rbi_val, "得点": run_val, "盗塁": (1 if p_res == "盗塁" else 0), 
+                    "結果": actual_res,
+                    "打点": rbi_val, "得点": run_val, "盗塁": 0, 
                     "種別": "打席", "打球方向": p_dir if p_dir != "---" else "",
                     "スコアラー": current_scorer
                 }
@@ -375,7 +375,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["persistent_scorer"] = selected_scorer
 
         # ==========================================
-        # 📍 現在の打順・打者インジケータ ＋ クイック入力欄（横並び）
+        # 📍 現在の打順・打者インジケータ ＋ クイック入力欄（打席結果・方向・打点）
         # ==========================================
         active_orders = 9
         for i in range(14, -1, -1):
@@ -397,35 +397,37 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         raw_batter_name = st.session_state.get(f"sn{current_batter_index}", "")
         formatted_batter_name = local_fmt(raw_batter_name) if raw_batter_name else "（未設定）"
 
-        batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
-                           "失策(ゴロ)", "失策(フライ)", "野選", "併殺打",  "盗塁", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
+        batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
+                           "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        # インジケータとクイック入力を横並びに配置
-        q_cols = [2.2, 1.8, 2.0, 1.0]
+        q_cols = [3.4, 1.8, 2.0, 1.0]
         qc = st.columns(q_cols)
 
         with qc[0]:
             st.markdown(f"""
-            <div style="background-color: #f0f2f6; padding: 6px 10px; border-radius: 8px; border-left: 5px solid #ff4b4b; height: 100%; display: flex; align-items: center;">
-                <div>
-                    <span style="font-size: 11px; color: #555; font-weight: bold;">📍 現在の打席</span><br>
-                    <span style="font-size: 13px; color: #111; font-weight: bold;">第 {current_order_num} 打順: <span style="color: #ff4b4b;">{formatted_batter_name}</span></span>
-                </div>
+            <div style="background-color: #f0f2f6; padding: 8px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 12px;">
+                <span style="font-size: 13px; color: #555; font-weight: bold; white-space: nowrap;">📍 現在の打席</span>
+                <span style="font-size: 16px; color: #111; font-weight: bold; white-space: nowrap;">第 {current_order_num} 打順</span>
+                <span style="font-size: 18px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
             </div>
             """, unsafe_allow_html=True)
         with qc[1]:
-            st.selectbox("結果(クイック)", batting_results, key="quick_sr", label_visibility="collapsed")
+            st.selectbox("結果(クイック)", batting_results, key="quick_sr", placeholder="打席結果", index=None, label_visibility="collapsed")
         with qc[2]:
             st.multiselect("方向(クイック)", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", label_visibility="collapsed", max_selections=2, placeholder="方向選択")
         with qc[3]:
-            st.selectbox("打点(クイック)", ["---", 0, 1, 2, 3, 4], key="quick_si", label_visibility="collapsed")
+            st.selectbox("打点(クイック)", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
         # ==========================================
 
         st.divider()
 
-        col_ratios = [0.5, 0.8, 1.5, 1.4, 1.6, 0.7, 0.7, 3.6]
+        run_results = ["盗塁", "盗塁死", "走塁死"]
+        pos_options = [p for p in ALL_POSITIONS if p != ""]
+        player_options = [p for p in ALL_PLAYERS if p != ""]
+
+        col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
         h = st.columns(col_ratios)
-        headers = ["打順", "守備", "選手名", "結果", "方向", "打点", "得点", "今日の成績"]
+        headers = ["打順", "守備", "選手名", "結果", "得点", "今日の成績"]
         for idx, title in enumerate(headers):
             h[idx].markdown(f"<div style='text-align:center; font-size:12px; color:gray;'>{title}</div>", unsafe_allow_html=True)
 
@@ -435,14 +437,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             s_pos = st.session_state["saved_lineup"].get(f"pos_{i}", "")
             s_name = st.session_state["saved_lineup"].get(f"name_{i}", "")
-            def_pos_ix = ALL_POSITIONS.index(s_pos) if s_pos in ALL_POSITIONS else 0
-            p_list = [""] + ALL_PLAYERS
-            def_name_ix = p_list.index(s_name) if s_name in p_list else 0
             
-            c[1].selectbox(f"p{i}", ALL_POSITIONS, index=def_pos_ix, key=f"sp{i}", label_visibility="collapsed")
-            c[2].selectbox(f"n{i}", p_list, index=def_name_ix, key=f"sn{i}", label_visibility="collapsed", format_func=local_fmt)
+            def_pos_ix = pos_options.index(s_pos) if s_pos in pos_options else None
+            def_name_ix = player_options.index(s_name) if s_name in player_options else None
             
-            # --- 青色で通算成績を表示 ---
+            c[1].selectbox(f"p{i}", pos_options, index=def_pos_ix, key=f"sp{i}", placeholder="守備", label_visibility="collapsed")
+            c[2].selectbox(f"n{i}", player_options, index=def_name_ix, key=f"sn{i}", placeholder="選手名", format_func=local_fmt, label_visibility="collapsed")
+            
             sel_p_name = st.session_state.get(f"sn{i}")
             if sel_p_name and not df_this_season.empty:
                 clean_name = sel_p_name.split(" (")[0]
@@ -461,12 +462,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 else:
                     c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>.000 0点 0本</div>", unsafe_allow_html=True)
 
-            c[3].selectbox(f"r{i}", batting_results, key=f"sr{i}", label_visibility="collapsed")
-            c[4].multiselect(f"d{i}", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key=f"sd{i}", label_visibility="collapsed", max_selections=2, placeholder="選択")
-            c[5].selectbox(f"i{i}", ["---", 0, 1, 2, 3, 4], key=f"si{i}", label_visibility="collapsed")
-            c[6].selectbox(f"t{i}", ["---", 0, 1], key=f"st{i}", label_visibility="collapsed") 
+            c[3].selectbox(f"r{i}", run_results, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
+            c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
-            # --- 今日の成績履歴 ---
             if not today_batting_df.empty and sel_p_name:
                 p_df = today_batting_df[
                     (today_batting_df["選手名"] == sel_p_name) & 
@@ -474,40 +472,30 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 ]
                 if not p_df.empty:
                     history_html = []
-                    pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
-                                           "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
                     count = 0
                     total_runs = 0
                     for _, row in p_df.iterrows():
                         res = row['結果']
-                        raw_dir = row['打球方向']
-                        p_dir = str(raw_dir) if pd.notna(raw_dir) and raw_dir != "---" else ""
-                        
-                        rbi_val = pd.to_numeric(row['打点'], errors='coerce')
-                        rbi = int(rbi_val) if pd.notna(rbi_val) else 0
-                        
                         runs_val = pd.to_numeric(row['得点'], errors='coerce')
                         total_runs += int(runs_val) if pd.notna(runs_val) else 0
                         
                         res_short = {
                             "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 
                             "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "失策(ゴロ)":"失", "失策(フライ)":"失", "野選":"野", "併殺打":"併", 
-                            "振り逃げ三振":"逃", "打撃妨害":"妨"
-                        }.get(res, res[:1])
+                            "振り逃げ三振":"逃", "打撃妨害":"妨", "盗塁":"盗", "盗塁死":"盗死", "走塁死":"走死"
+                        }.get(res, res[:2])
                         
-                        if res in pa_list_for_history:
-                            count += 1
-                            disp_text = f"{p_dir}{res_short}"
-                            if rbi > 0:
-                                html = f"<span style='color:red; font-weight:bold;'>{count}({disp_text}{rbi})</span>"
-                            else:
-                                html = f"<span>{count}({disp_text})</span>"
-                            history_html.append(html)
+                        count += 1
+                        raw_dir = row['打球方向']
+                        p_dir = str(raw_dir) if pd.notna(raw_dir) and raw_dir != "---" else ""
+                        disp_text = f"{p_dir}{res_short}" if p_dir else f"{res_short}"
+                        html = f"<span>{count}({disp_text})</span>"
+                        history_html.append(html)
                     
                     if total_runs > 0:
                         history_html.append(f"<span style='color:blue; font-size:14px; margin-left:5px;'>[計{total_runs}得点]</span>")
                     
-                    c[7].markdown(f"<div style='font-size:18px; line-height:1.2; padding-top:5px;'>{' '.join(history_html)}</div>", unsafe_allow_html=True)
+                    c[5].markdown(f"<div style='font-size:18px; line-height:1.2; padding-top:5px;'>{' '.join(history_html)}</div>", unsafe_allow_html=True)
 
         if submitted:
             submit_everything(curr_inn)
