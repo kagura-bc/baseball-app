@@ -250,14 +250,14 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
         st.info(f"📌 **条件未到達等のため配置外の選手**: {', '.join(unassigned)}")
 
 def show_ideal_order_tab(df_batting, df_pitching=None):
+    # 🌟 ここ（st.multiselectで使うより前）に配置します
+    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
+
     st.markdown("### 🧠 選択選手から理想オーダー作成")
     st.write("本日参加するメンバーを選択すると、成績のセイバーメトリクス指標と過去の守備機会から、最適なスタメンと守備位置を自動生成します。")
 
     default_players = st.session_state.get("persistent_bench", [])
     selected_players = st.multiselect("本日参加するメンバーを選択", ALL_PLAYERS, default=default_players, key="ideal_order_players_widget")
-
-    # スプレッドシートから最新の選手一覧と背番号を取得
-    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
 
     if not selected_players:
         st.info("選手を選択してください。")
