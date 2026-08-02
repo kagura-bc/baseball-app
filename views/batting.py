@@ -51,18 +51,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ==========================================
     # 1. 試合設定変更時のリセット & 初期化
     # ==========================================
-    # 日付・対戦相手・試合種別を組み合わせた識別IDを作成
     current_match_id = f"{selected_date_str}_{opp_team}_{match_type}"
     
     if "last_match_id" not in st.session_state:
         st.session_state["last_match_id"] = current_match_id
     
-    # 識別IDが変わった（＝設定が変更された）かを判定
     match_changed = (st.session_state["last_match_id"] != current_match_id)
     
     if match_changed:
         all_keys = list(st.session_state.keys())
-        # saved_lineup なども含めて関連データを一掃する
         target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
@@ -86,7 +83,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ==========================================
     is_kagura_top = (kagura_order == "先攻 (表)")
     
-    # 【修正】日付だけでなく、対戦相手と試合種別も一致するデータのみ抽出する
     today_batting_df = df_batting[
         (df_batting["日付"].astype(str) == selected_date_str) & 
         (df_batting["対戦相手"] == opp_team) & 
@@ -166,7 +162,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
         d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
         
-        # もし3アウト以上になっていれば次のイニングへ
         if (s_outs + d_outs) >= 3:
             try:
                 curr_idx = inn_list.index(current_inn_val)
@@ -180,7 +175,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     def submit_everything(selected_inn):
         if "sn0" not in st.session_state: return 
 
-        # 併殺打も打球方向を必須にするためリストに追加
         require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打(ゴロ)", "犠打(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打"]
         validation_errors = []
 
@@ -188,7 +182,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             p_name = st.session_state.get(f"sn{i}")
             p_res = st.session_state.get(f"sr{i}", "---")
             
-            # マルチセレクトのリストを文字列に変換 (例: ["遊", "一"] -> "遊-一")
             p_dir_raw = st.session_state.get(f"sd{i}", [])
             p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
             
@@ -203,7 +196,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         new_records = []
         has_homerun = False
         
-        # フォームから渡されたイニングを使用
         current_inn = selected_inn
         current_scorer = st.session_state.get("scorer_name_ui", "")
         
@@ -225,7 +217,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             p_res = st.session_state.get(f"sr{i}", "---")
             
-            # マルチセレクトのリストを文字列に変換
             p_dir_raw = st.session_state.get(f"sd{i}", [])
             p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
             
@@ -242,11 +233,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if rbi_val == 0: rbi_val = 1
                 has_homerun = True
 
-            # --- 前回状態の取得 (スタメン・守備変更の検知用) ---
             last_name = ""
             last_pos = ""
             if not today_batting_df.empty:
-                # この打順のこれまでの登録履歴を取得
                 order_records = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == i+1]
                 if not order_records.empty:
                     last_record = order_records.iloc[-1]
@@ -255,10 +244,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     last_pos = str(last_record.get("位置", ""))
                     if last_pos == "nan": last_pos = ""
 
-            # --- 自動反映 (スタメン / 守備変更 / 交代) ---
             if p_name and p_pos:
                 if last_name == "":
-                    # まだ誰も登録されていない場合 -> スタメン
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                         "イニング": "試合前", "選手名": p_name, "位置": p_pos, "打順": i+1,
@@ -269,7 +256,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
                     new_records.append(record_dict)
                 elif p_name == last_name and p_pos != last_pos:
-                    # 選手は同じで守備位置のみ変更された -> 守備変更
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                         "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
@@ -280,7 +266,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
                     new_records.append(record_dict)
                 elif p_name != last_name and last_name != "":
-                    # 選手が変わった場合 -> 交代 (途中出場)
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                         "イニング": current_inn, "選手名": p_name, "位置": p_pos, "打順": i+1,
@@ -291,7 +276,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
                     new_records.append(record_dict)
 
-            # --- 通常の打席成績の記録 ---
             if p_name and (p_res != "---" or run_val > 0):
                 record_dict = {
                     "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
@@ -341,16 +325,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     # --- フォーム開始 ---
     with st.form(key='batting_form', clear_on_submit=False):
-        # 1. 登録ボタン
         submitted = st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
 
-        # 2. イニング・アウト・スコアラー選択
         c_inn, c_outs, c_scorer = st.columns([1.5, 2.5, 3.5])
         
         with c_inn:
             def_inn_ix = inn_list.index(current_inn_val) if current_inn_val in inn_list else 0
             curr_inn = st.selectbox("イニング", inn_list, index=def_inn_ix)
-            st.session_state["persistent_inn"] = curr_inn # 手動変更に対応
+            st.session_state["persistent_inn"] = curr_inn
         
         with c_outs:
             disp_outs = 0
@@ -369,13 +351,43 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             selected_scorer = st.selectbox("スコアラー", p_list, key="scorer_name_ui", format_func=local_fmt, index=def_scorer_ix)
             st.session_state["persistent_scorer"] = selected_scorer
 
+        # ==========================================
+        # 💡 追加：現在の打順と打者をわかりやすく表示するインジケータ
+        # ==========================================
+        active_orders = 9
+        for i in range(14, -1, -1):
+            if st.session_state.get(f"sn{i}"):
+                active_orders = i + 1
+                break
+
+        if not today_batting_df.empty:
+            valid_pa_df = today_batting_df[
+                ~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"]) & 
+                ~today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代"])
+            ]
+            total_pa_count = len(valid_pa_df)
+        else:
+            total_pa_count = 0
+
+        current_batter_index = total_pa_count % active_orders
+        current_order_num = current_batter_index + 1
+        raw_batter_name = st.session_state.get(f"sn{current_batter_index}", "")
+        formatted_batter_name = local_fmt(raw_batter_name) if raw_batter_name else "（未設定）"
+
+        st.markdown(f"""
+        <div style="background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; margin-top: 10px; margin-bottom: 10px; text-align: center; border-left: 5px solid #ff4b4b;">
+            <span style="font-size: 14px; color: #555; font-weight: bold;">📍 現在の打席：</span>
+            <span style="font-size: 16px; color: #111; font-weight: bold; margin-left: 10px;">第 {current_order_num} 打順</span>
+            <span style="font-size: 16px; color: #ff4b4b; font-weight: bold; margin-left: 15px;">{formatted_batter_name}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        # ==========================================
+
         st.divider()
 
-        # 3. 打席入力テーブル (★ ここから "得点" を削除しました)
         batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打",  "盗塁", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
         
-        # 守備・選手名・打点・得点を少し狭め、方向(1.6)を大きく広げるよう比率を変更
         col_ratios = [0.5, 0.8, 1.5, 1.4, 1.6, 0.7, 0.7, 3.6]
         h = st.columns(col_ratios)
         headers = ["打順", "守備", "選手名", "結果", "方向", "打点", "得点", "今日の成績"]
@@ -415,10 +427,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>.000 0点 0本</div>", unsafe_allow_html=True)
 
             c[3].selectbox(f"r{i}", batting_results, key=f"sr{i}", label_visibility="collapsed")
-            
-            # selectbox から multiselect に変更（最大2つまで選択可能に。省スペース化のため placeholder を設定）
             c[4].multiselect(f"d{i}", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key=f"sd{i}", label_visibility="collapsed", max_selections=2, placeholder="選択")
-            
             c[5].selectbox(f"i{i}", ["---", 0, 1, 2, 3, 4], key=f"si{i}", label_visibility="collapsed")
             c[6].selectbox(f"t{i}", ["---", 0, 1], key=f"st{i}", label_visibility="collapsed") 
             
@@ -426,7 +435,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if not today_batting_df.empty and sel_p_name:
                 p_df = today_batting_df[
                     (today_batting_df["選手名"] == sel_p_name) & 
-                    (~today_batting_df["結果"].isin(["スタメン", "守備変更", "交代"])) # 履歴には出さない
+                    (~today_batting_df["結果"].isin(["スタメン", "守備変更", "交代"]))
                 ]
                 if not p_df.empty:
                     history_html = []
@@ -465,11 +474,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     
                     c[7].markdown(f"<div style='font-size:18px; line-height:1.2; padding-top:5px;'>{' '.join(history_html)}</div>", unsafe_allow_html=True)
 
-        # フォーム内でボタンが押された場合に実行
         if submitted:
             submit_everything(curr_inn)
 
-    # --- ベンチ入りメンバー (フォーム外) ---
     with st.expander(" 🚌 ベンチ入りメンバー", expanded=True):
         selected_bench = st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
         st.session_state["persistent_bench"] = selected_bench
