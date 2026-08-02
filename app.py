@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
-from config.settings import MY_TEAM, GROUND_LIST, OPPONENTS_LIST, OFFICIAL_GAME_TYPES
+from streamlit_gsheets import GSheetsConnection
+from config.settings import MY_TEAM, OFFICIAL_GAME_TYPES, SPREADSHEET_URL
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
 # 各ページ（View）の読み込みに ideal_order を追加
@@ -68,6 +69,21 @@ if not st.session_state["is_logged_in"]:
 df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
+# 🌟 スプレッドシートからグラウンド一覧と対戦相手一覧を動的に取得
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+try:
+    df_ground = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="グラウンド登録")
+    GROUND_LIST = df_ground["グラウンド名"].dropna().tolist() if "グラウンド名" in df_ground.columns else ["その他"]
+except Exception:
+    GROUND_LIST = ["小瀬スポーツ公園", "その他"]
+
+try:
+    df_opp = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録")
+    OPPONENTS_LIST = df_opp["チーム名"].dropna().tolist() if "チーム名" in df_opp.columns else ["その他"]
+except Exception:
+    OPPONENTS_LIST = ["その他"]
+
 # --- ヘルパー関数 (URLクエリパラメータとの同期用) ---
 def safe_index(lst, val):
     try:
@@ -130,7 +146,7 @@ if page == " 📝 試合データ入力":
             
         with c3:
             # 4. グラウンド
-            url_ground = st.query_params.get("ground", GROUND_LIST[0])
+            url_ground = st.query_params.get("ground", GROUND_LIST[0] if GROUND_LIST else "その他")
             selected_ground = st.selectbox(
                 "グラウンド", 
                 GROUND_LIST, 
@@ -140,7 +156,7 @@ if page == " 📝 試合データ入力":
             ground_name = st.text_input("グラウンド名入力", value="その他グラウンド", key="main_custom_ground") if selected_ground == "その他" else selected_ground
             
             # 5. 相手チーム
-            url_opp = st.query_params.get("opp", OPPONENTS_LIST[0])
+            url_opp = st.query_params.get("opp", OPPONENTS_LIST[0] if OPPONENTS_LIST else "その他")
             selected_opp = st.selectbox(
                 "相手チーム", 
                 OPPONENTS_LIST, 
