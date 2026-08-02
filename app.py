@@ -19,6 +19,15 @@ st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_htm
 
 load_css()
 
+# --- スマホ・タブレットでセレクトボックスをタッチした時にキーボードが出るのを防ぐ共通CSS ---
+st.markdown("""
+<style>
+    div[data-baseweb="select"] input {
+        pointer-events: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ==========================================
 # 🔐 ログイン機能の実装
 # ==========================================
