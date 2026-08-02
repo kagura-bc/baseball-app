@@ -37,15 +37,20 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ws_pitching = "投手成績"
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 
-    # ▼▼▼ 追加: フォームクリアのフラグ処理 (投手成績と同じ仕組み) ▼▼▼
+    # ▼▼▼ フォームクリアのフラグ処理 (クイック入力もクリア対象に追加) ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(15):
-            for k in [f"sr{i}", f"si{i}", f"st{i}"]:
+            for k in [f"sr{i}", f"si{i}"]:
                 if k in st.session_state:
                     st.session_state[k] = "---"
-            # 打球方向(sd)はマルチセレクトになるため空リスト([])でリセットする
             if f"sd{i}" in st.session_state:
                 st.session_state[f"sd{i}"] = []
+        if "quick_sr" in st.session_state:
+            st.session_state["quick_sr"] = "---"
+        if "quick_sd" in st.session_state:
+            st.session_state["quick_sd"] = []
+        if "quick_si" in st.session_state:
+            st.session_state["quick_si"] = "---"
         st.session_state["needs_batting_clear"] = False
 
     # ==========================================
@@ -60,7 +65,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     if match_changed:
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup"]
+        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
@@ -174,6 +179,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # --- 登録実行関数 ---
     def submit_everything(selected_inn):
         if "sn0" not in st.session_state: return 
+
+        # ▼ クイック入力で値が選ばれている場合、現在の打者の行に自動反映させる
+        active_orders_temp = 9
+        for idx_temp in range(14, -1, -1):
+            if st.session_state.get(f"sn{idx_temp}"):
+                active_orders_temp = idx_temp + 1
+                break
+        valid_pa_temp = today_batting_df[
+            ~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"]) & 
+            ~today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代"])
+        ] if not today_batting_df.empty else pd.DataFrame()
+        cur_batter_idx = len(valid_pa_temp) % active_orders_temp
+
+        q_res_val = st.session_state.get("quick_sr", "---")
+        if q_res_val != "---":
+            st.session_state[f"sr{cur_batter_idx}"] = q_res_val
+            st.session_state[f"sd{cur_batter_idx}"] = st.session_state.get("quick_sd", [])
+            st.session_state[f"si{cur_batter_idx}"] = st.session_state.get("quick_si", "---")
 
         require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打(ゴロ)", "犠打(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打"]
         validation_errors = []
@@ -352,7 +375,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["persistent_scorer"] = selected_scorer
 
         # ==========================================
-        # 💡 追加：現在の打順と打者をわかりやすく表示するインジケータ
+        # 📍 現在の打順・打者インジケータ ＋ クイック入力欄（横並び）
         # ==========================================
         active_orders = 9
         for i in range(14, -1, -1):
@@ -374,20 +397,32 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         raw_batter_name = st.session_state.get(f"sn{current_batter_index}", "")
         formatted_batter_name = local_fmt(raw_batter_name) if raw_batter_name else "（未設定）"
 
-        st.markdown(f"""
-        <div style="background-color: #f0f2f6; padding: 10px 15px; border-radius: 8px; margin-top: 10px; margin-bottom: 10px; text-align: center; border-left: 5px solid #ff4b4b;">
-            <span style="font-size: 14px; color: #555; font-weight: bold;">📍 現在の打席：</span>
-            <span style="font-size: 16px; color: #111; font-weight: bold; margin-left: 10px;">第 {current_order_num} 打順</span>
-            <span style="font-size: 16px; color: #ff4b4b; font-weight: bold; margin-left: 15px;">{formatted_batter_name}</span>
-        </div>
-        """, unsafe_allow_html=True)
+        batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
+                           "失策(ゴロ)", "失策(フライ)", "野選", "併殺打",  "盗塁", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
+
+        # インジケータとクイック入力を横並びに配置
+        q_cols = [2.2, 1.8, 2.0, 1.0]
+        qc = st.columns(q_cols)
+
+        with qc[0]:
+            st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 6px 10px; border-radius: 8px; border-left: 5px solid #ff4b4b; height: 100%; display: flex; align-items: center;">
+                <div>
+                    <span style="font-size: 11px; color: #555; font-weight: bold;">📍 現在の打席</span><br>
+                    <span style="font-size: 13px; color: #111; font-weight: bold;">第 {current_order_num} 打順: <span style="color: #ff4b4b;">{formatted_batter_name}</span></span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with qc[1]:
+            st.selectbox("結果(クイック)", batting_results, key="quick_sr", label_visibility="collapsed")
+        with qc[2]:
+            st.multiselect("方向(クイック)", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", label_visibility="collapsed", max_selections=2, placeholder="方向選択")
+        with qc[3]:
+            st.selectbox("打点(クイック)", ["---", 0, 1, 2, 3, 4], key="quick_si", label_visibility="collapsed")
         # ==========================================
 
         st.divider()
 
-        batting_results = ["---", "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
-                           "失策(ゴロ)", "失策(フライ)", "野選", "併殺打",  "盗塁", "走塁死", "盗塁死", "振り逃げ三振", "打撃妨害"]
-        
         col_ratios = [0.5, 0.8, 1.5, 1.4, 1.6, 0.7, 0.7, 3.6]
         h = st.columns(col_ratios)
         headers = ["打順", "守備", "選手名", "結果", "方向", "打点", "得点", "今日の成績"]
