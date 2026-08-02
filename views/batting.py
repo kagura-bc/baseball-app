@@ -29,6 +29,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
+    # --- スマホ・タブレットでセレクトボックスをタッチした時にキーボードが出るのを防ぐCSS ---
+    st.markdown("""
+    <style>
+        div[data-baseweb="select"] input {
+            pointer-events: none !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     ws_batting = "打撃成績"
@@ -447,10 +456,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         all_results_options = ["盗塁", "盗塁死", "走塁死"]
 
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
-        h = st.columns(col_ratios)
-        headers = ["打順", "守備", "選手名", "結果", "得点", "今日の成績"]
-        for idx, title in enumerate(headers):
-            h[idx].markdown(f"<div style='text-align:center; font-size:12px; color:gray;'>{title}</div>", unsafe_allow_html=True)
 
         for i in range(15):
             c = st.columns(col_ratios)
