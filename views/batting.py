@@ -286,7 +286,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 has_homerun = True
 
             target_order = i + 1
-            # 修正済みの正しい構文
             order_history_df = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order] if not today_batting_df.empty else pd.DataFrame()
             
             has_appeared_before = False
@@ -461,25 +460,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c[1].selectbox(f"p{i}", pos_options, index=def_pos_ix, key=f"sp{i}", placeholder="守備", label_visibility="collapsed")
             c[2].selectbox(f"n{i}", player_options, index=def_name_ix, key=f"sn{i}", placeholder="選手名", format_func=local_fmt, label_visibility="collapsed")
             
-            sel_p_name_raw = st.session_state.get(f"sn{i}")
-            if sel_p_name_raw and not df_this_season.empty:
-                clean_name = sel_p_name_raw.split(" (")[0]
-                p_stats_df = df_this_season[df_this_season["選手名"] == clean_name]
-                
-                if not p_stats_df.empty:
-                    ab_count = len(p_stats_df[p_stats_df["結果"].isin(ab_results)])
-                    hit_count = len(p_stats_df[p_stats_df["結果"].isin(hit_results)])
-                    rbi_sum = pd.to_numeric(p_stats_df["打点"], errors='coerce').sum()
-                    hr_count = len(p_stats_df[p_stats_df["結果"] == "本塁打"])
-                    
-                    avg = hit_count / ab_count if ab_count > 0 else 0.0
-                    avg_str = f"{avg:.3f}".replace("0.", ".") 
-                    
-                    c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>{avg_str} {int(rbi_sum)}点 {hr_count}本</div>", unsafe_allow_html=True)
-                else:
-                    c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>.000 0点 0本</div>", unsafe_allow_html=True)
-
-            # ▼ placeholderを「走塁結果」に変更 ▼
             c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
