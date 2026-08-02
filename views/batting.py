@@ -34,9 +34,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ▼▼▼ 追加: フォームクリアのフラグ処理 (投手成績と同じ仕組み) ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(15):
-            for k in [f"sr{i}", f"sd{i}", f"si{i}", f"st{i}"]:
+            for k in [f"sr{i}", f"si{i}", f"st{i}"]:
                 if k in st.session_state:
                     st.session_state[k] = "---"
+            # 打球方向(sd)はマルチセレクトになるため空リスト([])でリセットする
+            if f"sd{i}" in st.session_state:
+                st.session_state[f"sd{i}"] = []
         st.session_state["needs_batting_clear"] = False
 
     # ==========================================
@@ -171,13 +174,18 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     def submit_everything(selected_inn):
         if "sn0" not in st.session_state: return 
 
-        require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打(ゴロ)", "犠打(フライ)", "失策(ゴロ)", "失策(フライ)"]
+        # 併殺打も打球方向を必須にするためリストに追加
+        require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打(ゴロ)", "犠打(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打"]
         validation_errors = []
 
         for i in range(15):
             p_name = st.session_state.get(f"sn{i}")
             p_res = st.session_state.get(f"sr{i}", "---")
-            p_dir = st.session_state.get(f"sd{i}", "---")
+            
+            # マルチセレクトのリストを文字列に変換 (例: ["遊", "一"] -> "遊-一")
+            p_dir_raw = st.session_state.get(f"sd{i}", [])
+            p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
+            
             if p_name and p_res != "---":
                 if p_res in require_direction_results and p_dir == "---":
                     validation_errors.append(f"打順{i+1} ({p_name}): 「{p_res}」の打球方向を選択してください。")
@@ -210,7 +218,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state["saved_pitcher_name"] = p_name
             
             p_res = st.session_state.get(f"sr{i}", "---")
-            p_dir = st.session_state.get(f"sd{i}", "---")
+            
+            # マルチセレクトのリストを文字列に変換
+            p_dir_raw = st.session_state.get(f"sd{i}", [])
+            p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
             
             def to_int(val):
                 if val == "---" or val is None: return 0
@@ -397,7 +408,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>.000 0点 0本</div>", unsafe_allow_html=True)
 
             c[3].selectbox(f"r{i}", batting_results, key=f"sr{i}", label_visibility="collapsed")
-            c[4].selectbox(f"d{i}", ["---", "投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key=f"sd{i}", label_visibility="collapsed")
+            
+            # selectbox から multiselect に変更（最大2つまで選択可能に。省スペース化のため placeholder を設定）
+            c[4].multiselect(f"d{i}", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key=f"sd{i}", label_visibility="collapsed", max_selections=2, placeholder="選択")
+            
             c[5].selectbox(f"i{i}", ["---", 0, 1, 2, 3, 4], key=f"si{i}", label_visibility="collapsed")
             c[6].selectbox(f"t{i}", ["---", 0, 1], key=f"st{i}", label_visibility="collapsed") 
             
