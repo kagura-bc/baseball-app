@@ -295,8 +295,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if p_name_clean in historical_players:
                     has_appeared_before = True
                 
-                last_record = order_history_df.iloc[-1]
-                last_pos = str(last_record.get("位置", ""))
+                # 修正: 位置情報が記録されている直近の行から正確に前回のポジションを取得する
+                valid_pos_rows = order_history_df[order_history_df["位置"].astype(str).str.strip().ne("") & (order_history_df["位置"].astype(str) != "nan")]
+                if not valid_pos_rows.empty:
+                    last_pos = str(valid_pos_rows.iloc[-1]["位置"])
+                else:
+                    last_record = order_history_df.iloc[-1]
+                    last_pos = str(last_record.get("位置", ""))
                 if last_pos == "nan": last_pos = ""
 
             if p_name_clean and p_pos:
@@ -460,7 +465,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c[1].selectbox(f"p{i}", pos_options, index=def_pos_ix, key=f"sp{i}", placeholder="守備", label_visibility="collapsed")
             c[2].selectbox(f"n{i}", player_options, index=def_name_ix, key=f"sn{i}", placeholder="選手名", format_func=local_fmt, label_visibility="collapsed")
             
-            # ▼ 選手名取得をここで確実に定義する ▼
             sel_p_name_raw = st.session_state.get(f"sn{i}")
 
             c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
