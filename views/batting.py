@@ -463,6 +463,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
+            sel_p_name_raw = st.session_state.get(f"sn{i}")
             if not today_batting_df.empty and sel_p_name_raw:
                 clean_name = sel_p_name_raw.split(" (")[0]
                 p_df = today_batting_df[
