@@ -8,12 +8,12 @@ from utils.ui import fmt_player_name
 from utils.ui import render_scoreboard, render_out_indicator_3, fmt_player_name
 
 def local_fmt(name):
-    return fmt_player_name(name, PLAYER_NUMBERS)
+    return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
 
-def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    # スプレッドシートから最新の選手一覧と背番号を取得
+def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order):
+    # ▼▼▼ 追加: 最新の選手一覧と背番号を取得してセッションに保持 ▼▼▼
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
+    st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
     # 🧪 テストモード判定で書き込むシートを切り替え
     ws_pitching = "投手成績"
