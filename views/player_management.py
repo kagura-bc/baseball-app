@@ -35,8 +35,8 @@ def show_player_management():
         column_config={
             "選手名": st.column_config.TextColumn("選手名", required=True),
             "背番号": st.column_config.TextColumn("背番号"),
-            "成績非表示": st.column_config.CheckboxColumn("成績から隠す", default=False, help="チェックを入れるとチーム成績等のランキングから消えます（退団選手など）"),
-            "オーダー非表示": st.column_config.CheckboxColumn("オーダーから隠す", default=False, help="チェックを入れると試合入力のプルダウンから消えます（休部中など）"),
+            "成績非表示": st.column_config.CheckboxColumn("成績非表示", default=False, help="チェックを入れるとチーム成績等のランキングから消えます（退団選手など）"),
+            "オーダー非表示": st.column_config.CheckboxColumn("オーダー非表示", default=False, help="チェックを入れると試合入力のプルダウンから消えます（休部中など）"),
         },
         use_container_width=True,
         key="player_editor"
