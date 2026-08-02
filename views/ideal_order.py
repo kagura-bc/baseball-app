@@ -245,7 +245,12 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     
     st.divider()
 
-    unassigned = [p for p in selected_players if p not in used_players]
+    # 背番号を除去したクレンジング済みの配置済み選手リストを作成
+    used_players_clean = [str(u).split(" (")[0] for u in used_players]
+    
+    # クレンジングした状態で比較し、本当に配置されなかった選手のみを抽出
+    unassigned = [p for p in selected_players if str(p).split(" (")[0] not in used_players_clean]
+    
     if unassigned:
         st.info(f"📌 **条件未到達等のため配置外の選手**: {', '.join(unassigned)}")
 
@@ -288,7 +293,12 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
     for c in ["打点", "盗塁"]:
         df_calc[c] = pd.to_numeric(df_calc[c], errors='coerce').fillna(0)
 
-    df_selected = df_calc[df_calc["選手名"].isin(selected_players)].copy()
+    cleaned_selected_players = [p.split(" (")[0] for p in selected_players]
+    
+    # データ側の選手名も安全のためにクレンジング用列を作成
+    df_calc["選手名_clean"] = df_calc["選手名"].astype(str).apply(lambda x: x.split(" (")[0])
+    
+    df_selected = df_calc[df_calc["選手名_clean"].isin(cleaned_selected_players)].copy()
 
     if df_selected.empty:
         st.warning("選択された選手の打席データがありません。")
