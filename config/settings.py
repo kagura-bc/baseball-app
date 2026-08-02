@@ -1,8 +1,5 @@
 # config/settings.py
 import streamlit as st
-from config.settings import SPREADSHEET_URL, MY_TEAM
-from utils.players import get_active_players
-from utils.ui import fmt_player_name
 
 # チーム名
 MY_TEAM = "KAGURA"

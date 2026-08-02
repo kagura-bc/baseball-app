@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
-from config.settings import ALL_PLAYERS, SPREADSHEET_URL, PLAYER_NUMBERS, MY_TEAM
+from config.settings import SPREADSHEET_URL, MY_TEAM
+from utils.players import get_active_players
+# 必要に応じてUI用の関数もインポート
+from utils.ui import fmt_player_name
 from utils.ui import render_scoreboard, render_out_indicator_3, fmt_player_name
 
 def local_fmt(name):
@@ -9,6 +12,8 @@ def local_fmt(name):
 
 def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
     conn = st.connection("gsheets", type=GSheetsConnection)
+    # スプレッドシートから最新の選手一覧と背番号を取得
+    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     
     # 🧪 テストモード判定で書き込むシートを切り替え
     ws_pitching = "投手成績"
