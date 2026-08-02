@@ -286,6 +286,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 has_homerun = True
 
             target_order = i + 1
+            # 修正済みの正しい構文
             order_history_df = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order] if not today_batting_df.empty else pd.DataFrame()
             
             has_appeared_before = False
@@ -439,7 +440,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
-        # ▼ 修正: 各行のプルダウンに表示する選択肢を走塁結果のみに絞る ▼
         all_results_options = ["盗塁", "盗塁死", "走塁死"]
 
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
@@ -479,7 +479,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 else:
                     c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>.000 0点 0本</div>", unsafe_allow_html=True)
 
-            c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="結果", index=None, label_visibility="collapsed")
+            # ▼ placeholderを「走塁結果」に変更 ▼
+            c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
             if not today_batting_df.empty and sel_p_name_raw:
