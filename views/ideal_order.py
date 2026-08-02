@@ -1,7 +1,7 @@
 import datetime
 import streamlit as st
 import pandas as pd
-from config.settings import ALL_PLAYERS
+from utils.players import get_active_players
 
 
 def calculate_saber_metrics(stats):
@@ -255,6 +255,9 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
 
     default_players = st.session_state.get("persistent_bench", [])
     selected_players = st.multiselect("本日参加するメンバーを選択", ALL_PLAYERS, default=default_players, key="ideal_order_players_widget")
+
+    # スプレッドシートから最新の選手一覧と背番号を取得
+    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
 
     if not selected_players:
         st.info("選手を選択してください。")
