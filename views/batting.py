@@ -460,10 +460,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c[1].selectbox(f"p{i}", pos_options, index=def_pos_ix, key=f"sp{i}", placeholder="守備", label_visibility="collapsed")
             c[2].selectbox(f"n{i}", player_options, index=def_name_ix, key=f"sn{i}", placeholder="選手名", format_func=local_fmt, label_visibility="collapsed")
             
+            # ▼ 選手名取得をここで確実に定義する ▼
+            sel_p_name_raw = st.session_state.get(f"sn{i}")
+
             c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
-            sel_p_name_raw = st.session_state.get(f"sn{i}")
             if not today_batting_df.empty and sel_p_name_raw:
                 clean_name = sel_p_name_raw.split(" (")[0]
                 p_df = today_batting_df[
