@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime
 from streamlit_gsheets import GSheetsConnection
-from config.settings import ALL_PLAYERS, ALL_POSITIONS, SPREADSHEET_URL, PLAYER_NUMBERS
+from config.settings import ALL_POSITIONS, SPREADSHEET_URL
+from utils.players import get_active_players
 from utils.ui import render_scoreboard, render_out_indicator_3, show_homerun_effect, fmt_player_name
 
 # --- コールバック関数 (入力状態の保存用) ---
@@ -19,12 +20,17 @@ def save_lineup_item(i, item_type):
 
 # --- ヘルパー関数 ---
 def local_fmt(name):
-    return fmt_player_name(name, PLAYER_NUMBERS)
+    # 初期化時に読み込まれた PLAYER_NUMBERS を利用してフォーマット
+    return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
 
 # ==========================================
 # メイン表示関数
 # ==========================================
 def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
+    # 最新の選手リストを取得してセッションに保持（local_fmtで使うため）
+    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
+    st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
+    
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     ws_batting = "打撃成績"

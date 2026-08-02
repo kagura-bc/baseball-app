@@ -3,6 +3,7 @@ import pandas as pd
 from config.settings import OFFICIAL_GAME_TYPES
 from utils.ui import render_scoreboard
 import re
+from utils.players import get_stats_active_players
 
 # ★ 集計計算を共通化
 def calc_metrics(df):
@@ -46,6 +47,20 @@ def calc_metrics(df):
 
 def show_team_stats(df_batting, df_pitching):
     st.title(" 🏆 チーム成績ダッシュボード")
+
+    # ▼▼▼ 追加: 成績表示用の選手リストを取得し、非表示選手を除外する ▼▼▼
+    STATS_PLAYERS, STATS_NUMBERS = get_stats_active_players()
+    
+    # チーム記録（合計値）と、表示対象の選手のみを残す
+    allowed_names = STATS_PLAYERS + ["チーム記録"]
+    if not df_batting.empty:
+        df_batting = df_batting[df_batting["選手名"].isin(allowed_names)]
+    
+    if not df_pitching.empty:
+        if "投手名" in df_pitching.columns:
+            df_pitching = df_pitching[(df_pitching["投手名"].isin(allowed_names)) | (df_pitching["選手名"] == "チーム記録")]
+        else:
+            df_pitching = df_pitching[df_pitching["選手名"].isin(allowed_names)]
 
     # 1. データ準備 & 集計ロジック
     if df_batting.empty and df_pitching.empty:

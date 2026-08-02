@@ -3,8 +3,8 @@ import datetime
 from config.settings import MY_TEAM, GROUND_LIST, OPPONENTS_LIST, OFFICIAL_GAME_TYPES
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css
-# 各ページ（View）の読み込みに ideal_order を追加[cite: 1]
-from views import batting, pitching, team_stats, personal_stats, edit_data, analysis, ideal_order
+# 各ページ（View）の読み込みに ideal_order を追加
+from views import batting, pitching, team_stats, personal_stats, edit_data, analysis, ideal_order, player_management
 
 # 1. GitHub上の実際のファイル名 (logo-192.png) に合わせる
 ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/logo-192.png?v=3"
@@ -80,10 +80,10 @@ def safe_index(lst, val):
 # ==========================================
 st.sidebar.markdown("### ⚾️ KAGUSTA")
 
-# サイドバーにはメニューのみを配置（試合設定は削除）
+# サイドバーにはメニューのみを配置（選手管理を追加）
 page = st.sidebar.radio(
     "メニュー", 
-    [" 📝 試合データ入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正"]
+    [" 📝 試合データ入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正", " 👥 選手管理"]
 )
 
 # ==========================================
@@ -187,3 +187,7 @@ elif page == " 📈 データ分析":
 elif page == " 🔧 データ修正":
     # サイドバーから「データ修正」が選ばれた場合も表示できるように残す
     edit_data.show_edit_page(df_batting, df_pitching)
+
+elif page == " 👥 選手管理":
+    # ★追加: 選手管理ページの中身
+    player_management.show_player_management()

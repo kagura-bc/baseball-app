@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from config.settings import MY_TEAM
+from streamlit_gsheets import GSheetsConnection
+from config.settings import SPREADSHEET_URL
 
 def load_css():
     st.markdown("""
@@ -219,3 +221,4 @@ def render_out_indicator_3(count):
     
     html += "</div>"
     return html
+
