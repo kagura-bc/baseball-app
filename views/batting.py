@@ -285,16 +285,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if rbi_val == 0: rbi_val = 1
                 has_homerun = True
 
-            # ==========================================
-            # 🌟 修正: 2巡目以降も「交代」扱いにならないように判定を改善
-            # ==========================================
             target_order = i + 1
             order_history_df = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order] if not today_batting_df.empty else pd.DataFrame()
             
             has_appeared_before = False
             last_pos = ""
             if not order_history_df.empty:
-                # 過去にこの打順に登場したことがある選手名の一覧を取得
                 historical_players = order_history_df["選手名"].astype(str).unique().tolist()
                 if p_name_clean in historical_players:
                     has_appeared_before = True
@@ -305,7 +301,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             if p_name_clean and p_pos:
                 if order_history_df.empty:
-                    # 1. この試合でこの打順に全くデータがない場合（完全な新規スタメン）
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                         "イニング": "試合前", "選手名": p_name_clean, "位置": p_pos, "打順": target_order,
@@ -313,7 +308,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
                     new_records.append(record_dict)
                 elif has_appeared_before and p_pos != last_pos:
-                    # 2. すでに登場している選手だが、守備位置が変わった場合（守備変更）
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                         "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": target_order,
@@ -321,14 +315,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
                     new_records.append(record_dict)
                 elif not has_appeared_before:
-                    # 3. この試合でこの打順に初めて入る、別の人（選手交代）
                     record_dict = {
                         "日付": selected_date_str, "グラウンド": ground_name, "対戦相手": opp_team, "試合種別": match_type,
                         "イニング": current_inn, "選手名": p_name_clean, "位置": p_pos, "打順": target_order,
                         "結果": "交代", "打点": 0, "得点": 0, "盗塁": 0, "種別": "交代", "打球方向": "", "スコアラー": current_scorer
                     }
                     new_records.append(record_dict)
-                # ※すでに登場しており、かつ選手も守備位置も同じ（2巡目の打席など）の場合は、余計なスタメン・交代行を追加しません！
 
             if p_name_clean and (p_res is not None or run_val > 0):
                 actual_res = p_res if p_res is not None else "得点"
@@ -447,8 +439,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
-        run_results = ["盗塁", "盗塁死", "走塁死"]
-        all_results_options = batting_results + run_results
+        # ▼ 修正: 各行のプルダウンに表示する選択肢を走塁結果のみに絞る ▼
+        all_results_options = ["盗塁", "盗塁死", "走塁死"]
 
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
         h = st.columns(col_ratios)
