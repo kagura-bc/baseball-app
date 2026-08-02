@@ -69,20 +69,27 @@ if not st.session_state["is_logged_in"]:
 df_batting = load_batting_data()
 df_pitching = load_pitching_data()
 
-# 🌟 スプレッドシートからグラウンド一覧と対戦相手一覧を動的に取得
-conn = st.connection("gsheets", type=GSheetsConnection)
+# 🌟 キャッシュを利用してAPIリクエスト制限（429エラー）を回避
+@st.cache_data(ttl=60)
+def get_cached_grounds():
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        df_ground = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="グラウンド登録", ttl=0)
+        return df_ground["グラウンド名"].dropna().tolist() if "グラウンド名" in df_ground.columns else ["その他"]
+    except Exception:
+        return ["その他"]
 
-try:
-    df_ground = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="グラウンド登録")
-    GROUND_LIST = df_ground["グラウンド名"].dropna().tolist() if "グラウンド名" in df_ground.columns else ["その他"]
-except Exception:
-    GROUND_LIST = ["小瀬スポーツ公園", "その他"]
+@st.cache_data(ttl=60)
+def get_cached_opponents():
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        df_opp = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録", ttl=0)
+        return df_opp["チーム名"].dropna().tolist() if "チーム名" in df_opp.columns else ["その他"]
+    except Exception:
+        return ["その他"]
 
-try:
-    df_opp = conn.read(spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録")
-    OPPONENTS_LIST = df_opp["チーム名"].dropna().tolist() if "チーム名" in df_opp.columns else ["その他"]
-except Exception:
-    OPPONENTS_LIST = ["その他"]
+GROUND_LIST = get_cached_grounds()
+OPPONENTS_LIST = get_cached_opponents()
 
 # --- ヘルパー関数 (URLクエリパラメータとの同期用) ---
 def safe_index(lst, val):
