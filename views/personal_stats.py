@@ -2,25 +2,24 @@ import streamlit as st
 import pandas as pd
 import datetime
 import unicodedata
-from config.settings import ALL_PLAYERS, PLAYER_NUMBERS, OFFICIAL_GAME_TYPES
-
-# ==========================================
-# --- ネットとローカルの二段構えでリストを取得 ---
-# ==========================================
-if "HIDDEN_PLAYERS_TOTAL" in st.secrets:
-    # 1. ネット上(Streamlit Cloud)に設定があればそれを使う
-    HIDDEN_PLAYERS_TOTAL = st.secrets["HIDDEN_PLAYERS_TOTAL"]
-else:
-    # 2. なければローカルのファイルから読み込む
-    try:
-        from local_secrets import HIDDEN_PLAYERS_TOTAL
-    except ImportError:
-        HIDDEN_PLAYERS_TOTAL = []
-# ==========================================
+from config.settings import OFFICIAL_GAME_TYPES
+from utils.players import get_stats_active_players
 
 def show_personal_stats(df_batting, df_pitching):
     st.title(" 📊 個人成績")
 
+    # ▼▼▼ 追加: スプレッドシートから成績表示用の選手リストを取得 ▼▼▼
+    STATS_PLAYERS, STATS_NUMBERS = get_stats_active_players()
+    
+    # チーム記録は残しつつ、非表示対象の選手を除外する
+    allowed_names = STATS_PLAYERS + ["チーム記録"]
+    
+    if not df_batting.empty:
+        df_batting = df_batting[df_batting["選手名"].isin(allowed_names)].copy()
+    
+    if not df_pitching.empty:
+        df_pitching = df_pitching[df_pitching["選手名"].isin(allowed_names)].copy()
+    # ▲▲▲ 追加ここまで ▲▲▲
 
     # =========================================================
     # 1. データ前処理
@@ -174,25 +173,6 @@ def show_personal_stats(df_batting, df_pitching):
         df_b_tg = df_b_calc.copy()
         df_p_tg = df_p_calc.copy()
 
-        def normalize_name(text):
-            if not isinstance(text, str) or not text:
-                return ""
-            text = unicodedata.normalize('NFKC', text)
-            return text.strip().replace(" ", "").replace(" ", "").replace("さん", "")
-
-        hidden_list_raw = HIDDEN_PLAYERS_TOTAL
-        clean_hidden_list = [normalize_name(n) for n in hidden_list_raw]
-
-        if not df_b_tg.empty:
-            df_b_tg["_match_name"] = df_b_tg["選手名"].apply(normalize_name)
-            df_b_tg = df_b_tg[~df_b_tg["_match_name"].isin(clean_hidden_list)]
-            df_b_tg = df_b_tg.drop(columns=["_match_name"])
-
-        if not df_p_tg.empty:
-            df_p_tg["_match_name"] = df_p_tg["選手名"].apply(normalize_name)
-            df_p_tg = df_p_tg[~df_p_tg["_match_name"].isin(clean_hidden_list)]
-            df_p_tg = df_p_tg.drop(columns=["_match_name"])
-
         if target_year != "通算":
             df_b_tg = df_b_tg[df_b_tg["Year"] == target_year]
             df_p_tg = df_p_tg[df_p_tg["Year"] == target_year]
@@ -302,44 +282,50 @@ def show_personal_stats(df_batting, df_pitching):
                     fld_expanded = fld_data.explode("zipped").reset_index(drop=True)
                     if not fld_expanded.empty:
                         fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
+                        
+                        # 処理野手として登場した非表示選手を除外
+                        fld_expanded = fld_expanded[fld_expanded["FielderName"].isin(STATS_PLAYERS)]
                     else:
                         fld_expanded["FielderName"] = ""
                         fld_expanded["FielderPos"] = ""
 
-                    fld_expanded["is_error"] = fld_expanded["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
+                    if not fld_expanded.empty:
+                        fld_expanded["is_error"] = fld_expanded["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
 
-                    group_keys = ["Original_Idx", "FielderName", "FielderPos"]
+                        group_keys = ["Original_Idx", "FielderName", "FielderPos"]
 
-                    fld_unique = fld_expanded.groupby(group_keys).agg(
-                        is_error=("is_error", "max")
-                    ).reset_index()
+                        fld_unique = fld_expanded.groupby(group_keys).agg(
+                            is_error=("is_error", "max")
+                        ).reset_index()
 
-                    stats_f = fld_unique.groupby(["FielderName", "FielderPos"]).agg(
-                        守備機会=("FielderName", "count"),
-                        失策数=("is_error", "sum")
-                    ).reset_index()
-                    
-                    stats_f["守備率"] = stats_f.apply(
-                        lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, 
-                        axis=1
-                    )
-                    
-                    pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                    stats_f["SortKey"] = stats_f["FielderPos"].apply(
-                        lambda x: pos_order.index(x) if x in pos_order else 99
-                    )
-                    stats_f = stats_f.sort_values(["SortKey", "守備機会"], ascending=[True, False]).reset_index(drop=True)
-                    
-                    disp_df = stats_f[["FielderPos", "FielderName", "守備機会", "失策数", "守備率"]].copy()
-                    disp_df.columns = ["守備位置", "選手名", "守備機会", "失策", "守備率"]
-                    disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
-                    disp_df = disp_df[disp_df["選手名"] != ""].reset_index(drop=True)
-                    
-                    disp_df.insert(0, "順位", range(1, len(disp_df) + 1))
-                    
-                    st.dataframe(disp_df, use_container_width=True, hide_index=True, column_config={
-                        "順位": st.column_config.TextColumn("順位", help="ランキング順位")
-                    })
+                        stats_f = fld_unique.groupby(["FielderName", "FielderPos"]).agg(
+                            守備機会=("FielderName", "count"),
+                            失策数=("is_error", "sum")
+                        ).reset_index()
+                        
+                        stats_f["守備率"] = stats_f.apply(
+                            lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, 
+                            axis=1
+                        )
+                        
+                        pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                        stats_f["SortKey"] = stats_f["FielderPos"].apply(
+                            lambda x: pos_order.index(x) if x in pos_order else 99
+                        )
+                        stats_f = stats_f.sort_values(["SortKey", "守備機会"], ascending=[True, False]).reset_index(drop=True)
+                        
+                        disp_df = stats_f[["FielderPos", "FielderName", "守備機会", "失策数", "守備率"]].copy()
+                        disp_df.columns = ["守備位置", "選手名", "守備機会", "失策", "守備率"]
+                        disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
+                        disp_df = disp_df[disp_df["選手名"] != ""].reset_index(drop=True)
+                        
+                        disp_df.insert(0, "順位", range(1, len(disp_df) + 1))
+                        
+                        st.dataframe(disp_df, use_container_width=True, hide_index=True, column_config={
+                            "順位": st.column_config.TextColumn("順位", help="ランキング順位")
+                        })
+                    else:
+                        st.info("守備記録なし")
                 else:
                     st.info("守備記録なし")
             else:
@@ -372,8 +358,7 @@ def show_personal_stats(df_batting, df_pitching):
                     total_games = official_games + practice_games + other_games
 
                     df_personal_logs = df_all_logs[df_all_logs["選手名"] != "チーム記録"].copy()
-                    df_personal_logs["_match_name"] = df_personal_logs["選手名"].apply(normalize_name)
-                    df_valid_players = df_personal_logs[~df_personal_logs["_match_name"].isin(clean_hidden_list)].copy()
+                    df_valid_players = df_personal_logs.copy()
 
                     if not df_valid_players.empty:
                         # 🌟 日付型への変換と最新活動日の特定
@@ -479,7 +464,7 @@ def show_personal_stats(df_batting, df_pitching):
     # 2. 個人年度別 + 通算
     # ----------------------------------------------------
     with t_year:
-        sel_player = st.selectbox("選手選択", ALL_PLAYERS)
+        sel_player = st.selectbox("選手選択", STATS_PLAYERS)
         if sel_player:
             if not df_b_calc.empty:
                 my_b = df_b_calc[df_b_calc["選手名"] == sel_player]
@@ -748,28 +733,8 @@ def show_personal_stats(df_batting, df_pitching):
         rc1, rc2 = st.columns([1, 2])
         rec_mode = rc1.radio("対象", ["シーズン最高", "生涯通算"], horizontal=True)
         
-        FIXED_EXCLUDE_LIST = HIDDEN_PLAYERS_TOTAL
-
-        def normalize_name_for_rec(text):
-            if not isinstance(text, str) or not text:
-                return ""
-            text = unicodedata.normalize('NFKC', text)
-            return text.strip().replace(" ", "").replace(" ", "").replace("さん", "")
-
-        clean_exclude_list = [normalize_name_for_rec(n) for n in FIXED_EXCLUDE_LIST]
-
         df_b_target = df_b_calc.copy()
         df_p_target = df_p_calc.copy()
-
-        if not df_b_target.empty and clean_exclude_list:
-            df_b_target["_match_name"] = df_b_target["選手名"].apply(normalize_name_for_rec)
-            df_b_target = df_b_target[~df_b_target["_match_name"].isin(clean_exclude_list)]
-            df_b_target = df_b_target.drop(columns=["_match_name"])
-
-        if not df_p_target.empty and clean_exclude_list:
-            df_p_target["_match_name"] = df_p_target["選手名"].apply(normalize_name_for_rec)
-            df_p_target = df_p_target[~df_p_target["_match_name"].isin(clean_exclude_list)]
-            df_p_target = df_p_target.drop(columns=["_match_name"])
 
         if not df_b_target.empty:
             df_b_target["Date"] = pd.to_datetime(df_b_target["日付"])
@@ -899,8 +864,6 @@ def show_personal_stats(df_batting, df_pitching):
             saber_stats_b = pd.DataFrame()
             if not df_b_target.empty:
                 df_b_saber = df_b_target.copy()
-                df_b_saber["_match_name"] = df_b_saber["選手名"].apply(normalize_name)
-                df_b_saber = df_b_saber[~df_b_saber["_match_name"].isin(clean_hidden_list)]
                 if not df_b_saber.empty:
                     saber_stats_b = df_b_saber.groupby("選手名").agg(agg_rules_b).reset_index()
                     saber_stats_b["PA"] = saber_stats_b["is_ab"] + saber_stats_b["is_bb"] + saber_stats_b["is_sf"]
@@ -920,8 +883,6 @@ def show_personal_stats(df_batting, df_pitching):
             saber_stats_p = pd.DataFrame()
             if not df_p_target.empty:
                 df_p_saber = df_p_target.copy()
-                df_p_saber["_match_name"] = df_p_saber["選手名"].apply(normalize_name)
-                df_p_saber = df_p_saber[~df_p_saber["_match_name"].isin(clean_hidden_list)]
                 if not df_p_saber.empty:
                     saber_stats_p = df_p_saber.groupby("選手名").agg(agg_rules_p).reset_index()
                     saber_stats_p["投球回"] = saber_stats_p["アウト数"] / 3
@@ -944,8 +905,9 @@ def show_personal_stats(df_batting, df_pitching):
                     fld_expanded = fld_data.explode("zipped").reset_index(drop=True)
                     if not fld_expanded.empty:
                         fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
-                        fld_expanded["_match_name"] = fld_expanded["FielderName"].apply(normalize_name)
-                        fld_expanded = fld_expanded[~fld_expanded["_match_name"].isin(clean_hidden_list)]
+                        
+                        # 非表示選手を除外
+                        fld_expanded = fld_expanded[fld_expanded["FielderName"].isin(STATS_PLAYERS)]
                         
                         fld_expanded["is_error"] = fld_expanded["Result" if "Result" in fld_expanded.columns else "結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
                         
@@ -977,8 +939,7 @@ def show_personal_stats(df_batting, df_pitching):
 
                 df_all_logs = df_all_logs[df_all_logs["選手名"] != "チーム記録"]
                 df_all_logs["Game_ID"] = df_all_logs["日付"] + "_" + df_all_logs["対戦相手"] + "_" + df_all_logs["試合種別"]
-                df_all_logs["_match_name"] = df_all_logs["選手名"].apply(normalize_name)
-                df_valid_games = df_all_logs[~df_all_logs["_match_name"].isin(clean_hidden_list)]
+                df_valid_games = df_all_logs.copy()
                 
                 if not df_valid_games.empty:
                     game_counts = df_valid_games.groupby("選手名")["Game_ID"].nunique().reset_index(name="試合参加数")
