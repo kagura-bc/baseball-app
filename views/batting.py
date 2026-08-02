@@ -217,12 +217,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         cur_batter_idx = len(valid_pa_temp) % active_orders_temp
 
         q_res_val = st.session_state.get("quick_sr")
-        if q_res_val:
-            st.session_state[f"sr{cur_batter_idx}"] = q_res_val
-            st.session_state[f"sd{cur_batter_idx}"] = st.session_state.get("quick_sd", [])
-            q_si_val = st.session_state.get("quick_si")
-            if q_si_val is not None:
-                st.session_state[f"si{cur_batter_idx}"] = q_si_val
+        q_sd_val = st.session_state.get("quick_sd", [])
+        q_si_val = st.session_state.get("quick_si")
 
         require_direction_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "犠打(ゴロ)", "犠打(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打"]
         validation_errors = []
@@ -230,8 +226,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         for i in range(15):
             p_name = st.session_state.get(f"sn{i}")
             p_res = st.session_state.get(f"sr{i}")
-            
             p_dir_raw = st.session_state.get(f"sd{i}", [])
+            
+            # ▼追加修正：ウィジェット変数を直接書き換えずに、ローカル変数でクイック入力を上書き適用する
+            if q_res_val and i == cur_batter_idx:
+                p_res = q_res_val
+                p_dir_raw = q_sd_val
+            
             p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
             
             if p_name and p_res:
@@ -265,8 +266,16 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state["saved_pitcher_name"] = p_name
             
             p_res = st.session_state.get(f"sr{i}")
-            
             p_dir_raw = st.session_state.get(f"sd{i}", [])
+            rbi_val_raw = st.session_state.get(f"si{i}")
+            
+            # ▼追加修正：保存対象の変数にもクイック入力を上書き適用
+            if q_res_val and i == cur_batter_idx:
+                p_res = q_res_val
+                p_dir_raw = q_sd_val
+                if q_si_val is not None:
+                    rbi_val_raw = q_si_val
+            
             p_dir = "-".join(p_dir_raw) if p_dir_raw else "---"
             
             def to_int(val):
@@ -274,7 +283,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 try: return int(val)
                 except: return 0
 
-            rbi_val = to_int(st.session_state.get(f"si{i}"))
+            rbi_val = to_int(rbi_val_raw)
             run_val_raw = st.session_state.get(f"st{i}")
             run_val = int(run_val_raw) if run_val_raw is not None else 0
 
@@ -449,7 +458,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
-        # ▼ 追加修正：行のプルダウンに「打席結果」もすべて表示できるように統合 ▼
         run_results = ["盗塁", "盗塁死", "走塁死"]
         all_results_options = batting_results + run_results
 
@@ -491,7 +499,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 else:
                     c[2].markdown(f"<div style='color:#1E90FF; font-size:11px; margin-top:-5px; text-align:center;'>.000 0点 0本</div>", unsafe_allow_html=True)
 
-            # ▼ 追加修正：all_results_optionsに変更し、placeholderを「結果」に変更 ▼
             c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="結果", index=None, label_visibility="collapsed")
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed") 
             
