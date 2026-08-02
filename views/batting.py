@@ -35,6 +35,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ws_pitching = "投手成績"
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 
+    pos_options = [p for p in ALL_POSITIONS if p != ""]
+    player_options = [p for p in ALL_PLAYERS if p != ""]
+
     # ▼▼▼ フォームクリアのフラグ処理 ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(15):
@@ -114,19 +117,35 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             for i in range(15):
                 target_order = i + 1
-                rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
+                # スタメン行を優先的に取得するように修正
+                rows = today_batting_df[
+                    (pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order) & 
+                    (today_batting_df["結果"].astype(str) == "スタメン")
+                ]
+                if rows.empty:
+                    rows = today_batting_df[pd.to_numeric(today_batting_df["打順"], errors='coerce') == target_order]
+                
                 if not rows.empty:
                     last_row = rows.iloc[-1]
-                    saved_name = last_row["選手名"]
-                    saved_pos = last_row.get("位置", "")
+                    saved_name = str(last_row["選手名"])
+                    saved_pos = str(last_row.get("位置", ""))
                     
-                    st.session_state[f"sn{i}"] = saved_name if saved_name else None
-                    st.session_state[f"sp{i}"] = saved_pos if saved_pos else None
-                    st.session_state["saved_lineup"][f"name_{i}"] = saved_name
-                    st.session_state["saved_lineup"][f"pos_{i}"] = saved_pos
+                    # 選手名が選択肢に含まれるか、または名前部分が一致するか照合
+                    matched_name = None
+                    if saved_name in player_options:
+                        matched_name = saved_name
+                    else:
+                        matched_name = next((p for p in player_options if p.split(" (")[0] == saved_name.split(" (")[0]), None)
+
+                    matched_pos = saved_pos if saved_pos in pos_options else None
+
+                    st.session_state[f"sn{i}"] = matched_name
+                    st.session_state[f"sp{i}"] = matched_pos
+                    st.session_state["saved_lineup"][f"name_{i}"] = matched_name if matched_name else ""
+                    st.session_state["saved_lineup"][f"pos_{i}"] = matched_pos if matched_pos else ""
                     
-                    if saved_pos == "投" and saved_name:
-                        st.session_state["shared_starting_pitcher"] = saved_name.split(" (")[0]
+                    if matched_pos == "投" and matched_name:
+                        st.session_state["shared_starting_pitcher"] = matched_name.split(" (")[0]
                         
         except Exception as e:
             print(f"Data Loading Error: {e}")
@@ -422,8 +441,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.divider()
 
         run_results = ["盗塁", "盗塁死", "走塁死"]
-        pos_options = [p for p in ALL_POSITIONS if p != ""]
-        player_options = [p for p in ALL_PLAYERS if p != ""]
 
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
         h = st.columns(col_ratios)
