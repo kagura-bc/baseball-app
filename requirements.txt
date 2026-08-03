@@ -1,6 +1,0 @@
-streamlit
-pandas
-st-gsheets-connection
-matplotlib
-streamlit-option-menu
-streamlit-gsheets
