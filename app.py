@@ -19,11 +19,12 @@ st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_htm
 
 load_css()
 
-# --- スマホ・タブレットでセレクトボックスをタッチした時にキーボードが出るのを防ぐ共通CSS ---
+# --- スマホ・タブレットでキーボードが出るのを【完全に】防ぐ共通CSS ---
 st.markdown("""
 <style>
+    /* セレクトボックス内の検索用テキスト入力欄を完全に非表示にする */
     div[data-baseweb="select"] input {
-        pointer-events: none !important;
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
