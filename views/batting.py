@@ -23,7 +23,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* 画面内にあるすべてのプルダウン（セレクトボックス・マルチセレクト）の高さを大きくして統一 */
+        /* 画面内にあるすべてのプルダウンの高さを大きくして統一 */
         div[data-baseweb="select"] > div {
             min-height: 60px !important;
             height: auto !important;
@@ -223,7 +223,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     history_html.append(f"<span style='{color_style}'>{count}({disp_text})</span>")
                 
                 if total_runs > 0:
-                    history_html.append(f"<span style='color: green; font-size:14px; margin-left:5px;'>[計{total_runs}得点]</span>")
+                    history_html.append(f"<span style='color: green; font-size:18px; margin-left:5px;'>[計{total_runs}得点]</span>")
                 
                 player_history_dict[str(clean_name).strip()] = " ".join(history_html)
 
@@ -432,7 +432,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        # 🌟 打席表示と、上段クイック入力エリア（高さ80px、大きな文字）
+        # 🌟 打席表示と、上段クイック入力エリア
         q_cols = [3.6, 2.2, 2.6, 0.9]
         qc = st.columns(q_cols)
 
@@ -454,7 +454,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.divider()
 
         all_results_options = ["盗塁", "盗塁死", "走塁死"]
-        col_ratios = [0.5, 0.8, 1.5, 1.4, 1.0, 3.6]
+        col_ratios = [0.5, 1.0, 1.5, 1.4, 1.0, 3.6]
 
         # 15打順のループ
         for i in range(15):
@@ -481,7 +481,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if sel_p_name_raw:
                 clean_name = sel_p_name_raw.split(" (")[0].strip()
                 if clean_name in player_history_dict:
-                    c[5].markdown(f"<div style='font-size:18px; line-height:1.2; padding-top:5px;'>{player_history_dict[clean_name]}</div>", unsafe_allow_html=True)
+                    # 🌟 履歴の文字サイズを 24px に拡大
+                    c[5].markdown(f"<div style='font-size:24px; line-height:1.3; padding-top:10px;'>{player_history_dict[clean_name]}</div>", unsafe_allow_html=True)
 
         if submitted:
             submit_everything(curr_inn)
