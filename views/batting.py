@@ -409,7 +409,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        q_cols = [3.0, 2.0, 3.4, 0.9]
+        q_cols = [5.0, 2.0, 2.0, 1.0]
         qc = st.columns(q_cols)
 
         with qc[0]:
