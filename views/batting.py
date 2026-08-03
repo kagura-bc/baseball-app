@@ -46,7 +46,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         }
         .stMultiSelect div[data-baseweb="select"] > div {
             min-height: 56px !important;
-            padding: 4px 6px !important;
+            padding: 2px 3px !important;
             display: flex !important;
             align-items: center !important;
             flex-wrap: wrap !important;
