@@ -404,11 +404,19 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
         
         with c_scorer: 
-            p_list = [""] + ALL_PLAYERS
+            p_list = ALL_PLAYERS
             saved_scorer = st.session_state.get("persistent_scorer", "")
-            def_scorer_ix = p_list.index(saved_scorer) if saved_scorer in p_list else 0
-            selected_scorer = st.selectbox("スコアラー", p_list, key="scorer_name_ui", format_func=local_fmt, index=def_scorer_ix)
-            st.session_state["persistent_scorer"] = selected_scorer
+            scorer_idx = p_list.index(saved_scorer) if saved_scorer in p_list else None
+            
+            selected_scorer = st.selectbox(
+                "スコアラー", 
+                p_list, 
+                key="scorer_name_ui", 
+                format_func=local_fmt, 
+                index=scorer_idx,
+                placeholder="選択してください"
+            )
+            st.session_state["persistent_scorer"] = selected_scorer if selected_scorer else ""
 
         active_orders = 9
         for i in range(14, -1, -1):

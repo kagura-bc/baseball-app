@@ -19,12 +19,12 @@ st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_htm
 
 load_css()
 
-# --- スマホ・タブレットでキーボードが出るのを【完全に】防ぐ共通CSS ---
+# --- スマホ・タブレットでキーボードが出るのを防ぐ修正CSS ---
 st.markdown("""
 <style>
-    /* セレクトボックス内の検索用テキスト入力欄を完全に非表示にする */
+    /* 入力欄のカーソルを透明にして、タップ時の挙動を調整する */
     div[data-baseweb="select"] input {
-        display: none !important;
+        caret-color: transparent !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -149,47 +149,65 @@ if page == " 📝 試合データ入力":
         c1, c2, c3 = st.columns(3)
         
         with c1:
-            match_options = [""] + OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
-            initial_match = def_match_type if def_match_type in match_options else st.query_params.get("match", "")
+            match_options = OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
+            initial_match = def_match_type if def_match_type in match_options else None
+            match_idx = match_options.index(initial_match) if initial_match in match_options else None
             match_type = st.selectbox(
                 "試合区分", 
                 match_options, 
-                index=safe_index(match_options, initial_match),
+                index=match_idx,
+                placeholder="選択してください",
                 key="main_match_type"
             )
+            if match_type is None: match_type = ""
             
-            order_list = ["", "先攻 (表)", "後攻 (裏)"]
-            initial_order = def_order if def_order in order_list else st.query_params.get("order", "")
+            order_list = ["先攻 (表)", "後攻 (裏)"]
+            initial_order = def_order if def_order in order_list else None
+            order_idx = order_list.index(initial_order) if initial_order in order_list else None
             kagura_order = st.selectbox(
                 "攻守", 
                 order_list, 
-                index=safe_index(order_list, initial_order),
+                index=order_idx,
+                placeholder="選択してください",
                 key="main_kagura_order"
             )
+            if kagura_order is None: kagura_order = ""
             
         with c2:
             st.info(f"📅 選択中の日付: **{selected_date_str}**\n\n※日付を変更すると、過去に登録がある場合は設定が自動で呼び出されます。")
             
         with c3:
-            ground_options = [""] + GROUND_LIST
-            initial_ground = def_ground_name if def_ground_name in ground_options else ("その他" if def_ground_name else st.query_params.get("ground", ""))
+            ground_options = GROUND_LIST
+            initial_ground = def_ground_name if def_ground_name in ground_options else None
+            ground_idx = ground_options.index(initial_ground) if initial_ground in ground_options else None
             selected_ground = st.selectbox(
                 "グラウンド", 
                 ground_options, 
-                index=safe_index(ground_options, initial_ground),
+                index=ground_idx,
+                placeholder="選択してください",
                 key="main_selected_ground"
             )
-            ground_name = st.text_input("グラウンド名入力", value=def_ground_name if def_ground_name not in ground_options and def_ground_name else "その他グラウンド", key="main_custom_ground") if selected_ground == "その他" else selected_ground
             
-            opp_options = [""] + OPPONENTS_LIST
-            initial_opp = def_opp_team if def_opp_team in opp_options else ("その他" if def_opp_team else st.query_params.get("opp", ""))
+            if selected_ground == "その他":
+                ground_name = st.text_input("グラウンド名入力", value=def_ground_name if def_ground_name not in ground_options and def_ground_name else "その他グラウンド", key="main_custom_ground")
+            else:
+                ground_name = selected_ground if selected_ground else ""
+            
+            opp_options = OPPONENTS_LIST
+            initial_opp = def_opp_team if def_opp_team in opp_options else None
+            opp_idx = opp_options.index(initial_opp) if initial_opp in opp_options else None
             selected_opp = st.selectbox(
                 "相手チーム", 
                 opp_options, 
-                index=safe_index(opp_options, initial_opp),
+                index=opp_idx,
+                placeholder="選択してください",
                 key="main_selected_opp"
             )
-            opp_team = st.text_input("相手チーム名入力", value=def_opp_team if def_opp_team not in opp_options and def_opp_team else "相手チーム", key="main_custom_opp") if selected_opp == "その他" else selected_opp
+            
+            if selected_opp == "その他":
+                opp_team = st.text_input("相手チーム名入力", value=def_opp_team if def_opp_team not in opp_options and def_opp_team else "相手チーム", key="main_custom_opp")
+            else:
+                opp_team = selected_opp if selected_opp else ""
 
     st.write("")
 
