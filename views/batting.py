@@ -55,7 +55,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     if match_changed:
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset"]
+        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset", "lineup_states"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
@@ -68,6 +68,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     if "batter_offset" not in st.session_state:
         st.session_state["batter_offset"] = 0
+        
+    # ▼▼▼ 打順の表示人数（デフォルト9）の初期化 ▼▼▼
+    if "display_order_count" not in st.session_state:
+        st.session_state["display_order_count"] = 9
 
     # ==========================================
     # 2. データの読み込み & 即時反映キャッシュの適用
@@ -113,6 +117,26 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     else:
         today_pitching_df = pd.DataFrame()
 
+    # ラインナップの状態管理用セッション初期化 & 復元
+    if "lineup_states" not in st.session_state:
+        st.session_state["lineup_states"] = {}
+
+    if not today_batting_df.empty:
+        lineup_event_df = today_batting_df[today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代", "試合前"])]
+        # 過去データ解析用は最大15枠を維持
+        for i in range(15):
+            order_num = i + 1
+            order_rows = lineup_event_df[pd.to_numeric(lineup_event_df["打順"], errors='coerce') == order_num]
+            if not order_rows.empty:
+                latest_row = order_rows.iloc[-1]
+                latest_name = str(latest_row.get("選手名", "")).strip()
+                latest_pos = str(latest_row.get("位置", "")).strip()
+                if latest_name and latest_name not in ["nan", "チーム記録", ""]:
+                    st.session_state["lineup_states"][i] = {
+                        "name": latest_name,
+                        "pos": latest_pos if latest_pos and latest_pos != "nan" else "－"
+                    }
+
     if not match_changed and not today_batting_df.empty:
         valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
         if not valid_inn_df.empty:
@@ -127,20 +151,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if not valid_scorer_df.empty:
                 st.session_state["scorer_name_ui"] = valid_scorer_df.iloc[-1]["スコアラー"]
 
-        lineup_rows = today_batting_df[
-            (today_batting_df["結果"].astype(str) == "スタメン") | 
-            (today_batting_df["イニング"].astype(str) == "試合前")
-        ]
-        
-        for _, row in lineup_rows.iterrows():
-            order_val = pd.to_numeric(row.get("打順"), errors='coerce')
-            if pd.notna(order_val) and 1 <= int(order_val) <= 15:
-                idx = int(order_val) - 1
-                name_key = f"sn{idx}"
-                pos_key = f"sp{idx}"
-                
-                name_val = str(row.get("選手名", "")).strip()
-                pos_val = str(row.get("位置", "")).strip()
+        # ▼▼▼ 修正箇所: セッション消失時は「スタメン」ではなく「最新の選手（交代後）」を復元する ▼▼▼
+        for idx in range(15):
+            name_key = f"sn{idx}"
+            pos_key = f"sp{idx}"
+            
+            if idx in st.session_state["lineup_states"]:
+                latest_info = st.session_state["lineup_states"][idx]
+                name_val = latest_info["name"]
+                pos_val = latest_info["pos"]
                 
                 if name_key not in st.session_state and name_val and name_val not in ["nan", "チーム記録", ""]:
                     matched_name = next((p for p in player_options if p.split(" (")[0].strip() == name_val or p == name_val), None)
@@ -204,9 +223,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     rbi_num = int(rbi_val) if pd.notna(rbi_val) else 0
                     
                     if is_hit and rbi_num > 0:
-                        color_style = "color: red;"   # タイムリー
+                        color_style = "color: red;"
                     elif is_hit:
-                        color_style = "color: blue;"  # 安打
+                        color_style = "color: blue;"
                         
                     history_html.append(f"<span style='{color_style}'>{count}({disp_text})</span>")
                 
@@ -226,6 +245,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         current_date_formatted = pd.to_datetime(selected_date_str).strftime('%Y-%m-%d')
         scorer = st.session_state.get("scorer_name_ui", "")
         
+        display_count = st.session_state.get("display_order_count", 9)
+        
         if "saved_lineup" not in st.session_state:
             st.session_state["saved_lineup"] = {}
 
@@ -234,14 +255,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             has_today_lineup = not today_batting_df[today_batting_df["結果"].astype(str) == "スタメン"].empty
 
         if not has_today_lineup:
-            for i in range(15):
+            for i in range(display_count):
                 name_val = st.session_state.get(f"sn{i}")
                 pos_val = st.session_state.get(f"sp{i}")
                 if name_val:
                     clean_name = name_val.split(" (")[0].strip()
+                    current_pos = pos_val if pos_val else "－"
                     
                     st.session_state["saved_lineup"][f"name_{i}"] = clean_name
-                    st.session_state["saved_lineup"][f"pos_{i}"] = pos_val if pos_val else "－"
+                    st.session_state["saved_lineup"][f"pos_{i}"] = current_pos
 
                     rows_to_add.append({
                         "日付": current_date_formatted,
@@ -250,7 +272,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "イニング": "試合前",
                         "打順": i + 1,
                         "選手名": clean_name,
-                        "位置": pos_val if pos_val else "－",
+                        "位置": current_pos,
                         "結果": "スタメン",
                         "打球方向": "---",
                         "打点": 0,
@@ -258,6 +280,57 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "スコアラー": scorer,
                         "グラウンド": ground_name
                     })
+                    st.session_state.setdefault("lineup_states", {})[i] = {
+                        "name": clean_name,
+                        "pos": current_pos
+                    }
+        else:
+            for i in range(display_count):
+                name_val = st.session_state.get(f"sn{i}")
+                pos_val = st.session_state.get(f"sp{i}")
+                if name_val:
+                    clean_name = name_val.split(" (")[0].strip()
+                    current_pos = pos_val if pos_val else "－"
+                    
+                    prev_state = st.session_state.get("lineup_states", {}).get(i, {})
+                    prev_name = prev_state.get("name", "")
+                    prev_pos = prev_state.get("pos", "")
+                    
+                    if prev_name and prev_name != clean_name:
+                        rows_to_add.append({
+                            "日付": current_date_formatted,
+                            "対戦相手": opp_team,
+                            "試合種別": match_type,
+                            "イニング": inn_val,
+                            "打順": i + 1,
+                            "選手名": clean_name,
+                            "位置": current_pos,
+                            "結果": "交代",
+                            "打球方向": "---",
+                            "打点": 0,
+                            "得点": 0,
+                            "スコアラー": scorer,
+                            "グラウンド": ground_name
+                        })
+                        st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
+                    
+                    elif prev_name == clean_name and prev_pos and prev_pos != current_pos:
+                        rows_to_add.append({
+                            "日付": current_date_formatted,
+                            "対戦相手": opp_team,
+                            "試合種別": match_type,
+                            "イニング": inn_val,
+                            "打順": i + 1,
+                            "選手名": clean_name,
+                            "位置": current_pos,
+                            "結果": "守備変更",
+                            "打球方向": "---",
+                            "打点": 0,
+                            "得点": 0,
+                            "スコアラー": scorer,
+                            "グラウンド": ground_name
+                        })
+                        st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
 
         quick_res = st.session_state.get("quick_sr")
         quick_dirs = st.session_state.get("quick_sd", [])
@@ -268,7 +341,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             rbi_val = int(quick_rbi) if quick_rbi is not None else 0
             
             active_orders = 9
-            for idx_check in range(14, -1, -1):
+            for idx_check in range(display_count - 1, -1, -1):
                 if st.session_state.get(f"sn{idx_check}"):
                     active_orders = idx_check + 1
                     break
@@ -302,7 +375,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "グラウンド": ground_name
                 })
 
-        for i in range(15):
+        for i in range(display_count):
             name_val = st.session_state.get(f"sn{i}")
             run_res = st.session_state.get(f"sr{i}")
             run_score = st.session_state.get(f"st{i}")
@@ -417,7 +490,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.markdown(render_out_indicator_3(disp_outs), unsafe_allow_html=True)
 
         active_orders = 9
-        for i in range(14, -1, -1):
+        display_count = st.session_state.get("display_order_count", 9)
+        for i in range(display_count - 1, -1, -1):
             if st.session_state.get(f"sn{i}"):
                 active_orders = i + 1
                 break
@@ -463,8 +537,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         all_results_options = ["盗塁", "盗塁死", "走塁死", "牽制死"]
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
 
-        # 15打順のループ
-        for i in range(15):
+        # 可変人数（デフォルト9〜最大15）のループ
+        for i in range(display_count):
             c = st.columns(col_ratios)
             c[0].markdown(f"<div style='text-align:center; line-height:2.5;'>{i+1}</div>", unsafe_allow_html=True)
             
@@ -491,8 +565,40 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     c[5].markdown(f"<div style='font-size:24px; line-height:1.3; padding-top:10px;'>{player_history_dict[clean_name]}</div>", unsafe_allow_html=True)
 
         if submitted:
-            submit_everything(curr_inn)
+            # ▼▼▼ 打球方向の必須バリデーション処理 ▼▼▼
+            quick_res = st.session_state.get("quick_sr")
+            quick_dirs = st.session_state.get("quick_sd", [])
+            
+            require_dir_results = [
+                "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打",
+                "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)",
+                "野選", "併殺打"
+            ]
+            
+            if quick_res in require_dir_results and not quick_dirs:
+                st.error(f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。")
+            else:
+                submit_everything(curr_inn)
 
     with st.expander(" 🚌 ベンチ入りメンバー", expanded=True):
         selected_bench = st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
         st.session_state["persistent_bench"] = selected_bench
+
+    # ▼▼▼ 打順の表示人数調整用コントロール ▼▼▼
+    st.divider()
+    col_disp1, col_disp2, col_disp3 = st.columns([2.0, 1.0, 1.0])
+    with col_disp1:
+        st.markdown(f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>👥 打順の表示人数: {st.session_state.get('display_order_count', 9)}人</div>", unsafe_allow_html=True)
+    with col_disp2:
+        if st.button("➖ 減らす", use_container_width=True):
+            if st.session_state["display_order_count"] > 9:
+                st.session_state["display_order_count"] -= 1
+                idx = st.session_state["display_order_count"]
+                for k in [f"sn{idx}", f"sp{idx}", f"sr{idx}", f"st{idx}"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+    with col_disp3:
+        if st.button("➕ 追加 (最大20)", use_container_width=True):
+            if st.session_state["display_order_count"] < 20:
+                st.session_state["display_order_count"] += 1
+                st.rerun()

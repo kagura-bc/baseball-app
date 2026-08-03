@@ -96,7 +96,6 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             p_df = df_p_season[(df_p_season["投手名"] == p) | (df_p_season["選手名"] == p)]
             p_key = local_fmt(p)
             if p_df.empty:
-                current_season_pitching[p_key] = " 防御率 -.-- (0勝 0敗)"
                 continue
             er = pd.to_numeric(p_df["自責点"], errors='coerce').fillna(0).sum()
             outs = pd.to_numeric(p_df["アウト数"], errors='coerce').fillna(0).sum()
@@ -187,18 +186,24 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             pitcher_list_opts = [local_fmt(p) for p in ALL_PLAYERS]
             default_pitcher_idx = None
             
-            # --- 安全な投手取得処理 ---
+            # --- データベースから最新の登板投手を取得 ---
             current_pitcher = ""
-            lineup = st.session_state.get("saved_lineup")
+            if not today_batting_df.empty:
+                # 投手（位置="投"）が設定されている最も新しい行を探す
+                latest_pitcher_rows = today_batting_df[today_batting_df["位置"] == "投"]
+                if not latest_pitcher_rows.empty:
+                    current_pitcher = latest_pitcher_rows.iloc[-1]["選手名"]
             
-            if isinstance(lineup, dict):
-                for i in range(20):
-                    if lineup.get(f"pos_{i}") == "投":
-                        raw_name = lineup.get(f"name_{i}", "")
-                        if raw_name:
-                            current_pitcher = raw_name.split(" (")[0]
-                        break
-            
+            # フォールバック処理
+            if not current_pitcher:
+                lineup = st.session_state.get("saved_lineup")
+                if isinstance(lineup, dict):
+                    for i in range(20):
+                        if lineup.get(f"pos_{i}") == "投":
+                            raw_name = lineup.get(f"name_{i}", "")
+                            if raw_name:
+                                current_pitcher = raw_name.split(" (")[0]
+                            break
             if not current_pitcher:
                 current_pitcher = st.session_state.get("shared_starting_pitcher", "")
             
@@ -214,18 +219,27 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 st.markdown(f"<div style='font-size:14px; color:#1e3a8a;'>{current_season_pitching[target_pitcher_disp]}</div>", unsafe_allow_html=True)
 
         with c_mid4:
-            # --- 捕手取得処理 ---
+            # --- データベースから最新の捕手を取得 ---
             catcher_list_opts = [local_fmt(p) for p in ALL_PLAYERS]
             default_catcher_idx = None
             
             current_catcher = ""
-            if isinstance(lineup, dict):
-                for i in range(20):
-                    if lineup.get(f"pos_{i}") == "捕":
-                        raw_name = lineup.get(f"name_{i}", "")
-                        if raw_name:
-                            current_catcher = raw_name.split(" (")[0]
-                        break
+            if not today_batting_df.empty:
+                # 捕手（位置="捕"）が設定されている最も新しい行を探す
+                latest_catcher_rows = today_batting_df[today_batting_df["位置"] == "捕"]
+                if not latest_catcher_rows.empty:
+                    current_catcher = latest_catcher_rows.iloc[-1]["選手名"]
+            
+            # フォールバック処理
+            if not current_catcher:
+                lineup = st.session_state.get("saved_lineup")
+                if isinstance(lineup, dict):
+                    for i in range(20):
+                        if lineup.get(f"pos_{i}") == "捕":
+                            raw_name = lineup.get(f"name_{i}", "")
+                            if raw_name:
+                                current_catcher = raw_name.split(" (")[0]
+                            break
             
             if current_catcher:
                 for i, c_opt in enumerate(catcher_list_opts):
@@ -251,7 +265,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         
         with c_pos:
             target_fielder_pos_list = st.multiselect(
-                "打球方向/関与野手", 
+                "打球方向", 
                 ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"],
                 max_selections=2,
                 key="p_det_pos_list",
