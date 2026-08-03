@@ -17,51 +17,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- マルチセレクトの文字隠れ・潰れを完全に防止するCSS ---
-    st.markdown("""
-    <style>
-        div[data-baseweb="select"] input {
-            pointer-events: none !important;
-        }
-        
-        /* 1. 通常のセレクトボックス */
-        .stSelectbox div[data-baseweb="select"] {
-            min-height: 56px !important;
-        }
-        .stSelectbox div[data-baseweb="select"] > div {
-            min-height: 56px !important;
-            padding: 6px 10px !important;
-            display: flex !important;
-            align-items: center !important;
-        }
-        .stSelectbox div[data-baseweb="select"] span,
-        .stSelectbox div[data-baseweb="select"] p {
-            font-size: 18px !important;
-            font-weight: bold !important;
-        }
-
-        /* 2. マルチセレクト（方向選択）専用：文字隠れを完全に防ぐ構造 */
-        .stMultiSelect div[data-baseweb="select"] {
-            min-height: 56px !important;
-        }
-        .stMultiSelect div[data-baseweb="select"] > div {
-            min-height: 56px !important;
-            padding: 4px 8px !important;
-            display: flex !important;
-            align-items: center !important;
-            flex-wrap: nowrap !important;
-            overflow: visible !important;
-        }
-        .stMultiSelect div[data-baseweb="select"] span {
-            font-size: 15px !important;
-            font-weight: bold !important;
-            white-space: nowrap !important;
-            overflow: visible !important;
-            text-overflow: unset !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-    
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     ws_batting = "打撃成績"
