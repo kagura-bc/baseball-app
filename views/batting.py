@@ -23,18 +23,18 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* セレクトボックス内の文字サイズを大きく */
+        /* プルダウン内の文字サイズを大きく */
         div[data-baseweb="select"] span {
-            font-size: 16px !important;
+            font-size: 18px !important;
             font-weight: bold !important;
         }
-        /* セレクトボックス自体の高さを広げて押しやすく */
+        /* プルダウン自体の高さを広げて押しやすく */
         div[data-baseweb="select"] > div {
-            min-height: 48px !important;
+            min-height: 56px !important;
         }
-        /* 各入力項目のラベル文字を大きく */
-        label p {
-            font-size: 15px !important;
+        /* プレースホルダーの文字も大きく */
+        div[data-baseweb="select"] div[data-testid="stMarkdownContainer"] p {
+            font-size: 17px !important;
             font-weight: bold !important;
         }
     </style>
@@ -391,12 +391,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     with st.form(key='batting_form', clear_on_submit=False):
         submitted = st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
 
-        # 🌟 イニングとアウトカウント（大きめのセル・文字に調整）
         c_inn, c_outs = st.columns([1.5, 2.5])
         
         with c_inn:
             def_inn_ix = inn_list.index(current_inn_val) if current_inn_val in inn_list else 0
-            curr_inn = st.selectbox("イニング選択", inn_list, index=def_inn_ix)
+            curr_inn = st.selectbox("イニング選択", inn_list, index=def_inn_ix, label_visibility="collapsed")
             st.session_state["persistent_inn"] = curr_inn
         
         with c_outs:
@@ -433,24 +432,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        # 🌟 クイック入力部分（文字と高さを拡大）
-        q_cols = [3.2, 2.2, 2.4, 1.2]
+        # 🌟 ラベルを排除し、その分プルダウンと打者名の表示サイズ・高さを大きく拡大
+        q_cols = [3.4, 2.4, 2.4, 1.0]
         qc = st.columns(q_cols)
 
         with qc[0]:
             st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 12px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 52px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; box-sizing: border-box; margin-top: 24px;">
+            <div style="background-color: #f8f9fa; padding: 0px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 56px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; box-sizing: border-box;">
                 <span style="font-size: 13px; color: #555; font-weight: bold; white-space: nowrap;">📍 打席</span>
-                <span style="font-size: 16px; color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
-                <span style="font-size: 17px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
+                <span style="font-size: 17px; color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
+                <span style="font-size: 18px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
             </div>
             """, unsafe_allow_html=True)
         with qc[1]:
-            st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="結果選択", index=None)
+            st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="結果選択", index=None, label_visibility="collapsed")
         with qc[2]:
-            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向(最大2つ)")
+            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向選択", label_visibility="collapsed")
         with qc[3]:
-            st.selectbox("打点", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None)
+            st.selectbox("打点", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
 
         st.divider()
 
