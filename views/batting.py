@@ -17,14 +17,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- 通常セレクトとマルチセレクトのCSSを完全に分離してレイアウトを安定させるCSS ---
+    # --- マルチセレクトの文字隠れ・潰れを完全に防止するCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
         
-        /* 1. 通常のセレクトボックス（打席結果・打点・守備など） */
+        /* 1. 通常のセレクトボックス */
         .stSelectbox div[data-baseweb="select"] {
             min-height: 56px !important;
         }
@@ -40,22 +40,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             font-weight: bold !important;
         }
 
-        /* 2. マルチセレクト（方向選択）専用の個別調整 */
+        /* 2. マルチセレクト（方向選択）専用：文字隠れを完全に防ぐ構造 */
         .stMultiSelect div[data-baseweb="select"] {
             min-height: 56px !important;
         }
         .stMultiSelect div[data-baseweb="select"] > div {
             min-height: 56px !important;
-            padding: 2px 3px !important;
+            padding: 4px 8px !important;
             display: flex !important;
             align-items: center !important;
-            flex-wrap: wrap !important;
+            flex-wrap: nowrap !important;
+            overflow: visible !important;
         }
-        /* マルチセレクト内の文字・タグが潰れない最適なサイズに固定 */
-        .stMultiSelect div[data-baseweb="select"] span,
-        .stMultiSelect div[data-baseweb="select"] div {
+        .stMultiSelect div[data-baseweb="select"] span {
             font-size: 15px !important;
             font-weight: bold !important;
+            white-space: nowrap !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
         }
     </style>
     """, unsafe_allow_html=True)
