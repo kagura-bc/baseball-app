@@ -6,18 +6,6 @@ from config.settings import ALL_POSITIONS, SPREADSHEET_URL
 from utils.players import get_active_players
 from utils.ui import render_scoreboard, render_out_indicator_3, show_homerun_effect, fmt_player_name
 
-# --- コールバック関数 (入力状態の保存用) ---
-def save_lineup_item(i, item_type):
-    if "saved_lineup" not in st.session_state:
-        st.session_state["saved_lineup"] = {}
-        
-    prefix_map = {"pos": "sp", "name": "sn", "res": "sr", "rbi": "si"}
-    widget_key = f"{prefix_map[item_type]}{i}"
-    
-    if widget_key in st.session_state:
-        val = st.session_state[widget_key]
-        st.session_state["saved_lineup"][f"{item_type}_{i}"] = val
-
 # --- ヘルパー関数 ---
 def local_fmt(name):
     return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
@@ -88,11 +76,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
 
     # ==========================================
-    # 2. データの読み込み & 状態同期 (事前同期)
+    # 2. データの読み込み & 即時反映キャッシュの適用
     # ==========================================
     is_kagura_top = (kagura_order == "先攻 (表)")
-    
     target_date_str = pd.to_datetime(selected_date_str, errors='coerce').strftime('%Y-%m-%d')
+
+    cache_key = f"cache_batting_{selected_date_str}_{opp_team}_{match_type}"
+    if cache_key in st.session_state:
+        df_batting = st.session_state[cache_key]
 
     if not df_batting.empty and "日付" in df_batting.columns:
         df_batting["_date_str"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
@@ -163,7 +154,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     st.divider()
 
     # ==========================================
-    # 🌟 4. 【高速化】全選手の履歴HTMLを事前に一括生成（辞書化）
+    # 4. 高速化のための事前一括集計 (辞書化)
     # ==========================================
     player_history_dict = {}
     if not today_batting_df.empty:
@@ -195,11 +186,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     rbi_num = int(rbi_val) if pd.notna(rbi_val) else 0
                     
                     if is_hit and rbi_num > 0:
-                        color_style = "color: red;"   # タイムリー（赤）
+                        color_style = "color: red;"   # タイムリー
                     elif is_hit:
-                        color_style = "color: blue;"  # 安打（青）
+                        color_style = "color: blue;"  # 安打
                     elif res == "得点" or (runs_val > 0 and not is_hit):
-                        color_style = "color: green;" # 得点（緑）
+                        color_style = "color: green;" # 得点
                         
                     history_html.append(f"<span style='{color_style}'>{count}({disp_text})</span>")
                 
@@ -216,16 +207,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         current_date_formatted = pd.to_datetime(selected_date_str).strftime('%Y-%m-%d')
         scorer = st.session_state.get("scorer_name_ui", "")
         
-        # 投手・捕手の自動連動のために saved_lineup を更新
         if "saved_lineup" not in st.session_state:
             st.session_state["saved_lineup"] = {}
 
-        # 🌟 すでに今日のスタメンがスプレッドシートに登録されているかチェック
+        # 既に今日のスタメンが登録されているかチェックし、重複登録を防ぐ
         has_today_lineup = False
         if not today_batting_df.empty:
             has_today_lineup = not today_batting_df[today_batting_df["結果"].astype(str) == "スタメン"].empty
 
-        # 🌟 まだスタメンが登録されていない場合のみ、今回の登録時にスタメン情報を追加する
         if not has_today_lineup:
             for i in range(15):
                 name_val = st.session_state.get(f"sn{i}")
@@ -277,8 +266,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             if target_batter_name:
                 clean_batter_name = target_batter_name.split(" (")[0].strip()
-                
-                # 🌟 本塁打の場合は自動的に得点を1にする
                 auto_run = 1 if quick_res == "本塁打" else 0
 
                 rows_to_add.append({
@@ -292,7 +279,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "結果": quick_res,
                     "打球方向": dir_str,
                     "打点": rbi_val,
-                    "得点": auto_run,  # 自動設定された得点を反映
+                    "得点": auto_run,
                     "スコアラー": scorer,
                     "グラウンド": ground_name
                 })
@@ -333,6 +320,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             updated_full_df = pd.concat([df_batting, new_df_to_append], ignore_index=True)
             try:
                 conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=updated_full_df)
+                st.session_state[cache_key] = updated_full_df
                 st.session_state["needs_batting_clear"] = True
                 st.success("登録しました！")
                 st.rerun()
@@ -440,7 +428,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         all_results_options = ["盗塁", "盗塁死", "走塁死"]
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
 
-        # 🌟 15打順のループ（辞書引きのみで超高速化）
+        # 15打順のループ
         for i in range(15):
             c = st.columns(col_ratios)
             c[0].markdown(f"<div style='text-align:center; line-height:2.5;'>{i+1}</div>", unsafe_allow_html=True)
@@ -462,7 +450,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             c[3].selectbox(f"r{i}", all_results_options, key=f"sr{i}", placeholder="走塁結果", index=None, label_visibility="collapsed")
             c[4].selectbox(f"t{i}", [0, 1], key=f"st{i}", placeholder="得点", index=None, label_visibility="collapsed")
             
-            # 🌟 ループ内ではPandas検索をせず、事前に作った辞書から一瞬でデータを引く
             if sel_p_name_raw:
                 clean_name = sel_p_name_raw.split(" (")[0].strip()
                 if clean_name in player_history_dict:
