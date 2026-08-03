@@ -17,14 +17,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- すべてのセレクトボックス・マルチセレクトの文字潰れを解消する安定版CSS ---
+    # --- クラウドの狭い幅でも文字潰れを防ぎ、統一感を持たせるCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
         
-        /* すべてのセレクトボックス（通常・マルチ共通）の高さを統一 */
+        /* すべてのセレクトボックス・マルチセレクトの高さを統一 */
         div[data-baseweb="select"] {
             min-height: 56px !important;
         }
@@ -35,7 +35,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             align-items: center !important;
         }
         
-        /* すべての選択肢・プレースホルダーの文字サイズを綺麗に統一 */
+        /* 選択肢・プレースホルダーの文字サイズを統一 */
         div[data-baseweb="select"] span,
         div[data-baseweb="select"] p,
         div[data-baseweb="select"] div {
@@ -437,7 +437,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        q_cols = [3.6, 2.2, 2.6, 0.9]
+        # 🌟 方向選択（3番目）の幅を広げ、クラウドの狭い幅でも潰れないように再配分
+        q_cols = [3.0, 2.0, 3.4, 0.9]
         qc = st.columns(q_cols)
 
         with qc[0]:
@@ -458,7 +459,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.divider()
 
         all_results_options = ["盗塁", "盗塁死", "走塁死", "牽制死"]
-        col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
+        col_ratios = [0.5, 1.0, 1.5, 1.4, 1.0, 3.6]
 
         # 15打順のループ
         for i in range(15):
