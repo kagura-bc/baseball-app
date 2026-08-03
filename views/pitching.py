@@ -19,6 +19,9 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     ws_pitching = "投手成績"
     is_kagura_top = (kagura_order == "先攻 (表)")
 
+    # 🌟 ここに接続設定を追加します
+    conn = st.connection("gsheets", type=GSheetsConnection)
+
     # フィルタリング
     today_batting_df = df_batting[df_batting["日付"].astype(str) == selected_date_str]
     today_pitching_df = df_pitching[df_pitching["日付"].astype(str) == selected_date_str]
