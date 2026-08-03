@@ -18,19 +18,19 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
     # --- クラウド・ローカル共通で崩れない、パディング＆フォントサイズ拡大方式のCSS ---
+    # --- 打席結果と方向のの高さを完全に揃えるCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* 高さを無理に固定せず、上下左右のパディング（余白）を広げて押しやすい大きさに保つ */
-        div[data-baseweb="select"] > div {
-            padding-top: 10px !important;
-            padding-bottom: 10px !important;
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-            min-height: unset !important;
-            height: auto !important;
+        /* stSelectbox と stMultiSelect の高さを同じピクセル数（例: 54px）で完全に統一 */
+        .stSelectbox div[data-baseweb="select"] > div,
+        .stMultiSelect div[data-baseweb="select"] > div {
+            height: 54px !important;
+            min-height: 54px !important;
+            display: flex !important;
+            align-items: center !important;
         }
         /* プルダウン内の文字サイズやプレースホルダーを大きく迫力のあるサイズに */
         div[data-baseweb="select"] span,
