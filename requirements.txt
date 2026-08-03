@@ -3,5 +3,4 @@ pandas
 st-gsheets-connection
 matplotlib
 streamlit-option-menu
-streamlit==1.54.0  <-- ご自身のローカルのバージョンに書き換えてください
 streamlit-gsheets
