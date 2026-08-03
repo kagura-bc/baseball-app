@@ -17,29 +17,44 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- クラウドの狭い幅でも文字潰れを防ぎ、統一感を持たせるCSS ---
+    # --- 通常セレクトとマルチセレクトのCSSを完全に分離してレイアウトを安定させるCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
         
-        /* すべてのセレクトボックス・マルチセレクトの高さを統一 */
-        div[data-baseweb="select"] {
+        /* 1. 通常のセレクトボックス（打席結果・打点・守備など） */
+        .stSelectbox div[data-baseweb="select"] {
             min-height: 56px !important;
         }
-        div[data-baseweb="select"] > div {
+        .stSelectbox div[data-baseweb="select"] > div {
             min-height: 56px !important;
             padding: 6px 10px !important;
             display: flex !important;
             align-items: center !important;
         }
-        
-        /* 選択肢・プレースホルダーの文字サイズを統一 */
-        div[data-baseweb="select"] span,
-        div[data-baseweb="select"] p,
-        div[data-baseweb="select"] div {
+        .stSelectbox div[data-baseweb="select"] span,
+        .stSelectbox div[data-baseweb="select"] p {
             font-size: 18px !important;
+            font-weight: bold !important;
+        }
+
+        /* 2. マルチセレクト（方向選択）専用の個別調整 */
+        .stMultiSelect div[data-baseweb="select"] {
+            min-height: 56px !important;
+        }
+        .stMultiSelect div[data-baseweb="select"] > div {
+            min-height: 56px !important;
+            padding: 4px 6px !important;
+            display: flex !important;
+            align-items: center !important;
+            flex-wrap: wrap !important;
+        }
+        /* マルチセレクト内の文字・タグが潰れない最適なサイズに固定 */
+        .stMultiSelect div[data-baseweb="select"] span,
+        .stMultiSelect div[data-baseweb="select"] div {
+            font-size: 15px !important;
             font-weight: bold !important;
         }
     </style>
@@ -437,7 +452,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        # 🌟 方向選択（3番目）の幅を広げ、クラウドの狭い幅でも潰れないように再配分
         q_cols = [3.0, 2.0, 3.4, 0.9]
         qc = st.columns(q_cols)
 
@@ -459,7 +473,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.divider()
 
         all_results_options = ["盗塁", "盗塁死", "走塁死", "牽制死"]
-        col_ratios = [0.5, 1.0, 1.5, 1.4, 1.0, 3.6]
+        col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
 
         # 15打順のループ
         for i in range(15):
