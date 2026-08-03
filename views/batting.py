@@ -17,31 +17,29 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- クラウド・ローカル共通で文字潰れを防ぎ、綺麗に表示するCSS ---
+    # --- すべてのセレクトボックス・マルチセレクトの文字潰れを解消する安定版CSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* ボックスが極端に潰れないよう最小高さをしっかり確保しつつ、余白と中央揃えを調整 */
+        
+        /* すべてのセレクトボックス（通常・マルチ共通）の高さを統一 */
         div[data-baseweb="select"] {
             min-height: 56px !important;
         }
         div[data-baseweb="select"] > div {
             min-height: 56px !important;
-            padding-top: 6px !important;
-            padding-bottom: 6px !important;
-            padding-left: 10px !important;
-            padding-right: 10px !important;
+            padding: 6px 10px !important;
             display: flex !important;
             align-items: center !important;
-            flex-wrap: wrap !important;
         }
-        /* プルダウン内の文字サイズやプレースホルダーを大きく迫力のあるサイズに */
+        
+        /* すべての選択肢・プレースホルダーの文字サイズを綺麗に統一 */
         div[data-baseweb="select"] span,
         div[data-baseweb="select"] p,
         div[data-baseweb="select"] div {
-            font-size: 19px !important;
+            font-size: 18px !important;
             font-weight: bold !important;
         }
     </style>
@@ -453,7 +451,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         with qc[1]:
             st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="打席結果", index=None, label_visibility="collapsed")
         with qc[2]:
-            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向", label_visibility="collapsed")
+            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="打球方向", label_visibility="collapsed")
         with qc[3]:
             st.selectbox("打点", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
 
