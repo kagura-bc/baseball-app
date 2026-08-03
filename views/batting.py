@@ -17,23 +17,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- スマホ・タブレット対策 & 全てのプルダウンを大きく・統一するCSS ---
+    # --- スマホ・タブレット対策 & クラウド環境対応の強力な拡大CSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* 画面内にあるすべてのプルダウンの高さを大きくして統一 */
-        div[data-baseweb="select"] > div {
+        /* Streamlit Cloudでも確実に高さを広げるための指定 */
+        .stSelectbox div[data-baseweb="select"] > div,
+        .stMultiSelect div[data-baseweb="select"] > div {
             min-height: 60px !important;
-            height: auto !important;
+            height: 60px !important;
             display: flex !important;
             align-items: center !important;
         }
-        /* 全てのプルダウン内の文字サイズやプレースホルダーを大きく迫力のあるサイズに */
-        div[data-baseweb="select"] span,
-        div[data-baseweb="select"] p,
-        div[data-baseweb="select"] div {
+        /* プルダウン内の文字サイズやプレースホルダーを大きく統一 */
+        .stSelectbox div[data-baseweb="select"] span,
+        .stSelectbox div[data-baseweb="select"] p,
+        .stMultiSelect div[data-baseweb="select"] span,
+        .stMultiSelect div[data-baseweb="select"] p {
             font-size: 20px !important;
             font-weight: bold !important;
         }
@@ -452,7 +454,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
-        # 🌟 走塁結果の選択肢
         all_results_options = ["盗塁", "盗塁死", "走塁死", "牽制死"]
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
 
