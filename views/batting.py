@@ -17,24 +17,26 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- スマホ・タブレット対策 & 文字・セルの拡大CSS ---
+    # --- スマホ・タブレット対策 & 全プルダウンの大きさを統一・拡大するCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
+        /* すべてのプルダウンの高さを方向選択と同じサイズに統一 */
+        div[data-baseweb="select"] > div {
+            min-height: 52px !important;
+            height: auto !important;
+            align-items: center !important;
+        }
         /* プルダウン内の文字サイズを大きく */
         div[data-baseweb="select"] span {
-            font-size: 18px !important;
+            font-size: 16px !important;
             font-weight: bold !important;
-        }
-        /* プルダウン自体の高さを広げて押しやすく */
-        div[data-baseweb="select"] > div {
-            min-height: 56px !important;
         }
         /* プレースホルダーの文字も大きく */
         div[data-baseweb="select"] div[data-testid="stMarkdownContainer"] p {
-            font-size: 17px !important;
+            font-size: 16px !important;
             font-weight: bold !important;
         }
     </style>
@@ -432,13 +434,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        # 🌟 ラベルを排除し、その分プルダウンと打者名の表示サイズ・高さを大きく拡大
         q_cols = [3.4, 2.4, 2.4, 1.0]
         qc = st.columns(q_cols)
 
         with qc[0]:
             st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 0px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 56px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; box-sizing: border-box;">
+            <div style="background-color: #f8f9fa; padding: 0px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 52px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; box-sizing: border-box;">
                 <span style="font-size: 13px; color: #555; font-weight: bold; white-space: nowrap;">📍 打席</span>
                 <span style="font-size: 17px; color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
                 <span style="font-size: 18px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
