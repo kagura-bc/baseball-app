@@ -48,6 +48,33 @@ def show_edit_page(df_batting, df_pitching, is_test_mode=False):
     ws_batting = "打撃成績_テスト" if is_test_mode else "打撃成績"
     ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
     
+    import re
+    def extract_inning_num(val):
+        m = re.search(r'(\d+)', str(val))
+        return int(m.group(1)) if m else 0
+
+    # 🌟 打撃データ: 日付の新しい順、かつイニングの数字が大きい順（降順）にソート
+    if not df_batting.empty and "日付" in df_batting.columns:
+        df_batting = df_batting.copy()
+        df_batting["日付_dt"] = pd.to_datetime(df_batting["日付"], errors="coerce")
+        df_batting["イニング_num"] = df_batting["イニング"].apply(extract_inning_num)
+        
+        df_batting = df_batting.sort_values(
+            by=["日付_dt", "イニング_num"], 
+            ascending=[False, False]
+        ).drop(columns=["日付_dt", "イニング_num"]).reset_index(drop=True)
+
+    # 🌟 投手データ: 日付の新しい順、かつイニングの数字が大きい順（降順）にソート
+    if not df_pitching.empty and "日付" in df_pitching.columns:
+        df_pitching = df_pitching.copy()
+        df_pitching["日付_dt"] = pd.to_datetime(df_pitching["日付"], errors="coerce")
+        df_pitching["イニング_num"] = df_pitching["イニング"].apply(extract_inning_num)
+        
+        df_pitching = df_pitching.sort_values(
+            by=["日付_dt", "イニング_num"], 
+            ascending=[False, False]
+        ).drop(columns=["日付_dt", "イニング_num"]).reset_index(drop=True)
+
     # --- Primaryボタンの色を「赤」に塗り替えるCSS ---
     st.markdown("""
         <style>

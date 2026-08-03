@@ -326,9 +326,26 @@ def show_team_stats(df_batting, df_pitching):
                 target_row = df_display[(df_display["日付"] == pd.to_datetime(target_date_str)) & (df_display["対戦相手"] == target_opp)].iloc[0]
                 has_team_rec = target_row["has_team_record"]
                 tb_val = target_row.get("先攻後攻", "不明")
+                target_m_type = target_row.get("試合種別", "")
+
+                # 🌟 修正1: 日付・対戦相手・試合種別で厳密にその試合だけをフィルタリング
+                df_b_filtered = df_batting.copy()
+                df_b_filtered["DateStr"] = pd.to_datetime(df_b_filtered["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
                 
-                match_bat = df_batting[(pd.to_datetime(df_batting["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & (df_batting["対戦相手"] == target_opp)].copy()
-                match_pit = df_pitching[(pd.to_datetime(df_pitching["日付"]).dt.strftime('%Y-%m-%d') == target_date_str) & (df_pitching["対戦相手"] == target_opp)].copy()
+                df_p_filtered = df_pitching.copy()
+                df_p_filtered["DateStr"] = pd.to_datetime(df_p_filtered["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+
+                match_bat = df_b_filtered[
+                    (df_b_filtered["DateStr"] == target_date_str) & 
+                    (df_b_filtered["対戦相手"] == target_opp) & 
+                    (df_b_filtered["試合種別"] == target_m_type)
+                ].copy()
+                
+                match_pit = df_p_filtered[
+                    (df_p_filtered["DateStr"] == target_date_str) & 
+                    (df_p_filtered["対戦相手"] == target_opp) & 
+                    (df_p_filtered["試合種別"] == target_m_type)
+                ].copy()
 
                 if tb_val == "先攻":
                     detected_top = True
@@ -344,22 +361,36 @@ def show_team_stats(df_batting, df_pitching):
                 opp_errors = match_bat["結果"].astype(str).str.contains("失策").sum()
                 my_errors = target_row.get("失策", 0)
 
+                # 🌟 修正2: エラー数がイニング数で掛け算されてしまう不具合の解消
                 if has_team_rec:
                     sb_bat = match_bat[match_bat["選手名"] == "チーム記録"].copy()
                     sb_pit = match_pit[match_pit["選手名"] == "チーム記録"].copy()
-                    sb_pit["失策"] = my_errors
-                    sb_bat["失策"] = opp_errors
+                    
+                    # すべての行にそのまま代入すると行数分掛け算されてしまうため、一度0にしてから先頭行だけに合計値を入れる
+                    sb_pit["失策"] = 0
+                    if not sb_pit.empty:
+                        sb_pit.iloc[0, sb_pit.columns.get_loc("失策")] = my_errors
+                        
+                    sb_bat["失策"] = 0
+                    if not sb_bat.empty:
+                        sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
                 else:
                     sb_bat = match_bat.copy()
                     sb_pit = match_pit.copy()
                     
                     if "失策" not in sb_pit.columns:
                         sb_pit["失策"] = 0
+                    else:
+                        sb_pit["失策"] = 0  # 既存のエラーカウントをリセットして二重計上を防ぐ
+                        
                     if not sb_pit.empty:
                         sb_pit.iloc[0, sb_pit.columns.get_loc("失策")] = my_errors
                         
                     if "失策" not in sb_bat.columns:
                         sb_bat["失策"] = 0
+                    else:
+                        sb_bat["失策"] = 0  # 既存のエラーカウントをリセットして二重計上を防ぐ
+                        
                     if not sb_bat.empty:
                         sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
 
@@ -383,11 +414,15 @@ def show_team_stats(df_batting, df_pitching):
                 personal_bat = match_bat[match_bat["選手名"] != "チーム記録"].copy()
                 
                 if not personal_bat.empty:
-                    active_mask = personal_bat["イニング"] != "ベンチ"
-                    active_players = personal_bat.loc[active_mask, "選手名"].unique()
+                    # 🌟 修正: 結果・種別・イニングのいずれかに「ベンチ」が含まれるレコードをベンチメンバーとして抽出
+                    bench_mask = (
+                        (personal_bat["結果"] == "ベンチ") | 
+                        (personal_bat["種別"] == "ベンチ") | 
+                        (personal_bat["イニング"] == "ベンチ")
+                    )
                     
-                    df_active = personal_bat[(personal_bat["選手名"].isin(active_players)) & (personal_bat["イニング"] != "ベンチ")].copy()
-                    df_bench = personal_bat[~personal_bat["選手名"].isin(active_players)].copy()
+                    df_bench = personal_bat[bench_mask].copy()
+                    df_active = personal_bat[~bench_mask].copy()
 
                     if not df_active.empty:
                         summary_list = []
@@ -450,8 +485,11 @@ def show_team_stats(df_batting, df_pitching):
 
                             pos_val = "".join(seen_pos)
                             
-                            pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
-                            res_col = player_group.get("結果")
+                            pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "凡退", "失策(ゴロ)", "失策(フライ)", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
+                            
+                            # 🌟 res_col を定義する処理を追加
+                            res_col = player_group.get("結果") if "結果" in player_group.columns else None
+                            
                             tpa = res_col.isin(pa_list).sum() if res_col is not None else 0
                             
                             sb_col = player_group.get("盗塁")
@@ -461,7 +499,7 @@ def show_team_stats(df_batting, df_pitching):
                             
                             history_texts = []
                             count = 0
-                            pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
+                            pa_list_for_history = ["凡退(ゴロ)", "凡退(フライ)", "凡退", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             
                             if res_col is not None:
                                 for _, row in player_group.iterrows():
@@ -474,9 +512,9 @@ def show_team_stats(df_batting, df_pitching):
                                             
                                         res_short = {
                                             "単打":"安", "二塁打":"二", "三塁打":"三", "本塁打":"本", 
-                                            "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"四", 
+                                            "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "凡退":"凡", "四球":"四", 
                                             "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "振り逃げ三振":"逃", "打撃妨害":"妨",
-                                            "失策(ゴロ)":"失", "失策(フライ)":"失", "併殺打":"併", "野選":"野"
+                                            "失策(ゴロ)":"失", "失策(フライ)":"失", "失策":"失", "併殺打":"併", "野選":"野"
                                         }.get(res, res[:1])
                                         
                                         rbi_raw = pd.to_numeric(row.get("打点", 0), errors='coerce')

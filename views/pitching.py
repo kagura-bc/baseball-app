@@ -106,7 +106,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     
     # --- フォームのリセット処理 ---
     if st.session_state.get("needs_form_clear"):
-        st.session_state["p_det_res"] = "凡退(ゴロ)" # デフォルト値を文字列に修正(タプルだとエラーになる場合があるため)
+        st.session_state["p_det_res"] = None # ✖で消せるようにNone初期化
         st.session_state["p_det_pos_list"] = []
         st.session_state["p_det_run"] = 0
         st.session_state["p_det_er"] = 0
@@ -181,8 +181,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             st.session_state["opp_batter_index"] = st.number_input("現在の打順", 1, st.session_state["opp_batter_count"], value=st.session_state["opp_batter_index"])
         
         with c_mid3:
-            pitcher_list_opts = [""] + [local_fmt(p) for p in ALL_PLAYERS]
-            default_pitcher_idx = 0
+            pitcher_list_opts = [local_fmt(p) for p in ALL_PLAYERS]
+            default_pitcher_idx = None
             
             # --- 安全な投手取得処理 ---
             current_pitcher = ""
@@ -205,15 +205,15 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                         default_pitcher_idx = i
                         break
                         
-            target_pitcher_disp = st.selectbox("登板投手", pitcher_list_opts, index=default_pitcher_idx)
+            target_pitcher_disp = st.selectbox("登板投手", pitcher_list_opts, index=default_pitcher_idx, placeholder="選択してください")
             
             if "current_season_pitching" in locals() and target_pitcher_disp in current_season_pitching:
                 st.markdown(f"<div style='font-size:14px; color:#1e3a8a;'>{current_season_pitching[target_pitcher_disp]}</div>", unsafe_allow_html=True)
 
         with c_mid4:
-            # --- ★新規追加：安全な捕手取得処理 ---
-            catcher_list_opts = [""] + [local_fmt(p) for p in ALL_PLAYERS]
-            default_catcher_idx = 0
+            # --- 捕手取得処理 ---
+            catcher_list_opts = [local_fmt(p) for p in ALL_PLAYERS]
+            default_catcher_idx = None
             
             current_catcher = ""
             if isinstance(lineup, dict):
@@ -230,7 +230,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                         default_catcher_idx = i
                         break
                         
-            target_catcher_disp = st.selectbox("現在の捕手", catcher_list_opts, index=default_catcher_idx)
+            target_catcher_disp = st.selectbox("現在の捕手", catcher_list_opts, index=default_catcher_idx, placeholder="選択してください")
 
         # --- 下段：具体的な成績入力 ---
         st.divider()
@@ -239,8 +239,12 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         c_res, c_pos, c_run, c_er = st.columns(4)
         
         with c_res:
-            p_res = st.selectbox("結果", ["凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", 
-                                        "振り逃げ三振", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "ボーク", "暴投", "捕逸", "牽制死", "盗塁死", "盗塁", "走塁死"], key="p_det_res")
+            res_options = ["凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", 
+                           "振り逃げ三振", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "ボーク", "暴投", "捕逸", "牽制死", "盗塁死", "盗塁", "走塁死"]
+            saved_res = st.session_state.get("p_det_res")
+            res_idx = res_options.index(saved_res) if saved_res in res_options else None
+            
+            p_res = st.selectbox("結果", res_options, key="p_det_res", index=res_idx, placeholder="選択してください")
         
         with c_pos:
             target_fielder_pos_list = st.multiselect(
@@ -280,6 +284,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         
         if not input_name: 
             st.error("⚠️ 投手を選択してください")
+        elif not p_res:
+            st.error("⚠️ 結果を選択してください")
         elif p_res == "本塁打" and p_run == 0: 
             st.error("⚠️ 本塁打は失点1以上必須")
         elif p_res in ["凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)", "併殺打", "犠打(ゴロ)", "犠打(フライ)", "野選"] and not target_fielder_pos_list: 
@@ -410,10 +416,16 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         with st.form("pitcher_dec_form"):
             st.markdown("##### 1. 公式記録（勝敗・セーブ）の登録")
             c_d1, c_d2 = st.columns(2)
-            dec_p = c_d1.selectbox("投手", [""] + [local_fmt(p) for p in ALL_PLAYERS])
-            dec_t = c_d2.selectbox("内容", ["勝利", "敗戦", "セーブ", "ホールド"])
+            
+            dec_p_opts = [local_fmt(p) for p in ALL_PLAYERS]
+            dec_p = c_d1.selectbox("投手", dec_p_opts, index=None, placeholder="選択してください")
+            
+            dec_t_opts = ["勝利", "敗戦", "セーブ", "ホールド"]
+            dec_t = c_d2.selectbox("内容", dec_t_opts, index=None, placeholder="選択してください")
+            
             if st.form_submit_button("🏆 確定して保存", type="primary", use_container_width=True):
                 if not dec_p: st.error("投手を選択してください")
+                elif not dec_t: st.error("内容を選択してください")
                 else:
                     target_player = dec_p.split(" (")[0]
                     mask = (df_pitching["日付"].astype(str) == selected_date_str) & (df_pitching["選手名"] == target_player)
