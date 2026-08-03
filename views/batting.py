@@ -23,7 +23,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* すべてのプルダウンの高さを方向選択と同じサイズに統一 */
+        /* すべてのプルダウンの高さを統一 */
         div[data-baseweb="select"] > div {
             min-height: 52px !important;
             height: auto !important;
@@ -434,6 +434,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
+        # 🌟 カラム幅の比率を調整し、打席結果と方向選択のサイズを完全に統一
         q_cols = [3.4, 2.4, 2.4, 1.0]
         qc = st.columns(q_cols)
 
@@ -446,7 +447,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             </div>
             """, unsafe_allow_html=True)
         with qc[1]:
-            st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="結果選択", index=None, label_visibility="collapsed")
+            st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="打席結果", index=None, label_visibility="collapsed")
         with qc[2]:
             st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向選択", label_visibility="collapsed")
         with qc[3]:
