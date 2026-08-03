@@ -55,7 +55,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     if match_changed:
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup"]
+        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
@@ -65,6 +65,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     if "persistent_inn" not in st.session_state:
         st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
+
+    if "batter_offset" not in st.session_state:
+        st.session_state["batter_offset"] = 0
 
     # ==========================================
     # 2. データの読み込み & 即時反映キャッシュの適用
@@ -168,20 +171,30 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             for clean_name, group in valid_history_df.groupby("選手名"):
                 history_html = []
                 count = 0
+                stolen_base_count = 0
                 total_runs = 0
+                
                 for _, row in group.iterrows():
                     res = row['結果']
                     runs_val = pd.to_numeric(row['得点'], errors='coerce')
                     rbi_val = pd.to_numeric(row['打点'], errors='coerce')
-                    total_runs += int(runs_val) if pd.notna(runs_val) else 0
                     
+                    r_val = int(runs_val) if pd.notna(runs_val) else 0
+                    total_runs += r_val
+                    
+                    if res == "盗塁":
+                        stolen_base_count += 1
+                        continue
+                    elif res in ["盗塁死", "走塁死", "牽制死", "走塁記録"]:
+                        continue
+                    
+                    count += 1
                     res_short = {
                         "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 
                         "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "失策(ゴロ)":"失", "失策(フライ)":"失", "野選":"野", "併殺打":"併", 
-                        "振り逃げ三振":"逃", "打撃妨害":"妨", "盗塁":"盗", "盗塁死":"盗死", "走塁死":"走死", "牽制死":"牽制", "得点":"得点"
+                        "振り逃げ三振":"逃", "打撃妨害":"妨"
                     }.get(res, res[:2])
                     
-                    count += 1
                     raw_dir = row['打球方向']
                     p_dir = str(raw_dir) if pd.notna(raw_dir) and raw_dir != "---" else ""
                     disp_text = f"{p_dir}{res_short}" if p_dir else f"{res_short}"
@@ -194,13 +207,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         color_style = "color: red;"   # タイムリー
                     elif is_hit:
                         color_style = "color: blue;"  # 安打
-                    elif res == "得点" or (runs_val > 0 and not is_hit):
-                        color_style = "color: green;" # 得点
                         
                     history_html.append(f"<span style='{color_style}'>{count}({disp_text})</span>")
                 
+                if stolen_base_count > 0:
+                    history_html.append(f"<span style='color: #800080;'>盗{stolen_base_count}</span>")
+                
                 if total_runs > 0:
-                    history_html.append(f"<span style='color: green; font-size:18px; margin-left:5px;'>[計{total_runs}得点]</span>")
+                    history_html.append(f"<span style='color: green;'>得{total_runs}</span>")
                 
                 player_history_dict[str(clean_name).strip()] = " ".join(history_html)
 
@@ -265,7 +279,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             ] if not today_batting_df.empty else pd.DataFrame()
             
             total_pa = len(valid_pa_df)
-            batter_idx = total_pa % active_orders
+            batter_idx = (total_pa + st.session_state.get("batter_offset", 0)) % active_orders
             target_batter_name = st.session_state.get(f"sn{batter_idx}", "")
             
             if target_batter_name:
@@ -364,6 +378,23 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             except ValueError:
                 pass
 
+    # --- 打順のズレ調整用コントロール（フォーム外） ---
+    col_adj1, col_adj2, col_adj3, col_adj4 = st.columns([2.5, 1.0, 1.0, 1.0])
+    with col_adj1:
+        st.markdown(f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>📍 打順調整 (オフセット: {st.session_state.get('batter_offset', 0)})</div>", unsafe_allow_html=True)
+    with col_adj2:
+        if st.button("◀ 前へ", use_container_width=True):
+            st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) - 1
+            st.rerun()
+    with col_adj3:
+        if st.button("リセット", use_container_width=True):
+            st.session_state["batter_offset"] = 0
+            st.rerun()
+    with col_adj4:
+        if st.button("次へ ▶", use_container_width=True):
+            st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) + 1
+            st.rerun()
+
     # --- フォーム開始 ---
     with st.form(key='batting_form', clear_on_submit=False):
         submitted = st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
@@ -400,7 +431,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         else:
             total_pa_count = 0
 
-        current_batter_index = total_pa_count % active_orders
+        current_batter_index = (total_pa_count + st.session_state.get("batter_offset", 0)) % active_orders
         current_order_num = current_batter_index + 1
         
         raw_batter_name = st.session_state.get(f"sn{current_batter_index}", "")
@@ -414,10 +445,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         with qc[0]:
             st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 0px 16px; border-radius: 8px; border-left: 8px solid #ff4b4b; height: 80px; display: flex; align-items: center; justify-content: flex-start; gap: 14px; box-sizing: border-box;">
-                <span style="font-size: 26px; color: #555; font-weight: bold; white-space: nowrap;">📍 打席</span>
-                <span style="font-size: 32px; color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
-                <span style="font-size: 36px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
+            <div style="background-color: #f8f9fa; padding: 0px 12px; border-radius: 8px; border-left: 8px solid #ff4b4b; height: 50px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; box-sizing: border-box;">
+                <span style="color: #555; font-weight: bold; white-space: nowrap;">📍 打順</span>
+                <span style="color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
+                <span style="color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
             </div>
             """, unsafe_allow_html=True)
         with qc[1]:
