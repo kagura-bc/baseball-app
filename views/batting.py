@@ -17,11 +17,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- スマホ・タブレットでセレクトボックスをタッチした時にキーボードが出るのを防ぐCSS ---
+    # --- スマホ・タブレット対策 & 文字・セルの拡大CSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
+        }
+        /* セレクトボックス内の文字サイズを大きく */
+        div[data-baseweb="select"] span {
+            font-size: 16px !important;
+            font-weight: bold !important;
+        }
+        /* セレクトボックス自体の高さを広げて押しやすく */
+        div[data-baseweb="select"] > div {
+            min-height: 48px !important;
+        }
+        /* 各入力項目のラベル文字を大きく */
+        label p {
+            font-size: 15px !important;
+            font-weight: bold !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -76,7 +90,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
 
     # ==========================================
-    # 2. データの読み込み & 即時反映キャッシュの適用 (安全対策付き)
+    # 2. データの読み込み & 即時反映キャッシュの適用
     # ==========================================
     is_kagura_top = (kagura_order == "先攻 (表)")
     target_date_str = pd.to_datetime(selected_date_str, errors='coerce').strftime('%Y-%m-%d')
@@ -85,7 +99,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if cache_key in st.session_state:
         df_batting = st.session_state[cache_key]
 
-    # 🌟 必須カラムの定義と自動補正（KeyError防止）
     expected_batting_cols = ["日付", "イニング", "選手名", "位置", "結果", "打点", "得点", "グラウンド", "対戦相手", "試合種別", "打順", "打球方向", "スコアラー"]
     if df_batting.empty:
         df_batting = pd.DataFrame(columns=expected_batting_cols)
@@ -118,7 +131,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             (df_pitching["試合種別"].astype(str).str.strip() == str(match_type).strip())
         ]
     else:
-        today_pitching_df = pd.DataFrame(columns=expected_pitching_cols)
+        today_pitching_df = pd.DataFrame()
 
     if not match_changed and not today_batting_df.empty:
         valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
@@ -225,7 +238,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         if "saved_lineup" not in st.session_state:
             st.session_state["saved_lineup"] = {}
 
-        # 既に今日のスタメンが登録されているかチェックし、重複登録を防ぐ
         has_today_lineup = False
         if not today_batting_df.empty:
             has_today_lineup = not today_batting_df[today_batting_df["結果"].astype(str) == "スタメン"].empty
@@ -379,11 +391,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     with st.form(key='batting_form', clear_on_submit=False):
         submitted = st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
 
+        # 🌟 イニングとアウトカウント（大きめのセル・文字に調整）
         c_inn, c_outs = st.columns([1.5, 2.5])
         
         with c_inn:
             def_inn_ix = inn_list.index(current_inn_val) if current_inn_val in inn_list else 0
-            curr_inn = st.selectbox("イニング", inn_list, index=def_inn_ix)
+            curr_inn = st.selectbox("イニング選択", inn_list, index=def_inn_ix)
             st.session_state["persistent_inn"] = curr_inn
         
         with c_outs:
@@ -420,23 +433,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        q_cols = [3.4, 1.8, 2.0, 1.0]
+        # 🌟 クイック入力部分（文字と高さを拡大）
+        q_cols = [3.2, 2.2, 2.4, 1.2]
         qc = st.columns(q_cols)
 
         with qc[0]:
             st.markdown(f"""
-            <div style="background-color: #f0f2f6; padding: 8px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 12px;">
-                <span style="font-size: 13px; color: #555; font-weight: bold; white-space: nowrap;">📍 現在の打席</span>
-                <span style="font-size: 16px; color: #111; font-weight: bold; white-space: nowrap;"> {current_order_num} 番打者</span>
-                <span style="font-size: 18px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
+            <div style="background-color: #f8f9fa; padding: 12px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 52px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; box-sizing: border-box; margin-top: 24px;">
+                <span style="font-size: 13px; color: #555; font-weight: bold; white-space: nowrap;">📍 打席</span>
+                <span style="font-size: 16px; color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
+                <span style="font-size: 17px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
             </div>
             """, unsafe_allow_html=True)
         with qc[1]:
-            st.selectbox("結果(クイック)", batting_results, key="quick_sr", placeholder="打席結果", index=None, label_visibility="collapsed")
+            st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="結果選択", index=None)
         with qc[2]:
-            st.multiselect("方向(クイック)", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", label_visibility="collapsed", max_selections=2, placeholder="方向選択")
+            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向(最大2つ)")
         with qc[3]:
-            st.selectbox("打点(クイック)", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
+            st.selectbox("打点", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None)
 
         st.divider()
 
