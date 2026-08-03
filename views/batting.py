@@ -201,7 +201,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     res_short = {
                         "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 
                         "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "失策(ゴロ)":"失", "失策(フライ)":"失", "野選":"野", "併殺打":"併", 
-                        "振り逃げ三振":"逃", "打撃妨害":"妨", "盗塁":"盗", "盗塁死":"盗死", "走塁死":"走死", "得点":"得点"
+                        "振り逃げ三振":"逃", "打撃妨害":"妨", "盗塁":"盗", "盗塁死":"盗死", "走塁死":"走死", "牽制死":"牽制", "得点":"得点"
                     }.get(res, res[:2])
                     
                     count += 1
@@ -432,7 +432,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        # 🌟 打席表示と、上段クイック入力エリア
         q_cols = [3.6, 2.2, 2.6, 0.9]
         qc = st.columns(q_cols)
 
@@ -453,8 +452,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
-        all_results_options = ["盗塁", "盗塁死", "走塁死"]
-        col_ratios = [0.5, 1.0, 1.5, 1.4, 1.0, 3.6]
+        # 🌟 走塁結果の選択肢
+        all_results_options = ["盗塁", "盗塁死", "走塁死", "牽制死"]
+        col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
 
         # 15打順のループ
         for i in range(15):
@@ -481,7 +481,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if sel_p_name_raw:
                 clean_name = sel_p_name_raw.split(" (")[0].strip()
                 if clean_name in player_history_dict:
-                    # 🌟 履歴の文字サイズを 24px に拡大
                     c[5].markdown(f"<div style='font-size:24px; line-height:1.3; padding-top:10px;'>{player_history_dict[clean_name]}</div>", unsafe_allow_html=True)
 
         if submitted:
