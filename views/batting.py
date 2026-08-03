@@ -17,26 +17,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- スマホ・タブレット対策 & 全プルダウンの大きさを統一・拡大するCSS ---
+    # --- スマホ・タブレット対策 & 全てのプルダウンを大きく・統一するCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* すべてのプルダウンの高さを統一 */
+        /* 画面内にあるすべてのプルダウン（セレクトボックス・マルチセレクト）の高さを大きくして統一 */
         div[data-baseweb="select"] > div {
-            min-height: 52px !important;
+            min-height: 60px !important;
             height: auto !important;
+            display: flex !important;
             align-items: center !important;
         }
-        /* プルダウン内の文字サイズを大きく */
-        div[data-baseweb="select"] span {
-            font-size: 16px !important;
-            font-weight: bold !important;
-        }
-        /* プレースホルダーの文字も大きく */
-        div[data-baseweb="select"] div[data-testid="stMarkdownContainer"] p {
-            font-size: 16px !important;
+        /* 全てのプルダウン内の文字サイズやプレースホルダーを大きく迫力のあるサイズに */
+        div[data-baseweb="select"] span,
+        div[data-baseweb="select"] p,
+        div[data-baseweb="select"] div {
+            font-size: 20px !important;
             font-weight: bold !important;
         }
     </style>
@@ -434,29 +432,29 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        # 🌟 カラム幅の比率を調整し、打席結果と方向選択のサイズを完全に統一
-        q_cols = [3.4, 2.4, 2.4, 1.0]
+        # 🌟 打席表示と、上段クイック入力エリア（高さ80px、大きな文字）
+        q_cols = [3.6, 2.2, 2.6, 0.9]
         qc = st.columns(q_cols)
 
         with qc[0]:
             st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 0px 14px; border-radius: 8px; border-left: 6px solid #ff4b4b; height: 52px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; box-sizing: border-box;">
-                <span style="font-size: 13px; color: #555; font-weight: bold; white-space: nowrap;">📍 打席</span>
-                <span style="font-size: 17px; color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
-                <span style="font-size: 18px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
+            <div style="background-color: #f8f9fa; padding: 0px 16px; border-radius: 8px; border-left: 8px solid #ff4b4b; height: 80px; display: flex; align-items: center; justify-content: flex-start; gap: 14px; box-sizing: border-box;">
+                <span style="font-size: 26px; color: #555; font-weight: bold; white-space: nowrap;">📍 打席</span>
+                <span style="font-size: 32px; color: #111; font-weight: bold; white-space: nowrap;">{current_order_num}番</span>
+                <span style="font-size: 36px; color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
             </div>
             """, unsafe_allow_html=True)
         with qc[1]:
             st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="打席結果", index=None, label_visibility="collapsed")
         with qc[2]:
-            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向選択", label_visibility="collapsed")
+            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向", label_visibility="collapsed")
         with qc[3]:
             st.selectbox("打点", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
 
         st.divider()
 
         all_results_options = ["盗塁", "盗塁死", "走塁死"]
-        col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
+        col_ratios = [0.5, 0.8, 1.5, 1.4, 1.0, 3.6]
 
         # 15打順のループ
         for i in range(15):
