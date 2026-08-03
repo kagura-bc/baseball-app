@@ -17,26 +17,31 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- クラウド・ローカル共通で崩れない、パディング＆フォントサイズ拡大方式のCSS ---
-    # --- 打席結果と方向のの高さを完全に揃えるCSS ---
+    # --- クラウド・ローカル共通で文字潰れを防ぎ、綺麗に表示するCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* stSelectbox と stMultiSelect の高さを同じピクセル数（例: 54px）で完全に統一 */
-        .stSelectbox div[data-baseweb="select"] > div,
-        .stMultiSelect div[data-baseweb="select"] > div {
-            height: 54px !important;
-            min-height: 54px !important;
+        /* ボックスが極端に潰れないよう最小高さをしっかり確保しつつ、余白と中央揃えを調整 */
+        div[data-baseweb="select"] {
+            min-height: 56px !important;
+        }
+        div[data-baseweb="select"] > div {
+            min-height: 56px !important;
+            padding-top: 6px !important;
+            padding-bottom: 6px !important;
+            padding-left: 10px !important;
+            padding-right: 10px !important;
             display: flex !important;
             align-items: center !important;
+            flex-wrap: wrap !important;
         }
         /* プルダウン内の文字サイズやプレースホルダーを大きく迫力のあるサイズに */
         div[data-baseweb="select"] span,
         div[data-baseweb="select"] p,
         div[data-baseweb="select"] div {
-            font-size: 20px !important;
+            font-size: 19px !important;
             font-weight: bold !important;
         }
     </style>
@@ -434,7 +439,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
                            "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
 
-        q_cols = [3.6, 2.2, 2.2, 1.0]
+        q_cols = [3.6, 2.2, 2.6, 0.9]
         qc = st.columns(q_cols)
 
         with qc[0]:
@@ -448,15 +453,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         with qc[1]:
             st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="打席結果", index=None, label_visibility="collapsed")
         with qc[2]:
-            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="打球方向", label_visibility="collapsed")
+            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="方向", label_visibility="collapsed")
         with qc[3]:
             st.selectbox("打点", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
 
         st.divider()
 
-        all_results_options = ["盗塁", "盗塁死", "走塁死", "牵制死"] # 牽制死
         all_results_options = ["盗塁", "盗塁死", "走塁死", "牽制死"]
-        col_ratios = [0.5, 1.0, 1.5, 1.5, 1.0, 3.6]
+        col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
 
         # 15打順のループ
         for i in range(15):
