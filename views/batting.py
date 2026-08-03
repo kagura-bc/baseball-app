@@ -76,7 +76,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
 
     # ==========================================
-    # 2. データの読み込み & 即時反映キャッシュの適用
+    # 2. データの読み込み & 即時反映キャッシュの適用 (安全対策付き)
     # ==========================================
     is_kagura_top = (kagura_order == "先攻 (表)")
     target_date_str = pd.to_datetime(selected_date_str, errors='coerce').strftime('%Y-%m-%d')
@@ -85,7 +85,22 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if cache_key in st.session_state:
         df_batting = st.session_state[cache_key]
 
-    if not df_batting.empty and "日付" in df_batting.columns:
+    # 🌟 必須カラムの定義と自動補正（KeyError防止）
+    expected_batting_cols = ["日付", "イニング", "選手名", "位置", "結果", "打点", "得点", "グラウンド", "対戦相手", "試合種別", "打順", "打球方向", "スコアラー"]
+    if df_batting.empty:
+        df_batting = pd.DataFrame(columns=expected_batting_cols)
+    else:
+        for col in expected_batting_cols:
+            if col not in df_batting.columns:
+                df_batting[col] = ""
+
+    if not df_pitching.empty:
+        expected_pitching_cols = ["日付", "イニング", "選手名", "結果", "失点", "自責点", "被安打", "奪三振", "アウト数", "種別", "対戦相手", "試合種別"]
+        for col in expected_pitching_cols:
+            if col not in df_pitching.columns:
+                df_pitching[col] = ""
+
+    if "日付" in df_batting.columns:
         df_batting["_date_str"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
         today_batting_df = df_batting[
             (df_batting["_date_str"] == target_date_str) & 
@@ -93,7 +108,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             (df_batting["試合種別"].astype(str).str.strip() == str(match_type).strip())
         ]
     else:
-        today_batting_df = pd.DataFrame()
+        today_batting_df = pd.DataFrame(columns=expected_batting_cols)
 
     if not df_pitching.empty and "日付" in df_pitching.columns:
         df_pitching["_date_str"] = pd.to_datetime(df_pitching["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
@@ -103,7 +118,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             (df_pitching["試合種別"].astype(str).str.strip() == str(match_type).strip())
         ]
     else:
-        today_pitching_df = pd.DataFrame()
+        today_pitching_df = pd.DataFrame(columns=expected_pitching_cols)
 
     if not match_changed and not today_batting_df.empty:
         valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
