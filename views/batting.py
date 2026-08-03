@@ -17,25 +17,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
     
-    # --- スマホ・タブレット対策 & クラウド環境対応の強力な拡大CSS ---
+    # --- クラウド・ローカル共通で崩れない、パディング＆フォントサイズ拡大方式のCSS ---
     st.markdown("""
     <style>
         div[data-baseweb="select"] input {
             pointer-events: none !important;
         }
-        /* Streamlit Cloudでも確実に高さを広げるための指定 */
-        .stSelectbox div[data-baseweb="select"] > div,
-        .stMultiSelect div[data-baseweb="select"] > div {
-            min-height: 60px !important;
-            height: 60px !important;
-            display: flex !important;
-            align-items: center !important;
+        /* 高さを無理に固定せず、上下左右のパディング（余白）を広げて押しやすい大きさに保つ */
+        div[data-baseweb="select"] > div {
+            padding-top: 10px !important;
+            padding-bottom: 10px !important;
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+            min-height: unset !important;
+            height: auto !important;
         }
-        /* プルダウン内の文字サイズやプレースホルダーを大きく統一 */
-        .stSelectbox div[data-baseweb="select"] span,
-        .stSelectbox div[data-baseweb="select"] p,
-        .stMultiSelect div[data-baseweb="select"] span,
-        .stMultiSelect div[data-baseweb="select"] p {
+        /* プルダウン内の文字サイズやプレースホルダーを大きく迫力のあるサイズに */
+        div[data-baseweb="select"] span,
+        div[data-baseweb="select"] p,
+        div[data-baseweb="select"] div {
             font-size: 20px !important;
             font-weight: bold !important;
         }
@@ -454,6 +454,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
+        all_results_options = ["盗塁", "盗塁死", "走塁死", "牵制死"] # 牽制死
         all_results_options = ["盗塁", "盗塁死", "走塁死", "牽制死"]
         col_ratios = [0.5, 0.8, 1.5, 1.4, 0.7, 3.6]
 
