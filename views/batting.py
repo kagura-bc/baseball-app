@@ -55,7 +55,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     if match_changed:
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset", "lineup_states"]
+        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset", "lineup_states", "batting_error_msg"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
@@ -151,7 +151,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if not valid_scorer_df.empty:
                 st.session_state["scorer_name_ui"] = valid_scorer_df.iloc[-1]["スコアラー"]
 
-        # ▼▼▼ 修正箇所: セッション消失時は「スタメン」ではなく「最新の選手（交代後）」を復元する ▼▼▼
         for idx in range(15):
             name_key = f"sn{idx}"
             pos_key = f"sp{idx}"
@@ -472,6 +471,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     with st.form(key='batting_form', clear_on_submit=False):
         submitted = st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
 
+        # ▼▼▼ エラーメッセージ表示エリア（フォーム内の最上部・1番打者の上に配置） ▼▼▼
+        if st.session_state.get("batting_error_msg"):
+            st.error(st.session_state["batting_error_msg"])
+            st.session_state["batting_error_msg"] = None
+
         c_inn, c_outs = st.columns([1.5, 2.5])
         
         with c_inn:
@@ -576,7 +580,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             ]
             
             if quick_res in require_dir_results and not quick_dirs:
-                st.error(f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。")
+                st.session_state["batting_error_msg"] = f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。"
+                st.rerun()
             else:
                 submit_everything(curr_inn)
 
