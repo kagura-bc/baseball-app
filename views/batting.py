@@ -467,11 +467,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) + 1
             st.rerun()
 
-    # --- フォーム開始 ---
-    with st.form(key='batting_form', clear_on_submit=False):
-        submitted = st.form_submit_button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
+    # --- フォーム解除（コンテナに変更） ---
+    with st.container():
+        # ① ボタンの「表示」をコンテナの最上部に配置
+        submitted = st.button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
 
-        # ▼▼▼ エラーメッセージ表示エリア（フォーム内の最上部・1番打者の上に配置） ▼▼▼
+        # ▼▼▼ エラーメッセージ表示エリア（フォーム内の最上部） ▼▼▼
         if st.session_state.get("batting_error_msg"):
             st.error(st.session_state["batting_error_msg"])
             st.session_state["batting_error_msg"] = None
@@ -529,12 +530,76 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 <span style="color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_batter_name}</span>
             </div>
             """, unsafe_allow_html=True)
+
+        # --- 修正箇所：qc[1] 打席結果 ---
         with qc[1]:
-            st.selectbox("打席結果", batting_results, key="quick_sr", placeholder="打席結果", index=None, label_visibility="collapsed")
+            current_res = st.session_state.get("quick_sr")
+            btn_label = current_res if current_res else "打席結果 🔽"
+            
+            with st.popover(btn_label, use_container_width=True):
+                grid_cols = st.columns(6)
+                for idx, res in enumerate(batting_results):
+                    with grid_cols[idx % 6]:
+                        if st.button(res, key=f"grid_btn_{res}", use_container_width=True):
+                            st.session_state["quick_sr"] = res
+                            st.rerun()
+                            
+                # ▼ 追加：打席結果のクリアボタン ▼
+                if st.button("🔄 クリア", key="grid_btn_res_clear", use_container_width=True):
+                    st.session_state["quick_sr"] = None
+                    st.rerun()
+        # --- 修正箇所：qc[2] 打球方向 ---
         with qc[2]:
-            st.multiselect("方向選択", ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"], key="quick_sd", max_selections=2, placeholder="打球方向", label_visibility="collapsed")
+            # 現在の選択状態を取得
+            current_dirs = st.session_state.get("quick_sd", [])
+            dir_label = "".join(current_dirs) if current_dirs else "打球方向 🔽"
+            
+            with st.popover(dir_label, use_container_width=True):
+                # グラウンドの配置をイメージした3×3のレイアウト
+                dir_layout = ["左", "中", "右", "三", "遊", "二", "投", "捕", "一"]
+                dir_cols = st.columns(3)
+                
+                for idx, d in enumerate(dir_layout):
+                    with dir_cols[idx % 3]:
+                        # 選択中のボタンは分かりやすく記号を付ける（オプション）
+                        btn_text = f"✅ {d}" if d in current_dirs else d
+                        
+                        if st.button(btn_text, key=f"grid_btn_dir_{d}", use_container_width=True):
+                            # 最大2つまでの選択ロジック（元の max_selections=2 を再現）
+                            if d in current_dirs:
+                                current_dirs.remove(d) # 既に選択されていれば解除
+                            else:
+                                if len(current_dirs) >= 2:
+                                    current_dirs.pop(0) # 2つを超えたら古いものを消す
+                                current_dirs.append(d)
+                                
+                            st.session_state["quick_sd"] = current_dirs
+                            st.rerun()
+                            
+                # 選択をリセットするクリアボタン
+                if st.button("🔄 クリア", key="grid_btn_dir_clear", use_container_width=True):
+                    st.session_state["quick_sd"] = []
+                    st.rerun()
+
+        # --- 修正箇所：qc[3] 打点 ---
         with qc[3]:
-            st.selectbox("打点", [0, 1, 2, 3, 4], key="quick_si", placeholder="打点", index=None, label_visibility="collapsed")
+            current_rbi = st.session_state.get("quick_si")
+            rbi_label = f"{current_rbi}点" if current_rbi is not None else "打点 🔽"
+            
+            with st.popover(rbi_label, use_container_width=True):
+                rbi_options = [0, 1, 2, 3, 4] #
+                rbi_cols = st.columns(len(rbi_options))
+                
+                for idx, rbi in enumerate(rbi_options):
+                    with rbi_cols[idx]:
+                        if st.button(str(rbi), key=f"grid_btn_rbi_{rbi}", use_container_width=True):
+                            st.session_state["quick_si"] = rbi
+                            st.rerun()
+                            
+                # ▼ 追加：打点のクリアボタン ▼
+                if st.button("🔄 クリア", key="grid_btn_rbi_clear_btn", use_container_width=True):
+                    st.session_state["quick_si"] = None
+                    st.rerun()
 
         st.divider()
 
@@ -566,7 +631,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if sel_p_name_raw:
                 clean_name = sel_p_name_raw.split(" (")[0].strip()
                 if clean_name in player_history_dict:
-                    c[5].markdown(f"<div style='font-size:24px; line-height:1.3; padding-top:10px;'>{player_history_dict[clean_name]}</div>", unsafe_allow_html=True)
+                    c[5].markdown(f"<div style='font-size:24px; line-height:1.3; padding-top:10px;'>{player_history_dict[clean_name]}</div>", unsafe_allow_html=True) 
 
         if submitted:
             # ▼▼▼ 打球方向の必須バリデーション処理 ▼▼▼
