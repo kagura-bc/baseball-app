@@ -33,19 +33,16 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     pos_options = [p for p in ALL_POSITIONS if p != ""]
     player_options = [p for p in ALL_PLAYERS if p != ""]
 
-    # ▼▼▼ フォームクリアのフラグ処理 (APIエラーとゾンビバグを同時に防ぐ確実な方法) ▼▼▼
-    # 必ずウィジェットが描画される「前」に None を代入することで、安全にキャッシュを空にします
+    # ▼▼▼ フォームクリアのフラグ処理（ウィジェット描画前にキーを完全に削除してゾンビを完全駆除） ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(20):
-            st.session_state[f"row_sr{i}"] = None
-            st.session_state[f"sr{i}"] = None
-            st.session_state[f"si{i}"] = None
-            st.session_state[f"st{i}"] = None
-            st.session_state[f"sd{i}"] = []
+            for k in [f"sr{i}", f"si{i}", f"st{i}", f"row_sr{i}"]:
+                st.session_state.pop(k, None)
+            st.session_state.pop(f"sd{i}", None)
                 
-        st.session_state["quick_sr"] = None
-        st.session_state["quick_sd"] = []
-        st.session_state["quick_si"] = None
+        st.session_state.pop("quick_sr", None)
+        st.session_state.pop("quick_sd", None)
+        st.session_state.pop("quick_si", None)
         st.session_state["needs_batting_clear"] = False
 
     # ==========================================
@@ -130,7 +127,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         lineup_event_df = today_batting_df[today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代", "試合前"])]
         for i in range(15):
             order_num = i + 1
-            order_rows = lineup_event_df[pd.to_numeric(lineup_event_df["打順"], errors='coerce') == order_num]
+            order_rows = lineup_event_df[pd.to_numeric(lineup_event_df["打順"], errors='coerce'] == order_num]
             if not order_rows.empty:
                 latest_row = order_rows.iloc[-1]
                 latest_name = str(latest_row.get("選手名", "")).strip()
@@ -382,7 +379,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     active_orders = idx_check + 1
                     break
             
-            # ★ 修正: 打席(PA)のみを抽出して正しく打席数をカウントする
             if not today_batting_df.empty:
                 pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)]
             else:
@@ -453,6 +449,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             try:
                 conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=updated_full_df)
                 st.session_state[cache_key] = updated_full_df
+                # ★ ここでフラグを立てることで、次回の描画時に先頭でキーが完全に削除される
                 st.session_state["needs_batting_clear"] = True
                 st.success("登録しました！")
                 st.rerun()
@@ -539,7 +536,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 active_orders = i + 1
                 break
 
-        # ★ 修正: UIの現在打者判定でも打席(PA)のみを抽出する
         if not today_batting_df.empty:
             valid_pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)]
             total_pa_count = len(valid_pa_df)
@@ -594,7 +590,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.pills("打点", rbi_options, key="quick_si", label_visibility="collapsed")
 
                 st.markdown("---")
-                # ゾンビ回避のため、ボタンを押した瞬間にフラグを立ててリラン（リラン後に画面トップで確実に消去）
                 if st.button("🔄 入力をすべてクリア", use_container_width=True, key="quick_all_clear_btn"):
                     st.session_state["needs_batting_clear"] = True
                     st.rerun()
@@ -664,13 +659,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state["batting_error_msg"] = f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。"
                 st.rerun()
             else:
-                # ▼▼▼ 登録処理を実行する「直前」に、ポップオーバーのキーを強制削除してゾンビ化を防ぐ ▼▼▼
-                for i in range(20):
-                    st.session_state.pop(f"row_sr{i}", None)
-                st.session_state.pop("quick_sr", None)
-                st.session_state.pop("quick_sd", None)
-                st.session_state.pop("quick_si", None)
-                
                 submit_everything(curr_inn)
 
     with st.expander(" 🚌 ベンチ入りメンバー", expanded=True):
