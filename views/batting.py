@@ -664,6 +664,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state["batting_error_msg"] = f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。"
                 st.rerun()
             else:
+                # ▼▼▼ 登録処理を実行する「直前」に、ポップオーバーのキーを強制削除してゾンビ化を防ぐ ▼▼▼
+                for i in range(20):
+                    st.session_state.pop(f"row_sr{i}", None)
+                st.session_state.pop("quick_sr", None)
+                st.session_state.pop("quick_sd", None)
+                st.session_state.pop("quick_si", None)
+                
                 submit_everything(curr_inn)
 
     with st.expander(" 🚌 ベンチ入りメンバー", expanded=True):
