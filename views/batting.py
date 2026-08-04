@@ -31,14 +31,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         for i in range(15):
             for k in [f"sr{i}", f"si{i}", f"st{i}", f"row_sr{i}"]:
                 if k in st.session_state:
-                    st.session_state[k] = None
+                    del st.session_state[k]
             if f"sd{i}" in st.session_state:
-                st.session_state[f"sd{i}"] = []
+                del st.session_state[f"sd{i}"]
                 
         if "quick_sr" in st.session_state:
             del st.session_state["quick_sr"]
         if "quick_sd" in st.session_state:
-            st.session_state["quick_sd"] = []
+            del st.session_state["quick_sd"]
         if "quick_si" in st.session_state:
             del st.session_state["quick_si"]
         st.session_state["needs_batting_clear"] = False
@@ -617,7 +617,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if st.button("🔄 入力をすべてクリア", use_container_width=True, key="quick_all_clear_btn"):
                     if "quick_sr" in st.session_state:
                         del st.session_state["quick_sr"]
-                    st.session_state["quick_sd"] = []
+                    if "quick_sd" in st.session_state:
+                        del st.session_state["quick_sd"]
                     if "quick_si" in st.session_state:
                         del st.session_state["quick_si"]
                     st.rerun()
