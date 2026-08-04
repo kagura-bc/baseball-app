@@ -36,11 +36,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state[f"sd{i}"] = []
                 
         if "quick_sr" in st.session_state:
-            st.session_state["quick_sr"] = None
+            del st.session_state["quick_sr"]
         if "quick_sd" in st.session_state:
             st.session_state["quick_sd"] = []
         if "quick_si" in st.session_state:
-            st.session_state["quick_si"] = None
+            del st.session_state["quick_si"]
         st.session_state["needs_batting_clear"] = False
 
     # ==========================================
@@ -615,9 +615,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("---")
                 
                 if st.button("🔄 入力をすべてクリア", use_container_width=True, key="quick_all_clear_btn"):
-                    st.session_state["quick_sr"] = None
+                    if "quick_sr" in st.session_state:
+                        del st.session_state["quick_sr"]
                     st.session_state["quick_sd"] = []
-                    st.session_state["quick_si"] = None
+                    if "quick_si" in st.session_state:
+                        del st.session_state["quick_si"]
                     st.rerun()
 
         st.divider()
