@@ -10,6 +10,13 @@ from utils.ui import render_scoreboard, render_out_indicator_3, show_homerun_eff
 def local_fmt(name):
     return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
 
+# ★ 打席としてカウントする（打順を進める）結果のリスト
+PA_RESULTS = [
+    "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", 
+    "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
+    "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"
+]
+
 # ==========================================
 # メイン表示関数
 # ==========================================
@@ -26,11 +33,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     pos_options = [p for p in ALL_POSITIONS if p != ""]
     player_options = [p for p in ALL_PLAYERS if p != ""]
 
-    # ▼▼▼ フォームクリアのフラグ処理 ▼▼▼
+    # ▼▼▼ フォームクリアのフラグ処理 (APIエラーとゾンビバグを同時に防ぐ確実な方法) ▼▼▼
+    # 必ずウィジェットが描画される「前」に None を代入することで、安全にキャッシュを空にします
     if st.session_state.get("needs_batting_clear"):
-        for i in range(15):
-            for k in [f"sr{i}", f"si{i}", f"st{i}", f"row_sr{i}"]:
-                st.session_state[k] = None
+        for i in range(20):
+            st.session_state[f"row_sr{i}"] = None
+            st.session_state[f"sr{i}"] = None
+            st.session_state[f"si{i}"] = None
+            st.session_state[f"st{i}"] = None
             st.session_state[f"sd{i}"] = []
                 
         st.session_state["quick_sr"] = None
@@ -212,7 +222,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     
                     rbi_num = int(rbi_val) if pd.notna(rbi_val) else 0
                     
-                    # 打点がある場合は「中本・4」のように打点をハイフン付きで表示する形式
                     if rbi_num > 0:
                         disp_text = f"{p_dir}{res_short}・{rbi_num}" if p_dir else f"{res_short}・{rbi_num}"
                     else:
@@ -331,7 +340,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
 
-        # --- ベンチメンバーの登録処理（未登録の選手のみデータベースに追加） ---
         selected_bench = st.session_state.get("persistent_bench", [])
         registered_bench_names = set()
         if not today_batting_df.empty:
@@ -362,7 +370,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         quick_res = st.session_state.get("quick_sr")
         quick_dirs = st.session_state.get("quick_sd", [])
-        quick_rbi = st.session_state.get("quick_si", 0)
+        quick_rbi = st.session_state.get("quick_si")
         
         if quick_res:
             dir_str = "".join(quick_dirs) if quick_dirs else "---"
@@ -374,12 +382,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     active_orders = idx_check + 1
                     break
             
-            valid_pa_df = today_batting_df[
-                ~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"]) & 
-                ~today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代", "ベンチ", "メタデータ"])
-            ] if not today_batting_df.empty else pd.DataFrame()
+            # ★ 修正: 打席(PA)のみを抽出して正しく打席数をカウントする
+            if not today_batting_df.empty:
+                pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)]
+            else:
+                pa_df = pd.DataFrame()
             
-            total_pa = len(valid_pa_df)
+            total_pa = len(pa_df)
             batter_idx = (total_pa + st.session_state.get("batter_offset", 0)) % active_orders
             target_batter_name = st.session_state.get(f"sn{batter_idx}", "")
             
@@ -433,7 +442,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         if rows_to_add:
             new_df_to_append = pd.DataFrame(rows_to_add)
-            
             dt_parsed = pd.to_datetime(selected_date_str, errors='coerce')
             formatted_date = dt_parsed.strftime('%Y-%m-%d') if pd.notna(dt_parsed) else current_date_formatted
             
@@ -484,7 +492,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             except ValueError:
                 pass
 
-    # --- 打順のズレ調整用コントロール（フォーム外） ---
     col_adj1, col_adj2, col_adj3, col_adj4 = st.columns([2.5, 1.0, 1.0, 1.0])
     with col_adj1:
         st.markdown(f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>📍 打順調整 (オフセット: {st.session_state.get('batter_offset', 0)})</div>", unsafe_allow_html=True)
@@ -501,7 +508,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) + 1
             st.rerun()
 
-    # --- フォーム解除（コンテナに変更） ---
     with st.container():
         submitted = st.button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
 
@@ -533,11 +539,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 active_orders = i + 1
                 break
 
+        # ★ 修正: UIの現在打者判定でも打席(PA)のみを抽出する
         if not today_batting_df.empty:
-            valid_pa_df = today_batting_df[
-                ~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"]) & 
-                ~today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代", "ベンチ", "メタデータ"])
-            ]
+            valid_pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)]
             total_pa_count = len(valid_pa_df)
         else:
             total_pa_count = 0
@@ -577,40 +581,21 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             with st.popover(summary_btn_label, use_container_width=True):
 
                 st.markdown("##### ⚾ 打席結果を選択")
-                st.pills(
-                    "打席結果",
-                    batting_results,
-                    key="quick_sr",
-                    label_visibility="collapsed"
-                )
+                st.pills("打席結果", batting_results, key="quick_sr", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 打球方向を選択（複数選択可）")
-                
                 dir_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                st.pills(
-                    "打球方向",
-                    dir_options,
-                    selection_mode="multi",
-                    key="quick_sd",
-                    label_visibility="collapsed"
-                )
+                st.pills("打球方向", dir_options, selection_mode="multi", key="quick_sd", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
-                
                 rbi_options = [0, 1, 2, 3, 4]
-                st.pills(
-                    "打点",
-                    rbi_options,
-                    key="quick_si",
-                    label_visibility="collapsed"
-                )
+                st.pills("打点", rbi_options, key="quick_si", label_visibility="collapsed")
 
                 st.markdown("---")
-                
+                # ゾンビ回避のため、ボタンを押した瞬間にフラグを立ててリラン（リラン後に画面トップで確実に消去）
                 if st.button("🔄 入力をすべてクリア", use_container_width=True, key="quick_all_clear_btn"):
-                    # フラグを立ててリランすることで、上部のクリア処理を安全に呼び出す
                     st.session_state["needs_batting_clear"] = True
                     st.rerun()
 
@@ -618,48 +603,32 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         # ==========================================
         # 可変人数（デフォルト15〜最大20）のループ
-        # 各行に「走塁結果」ボタンを配置
         # ==========================================
         for i in range(display_count):
             pos_key = f"sp{i}"
             name_key = f"sn{i}"
             row_sr_key = f"row_sr{i}"
-
+            
             with st.container(border=True):
                 c_row = st.columns([0.7, 2.1, 3.2, 2.3, 3.7])
                 
-                # --- ① 打順番号 ---
                 with c_row[0]:
                     st.markdown(f"<div style='text-align:center; font-size:16px; font-weight:bold; padding-top:10px;'>{i+1}</div>", unsafe_allow_html=True)
 
-                # --- ② 守備位置（ポップオーバー・タッチ式） ---
                 with c_row[1]:
                     cur_pos = st.session_state.get(pos_key, "")
                     pos_btn_label = f"{cur_pos} 🔽" if cur_pos and cur_pos != "－" else "守備選択 🔽"
                     with st.popover(pos_btn_label, use_container_width=True):
                         st.markdown(f"##### {i+1}番 守備位置を選択")
-                        st.pills(
-                            f"守備ピル {i}",
-                            pos_options,
-                            key=pos_key,
-                            label_visibility="collapsed"
-                        )
+                        st.pills(f"守備ピル {i}", pos_options, key=pos_key, label_visibility="collapsed")
                 
-                # --- ③ 選手名（ポップオーバー・タッチ式） ---
                 with c_row[2]:
                     cur_name_raw = st.session_state.get(name_key, "")
                     formatted_cur_name = local_fmt(cur_name_raw) if cur_name_raw else "選手選択 🔽"
                     with st.popover(formatted_cur_name, use_container_width=True):
                         st.markdown(f"##### {i+1}番 選手を選択")
-                        st.pills(
-                            f"選手ピル {i}",
-                            player_options,
-                            format_func=local_fmt,
-                            key=name_key,
-                            label_visibility="collapsed"
-                        )
+                        st.pills(f"選手ピル {i}", player_options, format_func=local_fmt, key=name_key, label_visibility="collapsed")
                 
-                # --- ④ 各選手の走塁結果ボタン（選択時は色付きアイコンで変化） ---
                 with c_row[3]:
                     current_row_sr = st.session_state.get(row_sr_key)
                     if current_row_sr and current_row_sr != "--- (選択なし)":
@@ -670,14 +639,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     with st.popover(sr_btn_label, use_container_width=True):
                         st.markdown(f"##### {i+1}番 走塁結果を選択")
                         base_options = ["--- (選択なし)", "得点1", "盗塁", "盗塁死", "走塁死", "牽制死"]
-                        st.pills(
-                            f"走塁ピル {i}",
-                            base_options,
-                            key=row_sr_key,
-                            label_visibility="collapsed"
-                        )
+                        st.pills(f"走塁ピル {i}", base_options, key=row_sr_key, label_visibility="collapsed")
                 
-                # --- ⑤ 打席結果（履歴） ---
                 with c_row[4]:
                     sel_p_name_raw = st.session_state.get(name_key)
                     history_text = ""
@@ -707,7 +670,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         selected_bench = st.multiselect("ベンチメンバー", ALL_PLAYERS, default=st.session_state.get("persistent_bench", []), key="bench_selection_widget", format_func=local_fmt)
         st.session_state["persistent_bench"] = selected_bench
 
-    # ▼▼▼ 打順の表示人数調整用コントロール ▼▼▼
     st.divider()
     col_disp1, col_disp2, col_disp3 = st.columns([2.0, 1.0, 1.0])
     with col_disp1:
@@ -717,7 +679,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if st.session_state["display_order_count"] > 9:
                 st.session_state["display_order_count"] -= 1
                 idx = st.session_state["display_order_count"]
-                for k in [f"sn{idx}", f"sp{idx}", f"sr{idx}", f"st{idx}", f"row_sr{idx}"]:
+                for k in [f"sn{idx}", f"sp{idx}", f"row_sr{idx}"]:
                     st.session_state.pop(k, None)
                 st.rerun()
     with col_disp3:
