@@ -4,12 +4,16 @@ import datetime
 import unicodedata
 from config.settings import OFFICIAL_GAME_TYPES
 from utils.players import get_stats_active_players
+from utils.ui import fmt_player_name
 
 def show_personal_stats(df_batting, df_pitching):
     st.title(" 📊 個人成績")
 
     # ▼▼▼ 追加: スプレッドシートから成績表示用の選手リストを取得 ▼▼▼
     STATS_PLAYERS, STATS_NUMBERS = get_stats_active_players()
+    
+    def local_fmt(name):
+        return fmt_player_name(name, STATS_NUMBERS)
     
     # チーム記録は残しつつ、非表示対象の選手を除外する
     allowed_names = STATS_PLAYERS + ["チーム記録"]
@@ -464,7 +468,23 @@ def show_personal_stats(df_batting, df_pitching):
     # 2. 個人年度別 + 通算
     # ----------------------------------------------------
     with t_year:
-        sel_player = st.selectbox("選手選択", STATS_PLAYERS)
+        if "personal_stats_selected_player" not in st.session_state or st.session_state["personal_stats_selected_player"] not in STATS_PLAYERS:
+            st.session_state["personal_stats_selected_player"] = STATS_PLAYERS[0] if STATS_PLAYERS else ""
+
+        current_sel_player = st.session_state["personal_stats_selected_player"]
+        popover_label = f"👤 選手選択: {current_sel_player} 🔽" if current_sel_player else "選手を選択してください 🔽"
+
+        with st.popover(popover_label, use_container_width=True):
+            st.markdown("##### 👤 表示する選手をタップして選択")
+            st.pills(
+                "選手選択",
+                STATS_PLAYERS,
+                format_func=local_fmt,
+                key="personal_stats_selected_player",
+                label_visibility="collapsed"
+            )
+
+        sel_player = st.session_state.get("personal_stats_selected_player", "")
         if sel_player:
             if not df_b_calc.empty:
                 my_b = df_b_calc[df_b_calc["選手名"] == sel_player]
@@ -506,7 +526,7 @@ def show_personal_stats(df_batting, df_pitching):
                     disp_hist["四死球"] = combined_hist["is_bb"] 
                     disp_hist["三振"] = combined_hist["is_so"]
                     disp_hist["BB/K"] = combined_hist["BB/K"]
-                    disp_hist["三振率"] = combined_hist["三振率"] 
+                    disp_hist["三振率"] = combined_hist["is_so"] / combined_hist["PA"] # fixed
                     disp_hist["盗塁"] = combined_hist["盗塁"]
                     disp_hist["盗塁成功率"] = combined_hist["盗塁成功率"]
                     disp_hist.index.name = "年度"

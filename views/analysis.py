@@ -5,6 +5,8 @@ import altair as alt
 import unicodedata
 import re
 from config.settings import OFFICIAL_GAME_TYPES
+from utils.players import get_stats_active_players
+from utils.ui import fmt_player_name
 # 🌟 ideal_order ビューの読み込み
 from views.ideal_order import show_ideal_order_tab
 
@@ -47,6 +49,11 @@ def filter_players(df, exclude_set):
 
 def show_analysis_page(df_batting, df_pitching):
     st.title("📈 データ分析 & 傾向")
+
+    # 背番号表示用マップの取得
+    STATS_PLAYERS, STATS_NUMBERS = get_stats_active_players()
+    def local_fmt(name):
+        return fmt_player_name(name, STATS_NUMBERS)
 
     exclude_set = get_exclude_set()
 
@@ -628,13 +635,27 @@ def show_analysis_page(df_batting, df_pitching):
                 players_b = sorted(
                     df_b_detail[df_b_detail["選手名"] != "チーム記録"]["選手名"].dropna().unique())
                 if players_b:
-                    target_b_player = st.selectbox(
-                        "分析する打者を選択", players_b, key="ana_bat_player")
-                    my_b = df_b_detail[df_b_detail["選手名"]
-                                       == target_b_player].copy()
+                    if "ana_bat_player" not in st.session_state or st.session_state["ana_bat_player"] not in players_b:
+                        st.session_state["ana_bat_player"] = players_b[0]
+
+                    current_bat_player = st.session_state["ana_bat_player"]
+                    popover_label_bat = f"👤 打者選択: {fmt_player_name(current_bat_player, STATS_NUMBERS)} 🔽"
+
+                    with st.popover(popover_label_bat, use_container_width=True):
+                        st.markdown("##### 👤 分析する打者をタップして選択")
+                        st.pills(
+                            "分析する打者を選択",
+                            players_b,
+                            format_func=local_fmt,
+                            key="ana_bat_player",
+                            label_visibility="collapsed"
+                        )
+
+                    target_b_player = st.session_state.get("ana_bat_player", players_b[0])
+                    my_b = df_b_detail[df_b_detail["選手名"] == target_b_player].copy()
 
                     if not my_b.empty:
-                        st.markdown(f"#### {target_b_player} の打球傾向（方向×種類）")
+                        st.markdown(f"#### {fmt_player_name(target_b_player, STATS_NUMBERS)} の打球傾向（方向×種類）")
 
                         def show_player_direction_chart(data_df, title_label):
                             if "打球方向" not in data_df.columns:
@@ -674,7 +695,7 @@ def show_analysis_page(df_batting, df_pitching):
 
                         st.divider()
                         st.markdown(
-                            f"#### {target_b_player} のゴロ/フライ比率 (GO/AO)")
+                            f"#### {fmt_player_name(target_b_player, STATS_NUMBERS)} のゴロ/フライ比率 (GO/AO)")
                         my_goro = len(
                             my_b[my_b["結果"].astype(str).str.contains("ゴロ|併殺打")])
                         my_fly = len(
@@ -702,13 +723,29 @@ def show_analysis_page(df_batting, df_pitching):
                 if not players_p:
                     st.write("対象となる投手がいません")
                 else:
-                    target_p_player = st.selectbox("分析する投手を選択", players_p, key="ana_pit_player")
+                    if "ana_pit_player" not in st.session_state or st.session_state["ana_pit_player"] not in players_p:
+                        st.session_state["ana_pit_player"] = players_p[0]
+
+                    current_pit_player = st.session_state["ana_pit_player"]
+                    popover_label_pit = f"👤 投手選択: {fmt_player_name(current_pit_player, STATS_NUMBERS)} 🔽"
+
+                    with st.popover(popover_label_pit, use_container_width=True):
+                        st.markdown("##### 👤 分析する投手をタップして選択")
+                        st.pills(
+                            "分析する投手を選択",
+                            players_p,
+                            format_func=local_fmt,
+                            key="ana_pit_player",
+                            label_visibility="collapsed"
+                        )
+
+                    target_p_player = st.session_state.get("ana_pit_player", players_p[0])
                     my_p = df_p_detail[df_p_detail["選手名"] == target_p_player].copy()
                     
                     if my_p.empty:
                         st.write("該当選手のデータなし")
                     else:
-                        st.markdown(f"#### {target_p_player} のアウトの取り方")
+                        st.markdown(f"#### {fmt_player_name(target_p_player, STATS_NUMBERS)} のアウトの取り方")
                         my_p_out_only = my_p[~my_p["結果"].astype(str).str.contains("失策", na=False)]
                         
                         out_goro = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("ゴロ|併殺打")])
@@ -727,7 +764,7 @@ def show_analysis_page(df_batting, df_pitching):
                         st.write("")
                         st.divider()
                         
-                        st.markdown(f"#### {target_p_player} の打たせた打球方向と種類")
+                        st.markdown(f"#### {fmt_player_name(target_p_player, STATS_NUMBERS)} の打たせた打球方向と種類")
                         if "打球方向" in my_p.columns:
                             valid_p_df = my_p[my_p["打球方向"].notna() & 
                                               (my_p["打球方向"] != "") & 
@@ -776,7 +813,7 @@ def show_analysis_page(df_batting, df_pitching):
                             
                         st.write("")
                         st.divider()
-                        st.markdown(f"#### {target_p_player} の被安打・四死球の傾向")
+                        st.markdown(f"#### {fmt_player_name(target_p_player, STATS_NUMBERS)} の被安打・四死球の傾向")
                         hit_1 = len(my_p[my_p["結果"].astype(str).str.contains("単打|安打")])
                         hit_2 = len(my_p[my_p["結果"].astype(str).str.contains("二塁打")])
                         hit_3 = len(my_p[my_p["結果"].astype(str).str.contains("三塁打")])

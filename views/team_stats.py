@@ -301,16 +301,32 @@ def show_team_stats(df_batting, df_pitching):
     # 4. 試合履歴
     st.subheader(" 📋  試合履歴")
     if not df_display.empty:
+        df_display["日付"] = pd.to_datetime(df_display["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
         cols = ["日付", "対戦相手", "先攻後攻", "得点", "失点", "失策", "勝敗", "試合種別", "グラウンド"]
         st.dataframe(df_display[cols], use_container_width=True, hide_index=True)
     else:
         st.write("履歴データがありません")
 
-    # 5. 試合詳細ビューワー
+    # 5. 試合詳細ビューワー（タッチ式ポップオーバーに変更）
     st.markdown("### 📝 試合詳細ビューワー")
     
     if viewer_options:
-        selected_label = st.selectbox("詳細を確認したい試合を選択してください", viewer_options, key="detail_selector")
+        if "detail_selector_pill" not in st.session_state or st.session_state["detail_selector_pill"] not in viewer_options:
+            st.session_state["detail_selector_pill"] = viewer_options[0]
+
+        current_selected = st.session_state.get("detail_selector_pill", viewer_options[0])
+        viewer_btn_label = f"🟢 {current_selected} 🔽" if current_selected else "詳細を確認したい試合を選択 🔽"
+
+        with st.popover(viewer_btn_label, use_container_width=True):
+            st.markdown("##### 📝 詳細を確認したい試合を選択")
+            st.pills(
+                "試合選択",
+                viewer_options,
+                key="detail_selector_pill",
+                label_visibility="collapsed"
+            )
+        
+        selected_label = st.session_state.get("detail_selector_pill")
         
         if selected_label:
             try:
@@ -323,7 +339,17 @@ def show_team_stats(df_batting, df_pitching):
                 target_date_str = ""; target_opp = ""
 
             if target_date_str:
-                target_row = df_display[(df_display["日付"] == pd.to_datetime(target_date_str)) & (df_display["対戦相手"] == target_opp)].iloc[0]
+                # 文字列同士で安全に比較し、ヒットするか確認する
+                matched_rows = df_display[
+                    (pd.to_datetime(df_display["日付"], errors='coerce').dt.strftime('%Y-%m-%d') == target_date_str) & 
+                    (df_display["対戦相手"] == target_opp)
+                ]
+                
+                if matched_rows.empty:
+                    st.warning("該当する試合データが見つかりませんでした。")
+                    return
+                
+                target_row = matched_rows.iloc[0]
                 has_team_rec = target_row["has_team_record"]
                 tb_val = target_row.get("先攻後攻", "不明")
                 target_m_type = target_row.get("試合種別", "")

@@ -2,6 +2,11 @@ import datetime
 import streamlit as st
 import pandas as pd
 from utils.players import get_active_players
+from utils.ui import fmt_player_name
+
+
+def local_fmt(name):
+    return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
 
 
 def calculate_saber_metrics(stats):
@@ -142,7 +147,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
         else:
             lineup[order] = None
 
-    # 🌟 打順は打撃成績に応じて決定（上位から順に評価し、投手が未選出の場合は最後に9番に配置）
+    # 🌟 打順は打撃成績に応じて決定（上位から順に評価し、投手が未選出の場合は最後に9番に配置）[cite: 3]
     assign_player(3, "Score_3")
     assign_player(1, "Score_1")
     assign_player(2, "Score_2")
@@ -216,7 +221,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
             s_pa = season_pa_dict.get(player_name, 0)
             season_pa_text = f" | 今季打席数: **{s_pa}**"
 
-        # 🌟 投手成績を確実に「通算成績（アウト数・自責点ベース）」で計算・表記
+        # 🌟 投手成績を確実に「通算成績（アウト数・自責点ベース）」で計算・表記[cite: 3]
         pitcher_text = ""
         if assigned_pos == "投" and df_pitching is not None and not df_pitching.empty:
             p_rows = df_pitching[(df_pitching["選手名"] == player_name) & (df_pitching["選手名"] != "チーム記録")]
@@ -254,15 +259,46 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     if unassigned:
         st.info(f"📌 **条件未到達等のため配置外の選手**: {', '.join(unassigned)}")
 
+
 def show_ideal_order_tab(df_batting, df_pitching=None):
-    # 🌟 ここ（st.multiselectで使うより前）に配置します
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
+    st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
 
     st.markdown("### 🧠 選択選手から理想オーダー作成")
-    st.write("本日参加するメンバーを選択すると、成績のセイバーメトリクス指標と過去の守備機会から、最適なスタメンと守備位置を自動生成します。")
+    st.write("本日参加するメンバーを選択すると、成績のセイバーメトリクス指標と過去の守備機会から、最適なスタメンと守備位置を自動生成します[cite: 3]。")
 
-    default_players = st.session_state.get("persistent_bench", [])
-    selected_players = st.multiselect("本日参加するメンバーを選択", ALL_PLAYERS, default=default_players, key="ideal_order_players_widget")
+    # セッションステートを用いたタッチ式選択の初期化（デフォルト未選択=[ ]）
+    if "ideal_order_selected_players" not in st.session_state:
+        st.session_state["ideal_order_selected_players"] = []
+
+    sel_count = len(st.session_state.get("ideal_order_selected_players", []))
+    popover_label = f"👥 本日参加するメンバーを選択 (選択中: {sel_count}人) 🔽"
+
+    with st.popover(popover_label, use_container_width=True):
+        st.markdown("##### 👥 参加メンバーをタップして選択（複数選択可）")
+        
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            if st.button("全選択", use_container_width=True, key="select_all_ideal"):
+                st.session_state["ideal_order_selected_players"] = list(ALL_PLAYERS)
+                st.rerun()
+        with col_c2:
+            if st.button("クリア", use_container_width=True, key="clear_ideal"):
+                st.session_state["ideal_order_selected_players"] = []
+                st.rerun()
+
+        st.markdown("---")
+        
+        st.pills(
+            "本日参加するメンバーを選択",
+            ALL_PLAYERS,
+            format_func=local_fmt,
+            selection_mode="multi",
+            key="ideal_order_selected_players",
+            label_visibility="collapsed"
+        )
+
+    selected_players = st.session_state.get("ideal_order_selected_players", [])
 
     if not selected_players:
         st.info("選手を選択してください。")
@@ -335,7 +371,7 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
             st.warning("規定打数（10打数）に到達している選択選手がいません。")
 
     with tab_recent:
-        st.write("各選手の直近10打席（四死球・犠飛含む）の成績をベースにした、現在の調子重視のオーダーです。")
+        st.write("各選手の直近10打席（四死球・犠飛含む）の成績をベースにした、現在の調子重視のオーダーです[cite: 3]。")
         
         df_selected["打順_num"] = pd.to_numeric(df_selected["打順"], errors="coerce")
         df_sorted = df_selected.sort_values(by=["日付_dt", "打順_num"], ascending=[True, True])

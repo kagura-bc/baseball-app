@@ -29,7 +29,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ▼▼▼ フォームクリアのフラグ処理 ▼▼▼
     if st.session_state.get("needs_batting_clear"):
         for i in range(15):
-            for k in [f"sr{i}", f"si{i}", f"st{i}"]:
+            for k in [f"sr{i}", f"si{i}", f"st{i}", f"row_sr{i}"]:
                 if k in st.session_state:
                     st.session_state[k] = None
             if f"sd{i}" in st.session_state:
@@ -55,7 +55,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     if match_changed:
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset", "lineup_states", "batting_error_msg", "batch_sr_action"]
+        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "row_sr", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset", "lineup_states", "batting_error_msg"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
@@ -183,7 +183,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ==========================================
     player_history_dict = {}
     if not today_batting_df.empty:
-        valid_history_df = today_batting_df[~today_batting_df["結果"].isin(["スタメン", "守備変更", "交代"])]
+        valid_history_df = today_batting_df[~today_batting_df["結果"].isin(["スタメン", "守備変更", "交代", "ベンチ"])]
         if not valid_history_df.empty:
             for clean_name, group in valid_history_df.groupby("選手名"):
                 history_html = []
@@ -214,11 +214,17 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     
                     raw_dir = row['打球方向']
                     p_dir = str(raw_dir) if pd.notna(raw_dir) and raw_dir != "---" else ""
-                    disp_text = f"{p_dir}{res_short}" if p_dir else f"{res_short}"
+                    
+                    rbi_num = int(rbi_val) if pd.notna(rbi_val) else 0
+                    
+                    # 打点がある場合は「中本・4」のように打点をハイフン付きで表示する形式
+                    if rbi_num > 0:
+                        disp_text = f"{p_dir}{res_short}・{rbi_num}" if p_dir else f"{res_short}・{rbi_num}"
+                    else:
+                        disp_text = f"{p_dir}{res_short}" if p_dir else f"{res_short}"
                     
                     color_style = ""
                     is_hit = res in ["単打", "二塁打", "三塁打", "本塁打"]
-                    rbi_num = int(rbi_val) if pd.notna(rbi_val) else 0
                     
                     if is_hit and rbi_num > 0:
                         color_style = "color: red;"
@@ -330,6 +336,35 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
 
+        # --- ベンチメンバーの登録処理（未登録の選手のみデータベースに追加） ---
+        selected_bench = st.session_state.get("persistent_bench", [])
+        registered_bench_names = set()
+        if not today_batting_df.empty:
+            registered_bench_names = set(
+                today_batting_df[today_batting_df["結果"].astype(str) == "ベンチ"]["選手名"]
+                .astype(str).str.strip()
+            )
+
+        for b_name in selected_bench:
+            clean_b_name = b_name.split(" (")[0].strip()
+            if clean_b_name and clean_b_name not in registered_bench_names:
+                rows_to_add.append({
+                    "日付": current_date_formatted,
+                    "対戦相手": opp_team,
+                    "試合種別": match_type,
+                    "イニング": "試合前",
+                    "打順": "",
+                    "選手名": clean_b_name,
+                    "位置": "－",
+                    "結果": "ベンチ",
+                    "打球方向": "---",
+                    "打点": 0,
+                    "得点": 0,
+                    "スコアラー": scorer,
+                    "グラウンド": ground_name
+                })
+                registered_bench_names.add(clean_b_name)
+
         quick_res = st.session_state.get("quick_sr")
         quick_dirs = st.session_state.get("quick_sd", [])
         quick_rbi = st.session_state.get("quick_si", 0)
@@ -373,38 +408,33 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "グラウンド": ground_name
                 })
 
-        # --- 一括走塁・得点の処理（チェックが入っている行を対象にする） ---
-        batch_action = st.session_state.get("batch_sr_action")
-        if batch_action and batch_action != "--- (選択なし)":
-            for i in range(display_count):
-                if st.session_state.get(f"batch_sel_{i}", False):
-                    name_val = st.session_state.get(f"sn{i}")
-                    if name_val:
-                        clean_name = name_val.split(" (")[0].strip()
-                        
-                        is_score = (batch_action == "得点1")
-                        res_val = "走塁記録" if is_score else batch_action
-                        score_val = 1 if is_score else 0
-                        
-                        rows_to_add.append({
-                            "日付": current_date_formatted,
-                            "対戦相手": opp_team,
-                            "試合種別": match_type,
-                            "イニング": inn_val,
-                            "打順": i + 1,
-                            "選手名": clean_name,
-                            "位置": st.session_state.get(f"sp{i}", "－"),
-                            "結果": res_val,
-                            "打球方向": "---",
-                            "打点": 0,
-                            "得点": score_val,
-                            "スコアラー": scorer,
-                            "グラウンド": ground_name
-                        })
-                        
-                        st.session_state[f"batch_sel_{i}"] = False
-            
-            st.session_state["batch_sr_action"] = "--- (選択なし)"
+        # --- 各行の走塁結果ボタンの処理 ---
+        for i in range(display_count):
+            row_action = st.session_state.get(f"row_sr{i}")
+            if row_action and row_action != "--- (選択なし)":
+                name_val = st.session_state.get(f"sn{i}")
+                if name_val:
+                    clean_name = name_val.split(" (")[0].strip()
+                    
+                    is_score = (row_action == "得点1")
+                    res_val = "走塁記録" if is_score else row_action
+                    score_val = 1 if is_score else 0
+                    
+                    rows_to_add.append({
+                        "日付": current_date_formatted,
+                        "対戦相手": opp_team,
+                        "試合種別": match_type,
+                        "イニング": inn_val,
+                        "打順": i + 1,
+                        "選手名": clean_name,
+                        "位置": st.session_state.get(f"sp{i}", "－"),
+                        "結果": res_val,
+                        "打球方向": "---",
+                        "打点": 0,
+                        "得点": score_val,
+                        "スコアラー": scorer,
+                        "グラウンド": ground_name
+                    })
 
         if rows_to_add:
             new_df_to_append = pd.DataFrame(rows_to_add)
@@ -539,13 +569,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             """, unsafe_allow_html=True)
 
         with qc[1]:
+            current_res = st.session_state.get("quick_sr")
             current_dirs = st.session_state.get("quick_sd", [])
             current_rbi = st.session_state.get("quick_si")
             
+            res_label = f" 🟢 {current_res}" if current_res else ""
             dir_label = f" ({''.join(current_dirs)})" if current_dirs else ""
             rbi_label = f" [打点{current_rbi}]" if current_rbi is not None else ""
             
-            summary_btn_label = f"打席:{dir_label}{rbi_label} 🔽"
+            summary_btn_label = f"打席結果{res_label}{dir_label}{rbi_label} 🔽"
             
             with st.popover(summary_btn_label, use_container_width=True):
 
@@ -570,7 +602,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 )
 
                 st.markdown("---")
-                st.markdown("##### ⚾ 打点を選択 (0〜4)")
+                st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
                 
                 rbi_options = [0, 1, 2, 3, 4]
                 st.pills(
@@ -590,36 +622,17 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
-        # --- 走塁の一括設定ボタン（ピルボタンに変更） --
-        
-        if "batch_sr_action" not in st.session_state:
-            st.session_state["batch_sr_action"] = "--- (選択なし)"
-            
-        batch_btn_label = f"走塁結果 🔽"
-        
-        with st.popover(batch_btn_label, use_container_width=False):
-            st.markdown("##### 複数人に一括適用する内容を選択")
-            batch_options = ["--- (選択なし)", "得点1", "盗塁", "盗塁死", "走塁死", "牽制死"]
-            st.pills(
-                "走塁設定ピル",
-                batch_options,
-                key="batch_sr_action",
-                label_visibility="collapsed"
-            )
-        
-        st.divider()
-
         # ==========================================
         # 可変人数（デフォルト15〜最大20）のループ
-        # 打席結果（履歴）を「選択」チェックボックスの右側に配置
+        # 各行に「走塁結果」ボタンを配置
         # ==========================================
         for i in range(display_count):
             pos_key = f"sp{i}"
             name_key = f"sn{i}"
-            check_key = f"batch_sel_{i}"
+            row_sr_key = f"row_sr{i}"
 
             with st.container(border=True):
-                c_row = st.columns([0.8, 2.5, 3.5, 0.6, 4.0])
+                c_row = st.columns([0.7, 2.1, 3.2, 2.3, 3.7])
                 
                 # --- ① 打順番号 ---
                 with c_row[0]:
@@ -652,11 +665,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             label_visibility="collapsed"
                         )
                 
-                # --- ④ 一括選択用チェックボックス ---
+                # --- ④ 各選手の走塁結果ボタン（選択時は色付きアイコンで変化） ---
                 with c_row[3]:
-                    st.checkbox("選択", key=check_key, label_visibility="collapsed")
+                    current_row_sr = st.session_state.get(row_sr_key)
+                    if current_row_sr and current_row_sr != "--- (選択なし)":
+                        sr_btn_label = f"🟢 {current_row_sr} 🔽"
+                    else:
+                        sr_btn_label = "走塁結果 🔽"
+                        
+                    with st.popover(sr_btn_label, use_container_width=True):
+                        st.markdown(f"##### {i+1}番 走塁結果を選択")
+                        base_options = ["--- (選択なし)", "得点1", "盗塁", "盗塁死", "走塁死", "牽制死"]
+                        st.pills(
+                            f"走塁ピル {i}",
+                            base_options,
+                            key=row_sr_key,
+                            label_visibility="collapsed"
+                        )
                 
-                # --- ⑤ 打席結果（履歴）を「選択」の右隣に配置 ---
+                # --- ⑤ 打席結果（履歴） ---
                 with c_row[4]:
                     sel_p_name_raw = st.session_state.get(name_key)
                     history_text = ""
@@ -696,7 +723,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if st.session_state["display_order_count"] > 9:
                 st.session_state["display_order_count"] -= 1
                 idx = st.session_state["display_order_count"]
-                for k in [f"sn{idx}", f"sp{idx}", f"sr{idx}", f"st{idx}"]:
+                for k in [f"sn{idx}", f"sp{idx}", f"sr{idx}", f"st{idx}", f"row_sr{idx}"]:
                     st.session_state.pop(k, None)
                 st.rerun()
     with col_disp3:
