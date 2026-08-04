@@ -127,7 +127,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         lineup_event_df = today_batting_df[today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代", "試合前"])]
         for i in range(15):
             order_num = i + 1
-            order_rows = lineup_event_df[pd.to_numeric(lineup_event_df["打順"], errors='coerce'] == order_num]
+            order_rows = lineup_event_df[pd.to_numeric(lineup_event_df["打順"], errors='coerce') == order_num]
             if not order_rows.empty:
                 latest_row = order_rows.iloc[-1]
                 latest_name = str(latest_row.get("選手名", "")).strip()
@@ -449,7 +449,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             try:
                 conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=updated_full_df)
                 st.session_state[cache_key] = updated_full_df
-                # ★ ここでフラグを立てることで、次回の描画時に先頭でキーが完全に削除される
                 st.session_state["needs_batting_clear"] = True
                 st.success("登録しました！")
                 st.rerun()
