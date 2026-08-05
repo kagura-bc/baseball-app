@@ -116,6 +116,17 @@ if page == " 📝 試合データ入力":
     
     st.markdown("### 📝 試合データ入力")
 
+    # 反映用設定の初期化（未反映・初期状態）
+    if "applied_settings" not in st.session_state:
+        st.session_state["applied_settings"] = {
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "scorer": None,
+            "match_type": "",
+            "ground": "",
+            "opp": "",
+            "order": ""
+        }
+
     # ⚙️ 試合設定枠
     with st.expander("⚙️ 試合設定", expanded=True):
         url_date = st.query_params.get("date", datetime.date.today().strftime("%Y-%m-%d"))
@@ -131,7 +142,7 @@ if page == " 📝 試合データ入力":
             selected_date = st.date_input("試合日", value=default_date, key="main_selected_date")
             selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-        # --- 初期値のセット（すべて未選択スタート） ---
+        # --- 初期値のセット ---
         p_list = ALL_PLAYERS
         scorer_key = "scorer_name_ui"
         if scorer_key not in st.session_state:
@@ -201,9 +212,9 @@ if page == " 📝 試合データ入力":
                 )
             
             if cur_ground == "Other" or cur_ground == "その他":
-                ground_name = st.text_input("グラウンド名入力", value="その他グラウンド", key=f"main_custom_ground_{selected_date_str}")
+                ground_name_input = st.text_input("グラウンド名入力", value="その他グラウンド", key=f"main_custom_ground_{selected_date_str}")
             else:
-                ground_name = cur_ground if cur_ground else ""
+                ground_name_input = cur_ground if cur_ground else ""
 
         with c3:
             st.markdown("<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>相手チーム</div>", unsafe_allow_html=True)
@@ -219,9 +230,9 @@ if page == " 📝 試合データ入力":
                 )
             
             if cur_opp == "Other" or cur_opp == "その他":
-                opp_team = st.text_input("相手チーム名入力", value="相手チーム", key=f"main_custom_opp_{selected_date_str}")
+                opp_team_input = st.text_input("相手チーム名入力", value="相手チーム", key=f"main_custom_opp_{selected_date_str}")
             else:
-                opp_team = cur_opp if cur_opp else ""
+                opp_team_input = cur_opp if cur_opp else ""
 
             st.write("")
             st.markdown("<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>攻守</div>", unsafe_allow_html=True)
@@ -235,9 +246,31 @@ if page == " 📝 試合データ入力":
                     key=order_key,
                     label_visibility="collapsed"
                 )
-            kagura_order = cur_order if cur_order else ""
+            kagura_order_input = cur_order if cur_order else ""
 
-        match_type = st.session_state.get(match_key, "")
+        match_type_input = st.session_state.get(match_key, "")
+
+        st.write("")
+        # 決定ボタン（このボタンを押すまで下のタブや重い処理には反映されません）
+        if st.button("⚙️ 試合設定を決定", use_container_width=True):
+            st.session_state["applied_settings"] = {
+                "date": selected_date_str,
+                "scorer": saved_scorer,
+                "match_type": match_type_input,
+                "ground": ground_name_input,
+                "opp": opp_team_input,
+                "order": kagura_order_input
+            }
+            st.success("試合設定を反映しました！")
+            st.rerun()
+
+    # 下のタブには「決定ボタン」で確定された設定値が渡されます
+    applied = st.session_state["applied_settings"]
+    current_date_str = applied["date"]
+    match_type = applied["match_type"]
+    ground_name = applied["ground"]
+    opp_team = applied["opp"]
+    kagura_order = applied["order"]
 
     st.write("")
 
@@ -246,13 +279,13 @@ if page == " 📝 試合データ入力":
     with tab_batting:
         batting.show_batting_page(
             df_batting, df_pitching, 
-            selected_date_str, match_type, ground_name, opp_team, kagura_order
+            current_date_str, match_type, ground_name, opp_team, kagura_order
         )
         
     with tab_pitching:
         pitching.show_pitching_page(
             df_batting, df_pitching, 
-            selected_date_str, match_type, ground_name, opp_team, kagura_order
+            current_date_str, match_type, ground_name, opp_team, kagura_order
         )
 
     with tab_ideal:
