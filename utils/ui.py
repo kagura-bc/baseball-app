@@ -25,16 +25,37 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     st.markdown(f"### 📅 {date_txt} ({m_type}) &nbsp;&nbsp; 🏟️ {g_name}")
     st.subheader(f"⚾ {MY_TEAM} vs {opp_name}")
     
-    # --- 追加: 試合終了（勝敗確定）の判定 ---
+    # --- 該当する試合（日付・対戦相手・試合種別）のデータだけに厳密に絞り込む ---
+    if not b_df.empty and "日付" in b_df.columns:
+        b_df = b_df.copy()
+        b_df["_date_str"] = pd.to_datetime(b_df["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+        b_df = b_df[
+            (b_df["_date_str"] == str(date_txt)) & 
+            (b_df["対戦相手"].astype(str).str.strip() == str(opp_name).strip()) & 
+            (b_df["試合種別"].astype(str).str.strip() == str(m_type).strip())
+        ]
+        
+    if not p_df.empty and "日付" in p_df.columns:
+        p_df = p_df.copy()
+        p_df["_date_str"] = pd.to_datetime(p_df["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+        p_df = p_df[
+            (p_df["_date_str"] == str(date_txt)) & 
+            (p_df["対戦相手"].astype(str).str.strip() == str(opp_name).strip()) & 
+            (p_df["試合種別"].astype(str).str.strip() == str(m_type).strip())
+        ]
+
+    # --- 試合終了（勝敗確定）の判定 ---
     is_game_finished = False
-    if "勝敗" in p_df.columns and p_df["勝敗"].astype(str).str.contains("勝利|敗戦|勝|負").any():
+    if not p_df.empty and "勝敗" in p_df.columns and p_df["勝敗"].astype(str).str.contains("勝利|敗戦|勝|負").any():
         is_game_finished = True
         
-    # --- 追加: 最終イニング（データが存在する最大のイニング）を特定 ---
+    # --- 最終イニング（データが存在する最大のイニング）を特定 ---
     max_inning_played = 0
     for i in range(1, 10):
         target_innings = [f"{i}回", f"{i}回表", f"{i}回裏"]
-        if not b_df[b_df["イニング"].isin(target_innings)].empty or not p_df[p_df["イニング"].isin(target_innings)].empty:
+        b_has = not b_df.empty and not b_df[b_df["イニング"].isin(target_innings)].empty
+        p_has = not p_df.empty and not p_df[p_df["イニング"].isin(target_innings)].empty
+        if b_has or p_has:
             max_inning_played = i
 
     k_inning, opp_inning = [], []
@@ -44,21 +65,21 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     for i in range(1, 10):
         target_innings = [f"{i}回", f"{i}回表", f"{i}回裏"]
         
-        inn_bat_data = b_df[b_df["イニング"].isin(target_innings)]
-        inn_pit_data = p_df[p_df["イニング"].isin(target_innings)]
+        inn_bat_data = b_df[b_df["イニング"].isin(target_innings)] if not b_df.empty else pd.DataFrame()
+        inn_pit_data = p_df[p_df["イニング"].isin(target_innings)] if not p_df.empty else pd.DataFrame()
 
-        if not inn_bat_data[inn_bat_data["結果"] == "✖"].empty:
+        if not inn_bat_data.empty and not inn_bat_data[inn_bat_data["結果"] == "✖"].empty:
             k_disp = "✖"
             k_runs = 0
         else:
-            k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum())
+            k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum()) if not inn_bat_data.empty else 0
             k_disp = str(k_runs)
         
-        if not inn_pit_data[inn_pit_data["結果"] == "✖"].empty:
+        if not inn_pit_data.empty and not inn_pit_data[inn_pit_data["結果"] == "✖"].empty:
             opp_disp = "✖"
             opp_runs = 0
         else:
-            opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum())
+            opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum()) if not inn_pit_data.empty else 0
             opp_disp = str(opp_runs)
 
         k_exists = not inn_bat_data.empty
@@ -67,37 +88,36 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         total_k += k_runs
         total_opp += opp_runs
         
-        # --- 追加: 試合終了時の「✖」追加ロジック (後攻チームの最終イニング) ---
+        # 試合終了時の「✖」追加ロジック (後攻チームの最終イニング)
         if is_game_finished and i == max_inning_played:
             if is_top_first:
-                # KAGURA先攻、相手チーム後攻の場合
-                if not opp_exists: # 裏の攻撃がない場合
+                if not opp_exists:
                     opp_disp = "✖"
                     opp_exists = True
-                elif total_opp > total_k: # サヨナラの場合
+                elif total_opp > total_k:
                     opp_disp = f"{opp_disp}✖"
             else:
-                # 相手チーム先攻、KAGURA後攻の場合
-                if not k_exists: 
+                if not k_exists:
                     k_disp = "✖"
                     k_exists = True
-                elif total_k > total_opp: 
+                elif total_k > total_opp:
                     k_disp = f"{k_disp}✖"
 
         k_inning.append(k_disp if k_exists else "")
         opp_inning.append(opp_disp if opp_exists else "")
 
+    # --- 安打数 (H) の安全な集計 ---
     hit_list = ["単打", "二塁打", "三塁打", "本塁打", "安打"]
-    k_h = b_df[b_df["結果"].isin(hit_list)].shape[0] if "結果" in b_df.columns else 0
-    opp_h = p_df[p_df["結果"].isin(hit_list)].shape[0] if "結果" in p_df.columns else 0
+    k_h = b_df[b_df["結果"].isin(hit_list)].shape[0] if not b_df.empty and "結果" in b_df.columns else 0
+    
+    if not p_df.empty and "被安打" in p_df.columns:
+        opp_h = int(pd.to_numeric(p_df["被安打"], errors='coerce').fillna(0).sum())
+    else:
+        opp_h = p_df[p_df["結果"].isin(hit_list)].shape[0] if not p_df.empty and "結果" in p_df.columns else 0
 
-    k_e_col = int(pd.to_numeric(p_df["失策"], errors='coerce').fillna(0).sum()) if "失策" in p_df.columns else 0
-    k_e_res = p_df["結果"].astype(str).str.contains("失策").sum() if "結果" in p_df.columns else 0
-    k_e = max(k_e_col, k_e_res)
-
-    opp_e_col = int(pd.to_numeric(b_df["失策"], errors='coerce').fillna(0).sum()) if "失策" in b_df.columns else 0
-    opp_e_res = b_df["結果"].astype(str).str.contains("失策").sum() if "結果" in b_df.columns else 0
-    opp_e = max(opp_e_col, opp_e_res)
+    # --- 失策数 (E) の安全な集計（爆発防止） ---
+    k_e = int(pd.to_numeric(p_df["失策"], errors='coerce').fillna(0).sum()) if not p_df.empty and "失策" in p_df.columns else 0
+    opp_e = int(pd.to_numeric(b_df["失策"], errors='coerce').fillna(0).sum()) if not b_df.empty and "失策" in b_df.columns else 0
 
     if is_top_first:
         names = [MY_TEAM, opp_name]
@@ -221,4 +241,3 @@ def render_out_indicator_3(count):
     
     html += "</div>"
     return html
-

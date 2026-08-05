@@ -170,6 +170,7 @@ if page == " 📝 試合データ入力":
 
         # --- 各列へのタッチ式（ポップオーバー）配置 ---
         with c1:
+            st.write("")  # 2段目の高さをグラウンド・攻守と揃えるための余白
             st.markdown("<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>スコアラー</div>", unsafe_allow_html=True)
             saved_scorer = st.session_state.get(scorer_key)
             scorer_label = f"🟢 {local_fmt(saved_scorer)} 🔽" if saved_scorer else "スコアラー選択 🔽"
@@ -251,7 +252,6 @@ if page == " 📝 試合データ入力":
         match_type_input = st.session_state.get(match_key, "")
 
         st.write("")
-        # 決定ボタン（このボタンを押すまで下のタブや重い処理には反映されません）
         if st.button("⚙️ 試合設定を決定", use_container_width=True):
             st.session_state["applied_settings"] = {
                 "date": selected_date_str,
@@ -264,7 +264,6 @@ if page == " 📝 試合データ入力":
             st.success("試合設定を反映しました！")
             st.rerun()
 
-    # 下のタブには「決定ボタン」で確定された設定値が渡されます
     applied = st.session_state["applied_settings"]
     current_date_str = applied["date"]
     match_type = applied["match_type"]

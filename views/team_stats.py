@@ -60,7 +60,6 @@ def show_team_stats(df_batting, df_pitching):
     df_b_work["DateStr"] = pd.to_datetime(df_b_work["日付"]).dt.strftime('%Y-%m-%d')
     
     for (d_str, opp, m_type), group in df_b_work.groupby(["DateStr", "対戦相手", "試合種別"]):
-        # 1. 得点の計算
         team_rec_rows = group[group["選手名"] == "チーム記録"]
         if not team_rec_rows.empty:
             runs = pd.to_numeric(team_rec_rows["得点"], errors='coerce').fillna(0).sum()
@@ -70,12 +69,10 @@ def show_team_stats(df_batting, df_pitching):
             runs = pd.to_numeric(valid_batting["得点"], errors='coerce').fillna(0).sum()
             is_team_record = False
 
-        # 2. スタッツの計算 (打席ごとのカウントロジック)
         individuals = group[group["選手名"] != "チーム記録"]
         total_hits = 0; total_ab = 0; total_hr = 0; total_sb = 0
 
         if not individuals.empty:
-            # 凡退、失策、併殺打など、打数としてカウントすべきものを定義
             ab_results = [
                 "単打", "二塁打", "三塁打", "本塁打", "三振", 
                 "凡退", "失策", "併殺打", "野選", "振り逃げ三振", "犠飛"
@@ -85,7 +82,6 @@ def show_team_stats(df_batting, df_pitching):
             for _, row in individuals.iterrows():
                 res_str = str(row.get("結果", "")).strip()
                 
-                # 数値の取得（空欄や文字列は0になる）
                 ab_val = pd.to_numeric(row.get("打数", 0), errors='coerce')
                 hits_val = pd.to_numeric(row.get("安打", 0), errors='coerce')
                 hr_val = pd.to_numeric(row.get("本塁打", 0), errors='coerce')
@@ -97,14 +93,11 @@ def show_team_stats(df_batting, df_pitching):
                 sb = int(sb_val) if pd.notna(sb_val) else 0
                 
                 if ab > 0 or hits > 0:
-                    # まとめ入力などで数値が存在する場合は優先加算
                     total_ab += ab
                     total_hits += hits
                     total_hr += hr
                     total_sb += sb
                 else:
-                    # 詳細入力の場合：文字から判定して加算
-                    # 「凡退」が含まれていれば打数カウント
                     if res_str in ab_results or "凡退" in res_str or "失策" in res_str:
                         total_ab += 1
                     
@@ -115,7 +108,6 @@ def show_team_stats(df_batting, df_pitching):
                     
                     total_sb += sb
 
-        # 先攻後攻の判定
         top_bottom = "不明"
         if "イニング" in group.columns:
             innings = group["イニング"].dropna().astype(str).tolist()
@@ -275,8 +267,6 @@ def show_team_stats(df_batting, df_pitching):
 
     has_prev = not prev_display.empty
     
-    # ★ 「良し悪し（改善・悪化）」による色分け
-    # 防御率・失策・敗戦などは「inverse（マイナスが緑）」に設定
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("試合数", f"{curr['games']}", delta=int(curr['games'] - prev['games']) if has_prev else None)
     m2.metric("勝利", f"{curr['wins']}", delta=int(curr['wins'] - prev['wins']) if has_prev else None)
@@ -307,7 +297,7 @@ def show_team_stats(df_batting, df_pitching):
     else:
         st.write("履歴データがありません")
 
-    # 5. 試合詳細ビューワー（タッチ式ポップオーバーに変更）
+    # 5. 試合詳細ビューワー
     st.markdown("### 📝 試合詳細ビューワー")
     
     if viewer_options:
@@ -339,7 +329,6 @@ def show_team_stats(df_batting, df_pitching):
                 target_date_str = ""; target_opp = ""
 
             if target_date_str:
-                # 文字列同士で安全に比較し、ヒットするか確認する
                 matched_rows = df_display[
                     (pd.to_datetime(df_display["日付"], errors='coerce').dt.strftime('%Y-%m-%d') == target_date_str) & 
                     (df_display["対戦相手"] == target_opp)
@@ -354,7 +343,6 @@ def show_team_stats(df_batting, df_pitching):
                 tb_val = target_row.get("先攻後攻", "不明")
                 target_m_type = target_row.get("試合種別", "")
 
-                # 🌟 修正1: 日付・対戦相手・試合種別で厳密にその試合だけをフィルタリング
                 df_b_filtered = df_batting.copy()
                 df_b_filtered["DateStr"] = pd.to_datetime(df_b_filtered["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
                 
@@ -387,12 +375,10 @@ def show_team_stats(df_batting, df_pitching):
                 opp_errors = match_bat["結果"].astype(str).str.contains("失策").sum()
                 my_errors = target_row.get("失策", 0)
 
-                # 🌟 修正2: エラー数がイニング数で掛け算されてしまう不具合の解消
                 if has_team_rec:
                     sb_bat = match_bat[match_bat["選手名"] == "チーム記録"].copy()
                     sb_pit = match_pit[match_pit["選手名"] == "チーム記録"].copy()
                     
-                    # すべての行にそのまま代入すると行数分掛け算されてしまうため、一度0にしてから先頭行だけに合計値を入れる
                     sb_pit["失策"] = 0
                     if not sb_pit.empty:
                         sb_pit.iloc[0, sb_pit.columns.get_loc("失策")] = my_errors
@@ -407,7 +393,7 @@ def show_team_stats(df_batting, df_pitching):
                     if "失策" not in sb_pit.columns:
                         sb_pit["失策"] = 0
                     else:
-                        sb_pit["失策"] = 0  # 既存のエラーカウントをリセットして二重計上を防ぐ
+                        sb_pit["失策"] = 0
                         
                     if not sb_pit.empty:
                         sb_pit.iloc[0, sb_pit.columns.get_loc("失策")] = my_errors
@@ -415,12 +401,11 @@ def show_team_stats(df_batting, df_pitching):
                     if "失策" not in sb_bat.columns:
                         sb_bat["失策"] = 0
                     else:
-                        sb_bat["失策"] = 0  # 既存のエラーカウントをリセットして二重計上を防ぐ
+                        sb_bat["失策"] = 0
                         
                     if not sb_bat.empty:
                         sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
 
-                # 🌟 スコアボード用トップアンカー
                 st.markdown("<div id='viewer-top' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
 
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
@@ -440,7 +425,6 @@ def show_team_stats(df_batting, df_pitching):
                 personal_bat = match_bat[match_bat["選手名"] != "チーム記録"].copy()
                 
                 if not personal_bat.empty:
-                    # 🌟 修正: 結果・種別・イニングのいずれかに「ベンチ」が含まれるレコードをベンチメンバーとして抽出
                     bench_mask = (
                         (personal_bat["結果"] == "ベンチ") | 
                         (personal_bat["種別"] == "ベンチ") | 
@@ -512,10 +496,7 @@ def show_team_stats(df_batting, df_pitching):
                             pos_val = "".join(seen_pos)
                             
                             pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "凡退", "失策(ゴロ)", "失策(フライ)", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
-                            
-                            # 🌟 res_col を定義する処理を追加
                             res_col = player_group.get("結果") if "結果" in player_group.columns else None
-                            
                             tpa = res_col.isin(pa_list).sum() if res_col is not None else 0
                             
                             sb_col = player_group.get("盗塁")
@@ -547,7 +528,6 @@ def show_team_stats(df_batting, df_pitching):
                                         rbi_val = int(rbi_raw) if pd.notna(rbi_raw) else 0
                                         
                                         disp_text = f"{p_dir}{res_short}"
-                                        
                                         is_hit = res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
                                         
                                         if is_hit:
@@ -578,26 +558,14 @@ def show_team_stats(df_batting, df_pitching):
 
                         df_summary = pd.DataFrame(summary_list)
                         
-                        temp_orders = []
-                        for i in range(len(df_summary)):
-                            current_val = df_summary.at[i, "打順"]
-                            temp_orders.append(i + 1 if current_val == 999 else current_val)
-                        # 1. 選手の登場順（元のデータフレームで最初に記録された行番号）を取得
                         first_app = df_batting.reset_index().groupby("選手名")["index"].min()
-                        
-                        # 2. サマリー用の表に「登場順」を一時的に追加
                         if "選手名" in df_summary.columns:
                             df_summary["登場順"] = df_summary["選手名"].map(first_app)
                         else:
                             df_summary["登場順"] = df_summary.index.map(first_app)
                             
-                        # 3. 打順を数値化（前回の修正通り）
                         df_summary["打順"] = pd.to_numeric(df_summary["打順"], errors='coerce')
-                        
-                        # 4. 「打順」でソートし、打順が同じ場合は「登場順」でソートする（複数条件）
                         df_summary = df_summary.sort_values(["打順", "登場順"])
-                        
-                        # 5. 打順の文字列化（前回の修正通り）
                         df_summary["打順"] = df_summary["打順"].fillna(0).astype(int).astype(str).replace("0", "")
                         
                         table_html = (
@@ -676,7 +644,6 @@ def show_team_stats(df_batting, df_pitching):
                         elif frac == 2: fin += " 2/3"
 
                         final_res = "-"
-                        
                         if "勝" in group.columns and pd.to_numeric(group["勝"], errors='coerce').fillna(0).sum() > 0:
                             final_res = "勝"
                         elif "負" in group.columns and pd.to_numeric(group["負"], errors='coerce').fillna(0).sum() > 0:
@@ -707,7 +674,7 @@ def show_team_stats(df_batting, df_pitching):
                     st.table(pd.DataFrame(summary_list).set_index("投手名")[["結果", "回", "球数", "被安", "奪三", "四死", "失点", "自責"]])
 
                     st.write("")
-                    st.markdown("##### 📊 全イニング 対戦詳細履歴（守備）")
+                    st.markdown("##### 📊 全イニング 攻撃・守備 詳細履歴")
                     
                     # 🌟 画面右下に追従（フローティング）表示する「スコア画面に戻る」ボタン
                     st.markdown(
@@ -739,46 +706,107 @@ def show_team_stats(df_batting, df_pitching):
                         unsafe_allow_html=True
                     )
                     
-                    history_df = match_pit[
-                        match_pit["種別"].str.contains("詳細", na=False)
-                    ].copy()
+                    exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan"]
+                    valid_batting_df = match_bat[~match_bat["結果"].astype(str).isin(exclude_res)].copy() if not match_bat.empty else pd.DataFrame()
+                    valid_pitching_df = match_pit[match_pit["種別"].str.contains("詳細", na=False)].copy() if not match_pit.empty else pd.DataFrame()
 
-                    if not history_df.empty:
-                        for inn in [f"{i}回" for i in range(1, 10)] + ["延長"]:
-                            inn_df = history_df[history_df["イニング"].astype(str).str.startswith(inn)]
-                            if not inn_df.empty:
-                                inn_id = inn.replace("回", "")
-                                st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
-                                
-                                st.write(f"**【{inn}】**")
-                                display_items = []
-                                for _, row in inn_df.iterrows():
-                                    b_idx = str(row["種別"]).split(":")[1].replace("番打者", "") if ":" in str(row["種別"]) else "?"
+                    # 存在しているすべてのイニングを収集して重複を削除
+                    raw_inns = list(set(
+                        valid_batting_df["イニング"].dropna().astype(str).tolist() + 
+                        valid_pitching_df["イニング"].dropna().astype(str).tolist()
+                    ))
+                    
+                    exclude_inns = ["まとめ入力", "試合前", "ベンチ", "", "nan", "None"]
+                    active_innings = [inn for inn in raw_inns if inn not in exclude_inns]
+
+                    # ★ イニングの時系列順（1回表 ➔ 1回裏 ➔ 2回表…）に確実に並び替えるソートキー関数
+                    def inning_sort_key(inn):
+                        inn_str = str(inn)
+                        is_ext = 1 if "延長" in inn_str else 0
+                        m = re.search(r'(\d+)', inn_str)
+                        num = int(m.group(1)) if m else 99
+                        if "表" in inn_str:
+                            sub = 0
+                        elif "裏" in inn_str:
+                            sub = 1
+                        else:
+                            sub = 2  # 「6回」など表裏の記載がない場合
+                        return (is_ext, num, sub)
+
+                    active_innings.sort(key=inning_sort_key)
+
+                    if active_innings:
+                        for inn in active_innings:
+                            inn_id = inn.replace("回", "").replace("表", "").replace("裏", "")
+                            st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
+                            
+                            # --- 自チームの攻撃 ---
+                            inn_bat_df = valid_batting_df[valid_batting_df["イニング"] == inn] if not valid_batting_df.empty else pd.DataFrame()
+                            if not inn_bat_df.empty:
+                                st.markdown("---")
+                                st.markdown(f"### 📍 **{inn}（攻撃）**")
+                                bat_items = []
+                                for _, row in inn_bat_df.iterrows():
+                                    b_order = row.get("打順", "")
+                                    try:
+                                        b_order_str = f"{int(float(b_order))}番" if pd.notna(b_order) and str(b_order).strip() != "" else ""
+                                    except:
+                                        b_order_str = f"{b_order}番" if b_order else ""
+
+                                    p_name = row.get("選手名", "")
+                                    res = row.get("結果", "")
+                                    direction = row.get("打球方向", "")
+                                    rbi = pd.to_numeric(row.get("打点", 0), errors='coerce')
+                                    run = pd.to_numeric(row.get("得点", 0), errors='coerce')
                                     
+                                    res_str = str(res)
+                                    if direction and str(direction) not in ["---", "nan", "None", ""]:
+                                        res_str = f"{direction}{res_str}"
+                                    if pd.notna(rbi) and rbi > 0:
+                                        res_str = f"{res_str} ・ 打点{int(rbi)}"
+                                    if pd.notna(run) and run > 0:
+                                        res_str = f"{res_str} 🟢得点"
+                                        
+                                    bat_items.append({
+                                        "打順": b_order_str,
+                                        "選手名": p_name,
+                                        "結果": res_str
+                                    })
+                                df_bat_disp = pd.DataFrame(bat_items).T
+                                st.dataframe(df_bat_disp, use_container_width=True)
+
+                            # --- 相手チームの攻撃（守備） ---
+                            inn_pit_df = valid_pitching_df[valid_pitching_df["イニング"] == inn] if not valid_pitching_df.empty else pd.DataFrame()
+                            if not inn_pit_df.empty:
+                                st.markdown("---")
+                                st.markdown(f"### 📍 **{inn}（守備）**")
+                                pit_items = []
+                                for _, row in inn_pit_df.iterrows():
+                                    raw_b_idx = str(row["種別"]).split(":")[1].replace("番打者", "") if ":" in str(row["種別"]) else "?"
+                                    try:
+                                        b_idx = f"{int(float(raw_b_idx))}番"
+                                    except:
+                                        b_idx = f"{raw_b_idx}番" if raw_b_idx != "?" else "?"
+
                                     raw_res = str(row.get('結果', ''))
                                     pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
-                                    
                                     if pos_str and pos_str not in ["nan", "None", ""]:
                                         raw_res = f"{raw_res}({pos_str})"
-                                    
                                     fielder_str = str(row.get('処理野手', ''))
                                     if fielder_str and fielder_str not in ["nan", "None", ""]:
                                         res_text = f"{raw_res} [{fielder_str}]"
                                     else:
                                         res_text = raw_res
-                                        
                                     runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
                                     runs = int(runs) if pd.notna(runs) else 0
                                     if runs > 0:
                                         res_text = f"{res_text} 💥失点{runs}"
-                                        
-                                    display_items.append({
-                                        "打順": f"{b_idx}番", 
+                                    pit_items.append({
+                                        "打順": b_idx, 
                                         "投手": row["選手名"], 
                                         "結果": res_text
                                     })
-                                
-                                df_disp = pd.DataFrame(display_items).T
+                                df_pit_disp = pd.DataFrame(pit_items).T
                                 
                                 def highlight_timely(val):
                                     if isinstance(val, str) and "💥失点" in val:
@@ -786,9 +814,9 @@ def show_team_stats(df_batting, df_pitching):
                                     return ""
                                 
                                 try:
-                                    styled_df = df_disp.style.map(highlight_timely)
+                                    styled_df = df_pit_disp.style.map(highlight_timely)
                                 except AttributeError:
-                                    styled_df = df_disp.style.applymap(highlight_timely)
+                                    styled_df = df_pit_disp.style.applymap(highlight_timely)
                                     
                                 st.dataframe(styled_df, use_container_width=True)
                     else:

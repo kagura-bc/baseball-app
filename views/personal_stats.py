@@ -468,11 +468,11 @@ def show_personal_stats(df_batting, df_pitching):
     # 2. 個人年度別 + 通算
     # ----------------------------------------------------
     with t_year:
-        if "personal_stats_selected_player" not in st.session_state or st.session_state["personal_stats_selected_player"] not in STATS_PLAYERS:
-            st.session_state["personal_stats_selected_player"] = STATS_PLAYERS[0] if STATS_PLAYERS else ""
+        if "personal_stats_selected_player" not in st.session_state:
+            st.session_state["personal_stats_selected_player"] = None
 
-        current_sel_player = st.session_state["personal_stats_selected_player"]
-        popover_label = f"👤 選手選択: {current_sel_player} 🔽" if current_sel_player else "選手を選択してください 🔽"
+        current_sel_player = st.session_state.get("personal_stats_selected_player")
+        popover_label = f"👤 選手選択: {current_sel_player} 🔽" if current_sel_player else "👤 選手選択: 未選択 🔽"
 
         with st.popover(popover_label, use_container_width=True):
             st.markdown("##### 👤 表示する選手をタップして選択")
@@ -484,8 +484,11 @@ def show_personal_stats(df_batting, df_pitching):
                 label_visibility="collapsed"
             )
 
-        sel_player = st.session_state.get("personal_stats_selected_player", "")
-        if sel_player:
+        sel_player = st.session_state.get("personal_stats_selected_player", None)
+        
+        if not sel_player:
+            st.info("👆 上のボタンから表示する選手を選択してください。")
+        else:
             if not df_b_calc.empty:
                 my_b = df_b_calc[df_b_calc["選手名"] == sel_player]
                 if not my_b.empty:
@@ -543,123 +546,123 @@ def show_personal_stats(df_batting, df_pitching):
                     )
                 else: st.info("データなし")
         
-        if not df_p_calc.empty:
-            my_p = df_p_calc[df_p_calc["選手名"] == sel_player]
-            if not my_p.empty:
-                hist_p = my_p.groupby("Year").agg(agg_rules_p).sort_index(ascending=False)
-                total_p_s = my_p.agg(agg_rules_p)
-                hist_p_total = pd.DataFrame(total_p_s).T
-                hist_p_total.index = ["通算"]
+            if not df_p_calc.empty:
+                my_p = df_p_calc[df_p_calc["選手名"] == sel_player]
+                if not my_p.empty:
+                    hist_p = my_p.groupby("Year").agg(agg_rules_p).sort_index(ascending=False)
+                    total_p_s = my_p.agg(agg_rules_p)
+                    hist_p_total = pd.DataFrame(total_p_s).T
+                    hist_p_total.index = ["通算"]
 
-                combined_p = pd.concat([hist_p_total, hist_p])
+                    combined_p = pd.concat([hist_p_total, hist_p])
 
-                combined_p["TotalSO"] = combined_p["is_so"] + combined_p["奪三振"]
-                combined_p["Innings"] = combined_p["アウト数"] / 3
-                combined_p["防御率"] = combined_p.apply(
-                    lambda x: (x["自責点"]*7)/x["Innings"] if x["Innings"]>0 else 0, axis=1
-                )
-                combined_p["勝率"] = combined_p.apply(
-                    lambda x: x["is_win"] / (x["is_win"] + x["is_lose"]) 
-                    if (x["is_win"] + x["is_lose"]) > 0 else 0, axis=1
-                )
-                combined_p["奪三振率"] = combined_p.apply(
-                    lambda x: (x["TotalSO"] * 7) / x["Innings"] 
-                    if x["Innings"] > 0 else 0, axis=1
-                )
-                combined_p["WHIP"] = combined_p.apply(
-                    lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] 
-                    if x["Innings"] > 0 else 0, axis=1
-                )
-                combined_p["回"] = combined_p["アウト数"].apply(lambda x: f"{int(x//3)}.{int(x%3)}")
+                    combined_p["TotalSO"] = combined_p["is_so"] + combined_p["奪三振"]
+                    combined_p["Innings"] = combined_p["アウト数"] / 3
+                    combined_p["防御率"] = combined_p.apply(
+                        lambda x: (x["自責点"]*7)/x["Innings"] if x["Innings"]>0 else 0, axis=1
+                    )
+                    combined_p["勝率"] = combined_p.apply(
+                        lambda x: x["is_win"] / (x["is_win"] + x["is_lose"]) 
+                        if (x["is_win"] + x["is_lose"]) > 0 else 0, axis=1
+                    )
+                    combined_p["奪三振率"] = combined_p.apply(
+                        lambda x: (x["TotalSO"] * 7) / x["Innings"] 
+                        if x["Innings"] > 0 else 0, axis=1
+                    )
+                    combined_p["WHIP"] = combined_p.apply(
+                        lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] 
+                        if x["Innings"] > 0 else 0, axis=1
+                    )
+                    combined_p["回"] = combined_p["アウト数"].apply(lambda x: f"{int(x//3)}.{int(x%3)}")
+                    
+                    for col in ["is_win", "is_lose", "TotalSO", "total_bb"]: 
+                        combined_p[col] = combined_p[col].astype(int)
+
+                    disp_p_hist = pd.DataFrame()
+                    disp_p_hist["防御率"] = combined_p["防御率"]
+                    disp_p_hist["勝率"] = combined_p["勝率"]
+                    disp_p_hist["WHIP"] = combined_p["WHIP"]
+                    disp_p_hist["奪三振率"] = combined_p["奪三振率"]
+                    disp_p_hist["投球回"] = combined_p["回"]
+                    disp_p_hist["勝"] = combined_p["is_win"]
+                    disp_p_hist["敗"] = combined_p["is_lose"]
+                    disp_p_hist["奪三振"] = combined_p["TotalSO"]
+                    disp_p_hist["四死球"] = combined_p["total_bb"]
+                    disp_p_hist.index.name = "年度"
+
+                    st.markdown("##### 🛡️ 投手成績推移")
+                    st.dataframe(
+                        disp_p_hist.style.format({
+                            "防御率": "{:.2f}", "勝率": "{:.3f}", "WHIP": "{:.2f}", "奪三振率": "{:.2f}"
+                        })
+                    )
+                else: st.info("データなし")
+            
+            if not df_p_calc.empty and "処理野手" in df_p_calc.columns and "守備位置" in df_p_calc.columns:
+                fld_base_all = df_p_calc.copy().reset_index(drop=True)
                 
-                for col in ["is_win", "is_lose", "TotalSO", "total_bb"]: 
-                    combined_p[col] = combined_p[col].astype(int)
-
-                disp_p_hist = pd.DataFrame()
-                disp_p_hist["防御率"] = combined_p["防御率"]
-                disp_p_hist["勝率"] = combined_p["勝率"]
-                disp_p_hist["WHIP"] = combined_p["WHIP"]
-                disp_p_hist["奪三振率"] = combined_p["奪三振率"]
-                disp_p_hist["投球回"] = combined_p["回"]
-                disp_p_hist["勝"] = combined_p["is_win"]
-                disp_p_hist["敗"] = combined_p["is_lose"]
-                disp_p_hist["奪三振"] = combined_p["TotalSO"]
-                disp_p_hist["四死球"] = combined_p["total_bb"]
-                disp_p_hist.index.name = "年度"
-
-                st.markdown("##### 🛡️ 投手成績推移")
-                st.dataframe(
-                    disp_p_hist.style.format({
-                        "防御率": "{:.2f}", "勝率": "{:.3f}", "WHIP": "{:.2f}", "奪三振率": "{:.2f}"
-                    })
-                )
-            else: st.info("データなし")
-        
-        if not df_p_calc.empty and "処理野手" in df_p_calc.columns and "守備位置" in df_p_calc.columns:
-            fld_base_all = df_p_calc.copy().reset_index(drop=True)
-            
-            if "Year" not in fld_base_all.columns:
-                fld_base_all["Year"] = pd.to_datetime(fld_base_all["日付"], errors='coerce').dt.strftime('%Y').fillna("不明")
+                if "Year" not in fld_base_all.columns:
+                    fld_base_all["Year"] = pd.to_datetime(fld_base_all["日付"], errors='coerce').dt.strftime('%Y').fillna("不明")
+                    
+                fld_base_all["Original_Idx"] = fld_base_all.index
                 
-            fld_base_all["Original_Idx"] = fld_base_all.index
-            
-            fld_base = fld_base_all[fld_base_all["処理野手"].notna() & (fld_base_all["処理野手"] != "")].copy()
-            
-            if not fld_base.empty:
-                fld_base["処理野手"] = fld_base["処理野手"].astype(str)
-                fld_base["守備位置"] = fld_base["守備位置"].astype(str)
-                fld_base = fld_base[fld_base["処理野手"].str.contains(sel_player, na=False)]
+                fld_base = fld_base_all[fld_base_all["処理野手"].notna() & (fld_base_all["処理野手"] != "")].copy()
                 
                 if not fld_base.empty:
-                    fld_base["zipped"] = fld_base.apply(
-                        lambda x: list(dict.fromkeys(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-")))), 
-                        axis=1
-                    )
-                    fld_expanded = fld_base.explode("zipped").reset_index(drop=True)
+                    fld_base["処理野手"] = fld_base["処理野手"].astype(str)
+                    fld_base["守備位置"] = fld_base["守備位置"].astype(str)
+                    fld_base = fld_base[fld_base["処理野手"].str.contains(sel_player, na=False)]
                     
-                    if not fld_expanded.empty:
-                        fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
-                        my_f = fld_expanded[fld_expanded["FielderName"] == sel_player].copy()
+                    if not fld_base.empty:
+                        fld_base["zipped"] = fld_base.apply(
+                            lambda x: list(dict.fromkeys(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-")))), 
+                            axis=1
+                        )
+                        fld_expanded = fld_base.explode("zipped").reset_index(drop=True)
                         
-                        if not my_f.empty:
-                            my_f["is_error"] = my_f["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
+                        if not fld_expanded.empty:
+                            fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
+                            my_f = fld_expanded[fld_expanded["FielderName"] == sel_player].copy()
+                            
+                            if not my_f.empty:
+                                my_f["is_error"] = my_f["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
 
-                            group_keys = ["Original_Idx", "FielderName", "FielderPos"]
+                                group_keys = ["Original_Idx", "FielderName", "FielderPos"]
 
-                            fld_unique = my_f.groupby(group_keys).agg(
-                                Year=("Year", "first"),
-                                is_error=("is_error", "max")
-                            ).reset_index()
+                                fld_unique = my_f.groupby(group_keys).agg(
+                                    Year=("Year", "first"),
+                                    is_error=("is_error", "max")
+                                ).reset_index()
 
-                            hist_f = fld_unique.groupby("Year").agg(
-                                守備機会=("FielderName", "count"),
-                                失策数=("is_error", "sum")
-                            ).sort_index(ascending=False)
-                            
-                            total_f_opp = fld_unique["FielderName"].count()
-                            total_f_err = fld_unique["is_error"].sum()
-                            hist_f_total = pd.DataFrame({
-                                "守備機会": [total_f_opp],
-                                "失策数": [total_f_err]
-                            }, index=["通算"])
-                            
-                            combined_f = pd.concat([hist_f_total, hist_f])
-                            
-                            combined_f["守備率"] = combined_f.apply(
-                                lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, 
-                                axis=1
-                            )
-                            
-                            disp_f_hist = pd.DataFrame()
-                            disp_f_hist["守備率"] = combined_f["守備率"]
-                            disp_f_hist["守備機会"] = combined_f["守備機会"]
-                            disp_f_hist["失策"] = combined_f["失策数"]
-                            disp_f_hist.index.name = "年度"
-                            
-                            st.markdown("##### 🧤 守備成績推移")
-                            st.dataframe(disp_f_hist.style.format({"守備率": "{:.3f}"}))
-                        else:
-                            st.caption("※ 守備記録なし")
+                                hist_f = fld_unique.groupby("Year").agg(
+                                    守備機会=("FielderName", "count"),
+                                    失策数=("is_error", "sum")
+                                ).sort_index(ascending=False)
+                                
+                                total_f_opp = fld_unique["FielderName"].count()
+                                total_f_err = fld_unique["is_error"].sum()
+                                hist_f_total = pd.DataFrame({
+                                    "守備機会": [total_f_opp],
+                                    "失策数": [total_f_err]
+                                }, index=["通算"])
+                                
+                                combined_f = pd.concat([hist_f_total, hist_f])
+                                
+                                combined_f["守備率"] = combined_f.apply(
+                                    lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, 
+                                    axis=1
+                                )
+                                
+                                disp_f_hist = pd.DataFrame()
+                                disp_f_hist["守備率"] = combined_f["守備率"]
+                                disp_f_hist["守備機会"] = combined_f["守備機会"]
+                                disp_f_hist["失策"] = combined_f["失策数"]
+                                disp_f_hist.index.name = "年度"
+                                
+                                st.markdown("##### 🧤 守備成績推移")
+                                st.dataframe(disp_f_hist.style.format({"守備率": "{:.3f}"}))
+                            else:
+                                st.caption("※ 守備記録なし")
 
     # ----------------------------------------------------
     # 3. ランキング
