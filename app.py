@@ -116,22 +116,18 @@ if page == " 📝 試合データ入力":
     
     st.markdown("### 📝 試合データ入力")
 
-    # 反映用設定の初期化（未反映・初期状態）
-    if "applied_settings" not in st.session_state:
-        st.session_state["applied_settings"] = {
-            "date": datetime.date.today().strftime("%Y-%m-%d"),
-            "scorer": None,
-            "match_type": "",
-            "ground": "",
-            "opp": "",
-            "order": ""
-        }
+    # --- URLパラメータからの基本復元 ---
+    query_date = st.query_params.get("date", datetime.date.today().strftime("%Y-%m-%d"))
+    query_opp = st.query_params.get("opp", "")
+    query_match = st.query_params.get("match", "")
+    query_ground = st.query_params.get("ground", "")
+    query_order = st.query_params.get("order", "")
+    query_scorer = st.query_params.get("scorer", "")
 
     # ⚙️ 試合設定枠
     with st.expander("⚙️ 試合設定", expanded=True):
-        url_date = st.query_params.get("date", datetime.date.today().strftime("%Y-%m-%d"))
         try:
-            default_date = datetime.datetime.strptime(url_date, "%Y-%m-%d").date()
+            default_date = datetime.datetime.strptime(query_date, "%Y-%m-%d").date()
         except ValueError:
             default_date = datetime.date.today()
 
@@ -142,31 +138,68 @@ if page == " 📝 試合データ入力":
             selected_date = st.date_input("試合日", value=default_date, key="main_selected_date")
             selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-        # --- 初期値のセット ---
+        # 🌟 【自動復元 & データベース存在確認ロジック】
+        auto_opp = ""
+        auto_match = ""
+        auto_ground = ""
+        auto_scorer = ""
+        auto_order = ""
+        has_data_for_date = False
+
+        if not df_batting.empty and "日付" in df_batting.columns:
+            df_batting["_date_str"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+            date_matched = df_batting[df_batting["_date_str"] == selected_date_str]
+            if not date_matched.empty:
+                has_data_for_date = True
+                latest_r = date_matched.iloc[-1]
+                auto_opp = str(latest_r.get("対戦相手", "")) if pd.notna(latest_r.get("対戦相手", "")) else ""
+                auto_match = str(latest_r.get("試合種別", "")) if pd.notna(latest_r.get("試合種別", "")) else ""
+                auto_ground = str(latest_r.get("グラウンド", "")) if pd.notna(latest_r.get("グラウンド", "")) else ""
+                auto_scorer = str(latest_r.get("スコアラー", "")) if pd.notna(latest_r.get("スコアラー", "")) else ""
+                auto_order = str(latest_r.get("攻守", "")) if pd.notna(latest_r.get("攻守", "")) else ""
+
+        # スプレッドシートにその日のデータが存在する場合のみ初期値に採用
+        if has_data_for_date:
+            res_opp = auto_opp
+            res_match = auto_match
+            res_ground = auto_ground
+            res_scorer = auto_scorer
+            res_order = auto_order
+        else:
+            res_opp = ""
+            res_match = ""
+            res_ground = ""
+            res_scorer = ""
+            res_order = ""
+            for q_key in ["opp", "match", "ground", "order", "scorer"]:
+                if q_key in st.query_params:
+                    del st.query_params[q_key]
+
+        # --- 初期値のセット（キーが存在しない初回のみセットし、ユーザーの選択操作を上書きしない） ---
         p_list = ALL_PLAYERS
         scorer_key = "scorer_name_ui"
         if scorer_key not in st.session_state:
-            st.session_state[scorer_key] = None
+            st.session_state[scorer_key] = res_scorer if res_scorer else None
 
         match_options = OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
         match_key = f"main_match_type_{selected_date_str}"
         if match_key not in st.session_state:
-            st.session_state[match_key] = None
+            st.session_state[match_key] = res_match if res_match else None
 
         ground_options = GROUND_LIST if "その他" in GROUND_LIST else GROUND_LIST + ["その他"]
         ground_key = f"main_selected_ground_{selected_date_str}"
         if ground_key not in st.session_state:
-            st.session_state[ground_key] = None
+            st.session_state[ground_key] = res_ground if res_ground else None
 
         opp_options = OPPONENTS_LIST if "その他" in OPPONENTS_LIST else OPPONENTS_LIST + ["その他"]
         opp_key = f"main_selected_opp_{selected_date_str}"
         if opp_key not in st.session_state:
-            st.session_state[opp_key] = None
+            st.session_state[opp_key] = res_opp if res_opp else None
 
         order_list = ["先攻 (表)", "後攻 (裏)"]
         order_key = f"main_kagura_order_{selected_date_str}"
         if order_key not in st.session_state:
-            st.session_state[order_key] = None
+            st.session_state[order_key] = res_order if res_order else None
 
         # --- 各列へのタッチ式（ポップオーバー）配置 ---
         with c1:
@@ -213,7 +246,7 @@ if page == " 📝 試合データ入力":
                 )
             
             if cur_ground == "Other" or cur_ground == "その他":
-                ground_name_input = st.text_input("グラウンド名入力", value="その他グラウンド", key=f"main_custom_ground_{selected_date_str}")
+                ground_name_input = st.text_input("グラウンド名入力", value=res_ground if res_ground else "その他グラウンド", key=f"main_custom_ground_{selected_date_str}")
             else:
                 ground_name_input = cur_ground if cur_ground else ""
 
@@ -231,7 +264,7 @@ if page == " 📝 試合データ入力":
                 )
             
             if cur_opp == "Other" or cur_opp == "その他":
-                opp_team_input = st.text_input("相手チーム名入力", value="相手チーム", key=f"main_custom_opp_{selected_date_str}")
+                opp_team_input = st.text_input("相手チーム名入力", value=res_opp if res_opp else "相手チーム", key=f"main_custom_opp_{selected_date_str}")
             else:
                 opp_team_input = cur_opp if cur_opp else ""
 
@@ -253,6 +286,14 @@ if page == " 📝 試合データ入力":
 
         st.write("")
         if st.button("⚙️ 試合設定を決定", use_container_width=True):
+            # --- 決定時にURLクエリパラメータを更新 ---
+            st.query_params["date"] = selected_date_str
+            st.query_params["opp"] = opp_team_input
+            st.query_params["match"] = match_type_input
+            st.query_params["ground"] = ground_name_input
+            st.query_params["order"] = kagura_order_input
+            st.query_params["scorer"] = saved_scorer if saved_scorer else ""
+
             st.session_state["applied_settings"] = {
                 "date": selected_date_str,
                 "scorer": saved_scorer,
@@ -263,6 +304,17 @@ if page == " 📝 試合データ入力":
             }
             st.success("試合設定を反映しました！")
             st.rerun()
+
+    # 反映用設定の初期化
+    if "applied_settings" not in st.session_state or st.session_state["applied_settings"]["date"] != selected_date_str:
+        st.session_state["applied_settings"] = {
+            "date": selected_date_str,
+            "scorer": st.session_state.get(scorer_key),
+            "match_type": st.session_state.get(match_key, ""),
+            "ground": ground_name_input,
+            "opp": opp_team_input,
+            "order": st.session_state.get(order_key, "")
+        }
 
     applied = st.session_state["applied_settings"]
     current_date_str = applied["date"]

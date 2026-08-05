@@ -163,12 +163,15 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         
         with c_mid3:
             st.markdown("<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>登板投手</div>", unsafe_allow_html=True)
-            if "p_det_pitcher" not in st.session_state:
+            
+            # セッションに値がない、またはリストに含まれない場合は打順・スタメンから自動取得を試みる
+            current_p = st.session_state.get("p_det_pitcher")
+            if not current_p or current_p not in ALL_PLAYERS:
                 def_pitcher = ""
                 if not today_batting_df.empty and "位置" in today_batting_df.columns:
                     latest_pitcher_rows = today_batting_df[today_batting_df["位置"] == "投"]
                     if not latest_pitcher_rows.empty:
-                        def_pitcher = latest_pitcher_rows.iloc[-1]["選手名"]
+                        def_pitcher = str(latest_pitcher_rows.iloc[-1]["選手名"])
                 if not def_pitcher:
                     lineup = st.session_state.get("saved_lineup")
                     if isinstance(lineup, dict):
@@ -176,16 +179,16 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             if lineup.get(f"pos_{i}") == "投":
                                 raw_name = lineup.get(f"name_{i}", "")
                                 if raw_name:
-                                    def_pitcher = raw_name.split(" (")[0]
+                                    def_pitcher = str(raw_name).split(" (")[0]
                                 break
                 if not def_pitcher:
-                    def_pitcher = st.session_state.get("shared_starting_pitcher", "")
+                    def_pitcher = str(st.session_state.get("shared_starting_pitcher", ""))
                 
-                matched_p = next((p for p in ALL_PLAYERS if p.split(" (")[0].strip() == def_pitcher or p == def_pitcher), None)
-                st.session_state["p_det_pitcher"] = matched_p if matched_p else (ALL_PLAYERS[0] if ALL_PLAYERS else None)
+                matched_p = next((p for p in ALL_PLAYERS if p.split(" (")[0].strip() == def_pitcher.strip() or p == def_pitcher), None)
+                st.session_state["p_det_pitcher"] = matched_p if matched_p else None
 
             cur_p_raw = st.session_state.get("p_det_pitcher", "")
-            p_btn_label = f"🟢 {local_fmt(cur_p_raw)} 🔽" if cur_p_raw else "投手選択 🔽"
+            p_btn_label = f"🟢 {local_fmt(cur_p_raw)} 🔽" if cur_p_raw and cur_p_raw in ALL_PLAYERS else "未選択 🔽"
             with st.popover(p_btn_label, use_container_width=True):
                 st.markdown("##### ⚾ 登板投手を選択")
                 st.pills(
@@ -202,12 +205,14 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
 
         with c_mid4:
             st.markdown("<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>現在の捕手</div>", unsafe_allow_html=True)
-            if "p_det_catcher" not in st.session_state:
+            
+            current_c = st.session_state.get("p_det_catcher")
+            if not current_c or current_c not in ALL_PLAYERS:
                 def_catcher = ""
                 if not today_batting_df.empty and "位置" in today_batting_df.columns:
                     latest_catcher_rows = today_batting_df[today_batting_df["位置"] == "捕"]
                     if not latest_catcher_rows.empty:
-                        def_catcher = latest_catcher_rows.iloc[-1]["選手名"]
+                        def_catcher = str(latest_catcher_rows.iloc[-1]["選手名"])
                 if not def_catcher:
                     lineup = st.session_state.get("saved_lineup")
                     if isinstance(lineup, dict):
@@ -215,14 +220,14 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             if lineup.get(f"pos_{i}") == "捕":
                                 raw_name = lineup.get(f"name_{i}", "")
                                 if raw_name:
-                                    def_catcher = raw_name.split(" (")[0]
+                                    def_catcher = str(raw_name).split(" (")[0]
                                 break
                 
-                matched_c = next((p for p in ALL_PLAYERS if p.split(" (")[0].strip() == def_catcher or p == def_catcher), None)
-                st.session_state["p_det_catcher"] = matched_c if matched_c else (ALL_PLAYERS[0] if ALL_PLAYERS else None)
+                matched_c = next((p for p in ALL_PLAYERS if p.split(" (")[0].strip() == def_catcher.strip() or p == def_catcher), None)
+                st.session_state["p_det_catcher"] = matched_c if matched_c else None
 
             cur_c_raw = st.session_state.get("p_det_catcher", "")
-            c_btn_label = f"🟢 {local_fmt(cur_c_raw)} 🔽" if cur_c_raw else "捕手選択 🔽"
+            c_btn_label = f"🟢 {local_fmt(cur_c_raw)} 🔽" if cur_c_raw and cur_c_raw in ALL_PLAYERS else "未選択 🔽"
             with st.popover(c_btn_label, use_container_width=True):
                 st.markdown("##### ⚾ 現在の捕手を選択")
                 st.pills(
@@ -579,8 +584,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             res_text = f"{raw_res} [{fielder_str}]"
                         else:
                             res_text = raw_res
-                        runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
-                        runs = int(runs) if pd.notna(runs) else 0
+                        rows_val = pd.to_numeric(row.get('失点', 0), errors='coerce')
+                        runs = int(rows_val) if pd.notna(rows_val) else 0
                         if runs > 0:
                             res_text = f"{res_text} 💥失点{runs}"
                         pit_items.append({

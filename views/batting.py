@@ -76,7 +76,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if cache_key in st.session_state:
         df_batting = st.session_state[cache_key]
 
-    expected_batting_cols = ["日付", "イニング", "選手名", "位置", "結果", "打点", "得点", "グラウンド", "対戦相手", "試合種別", "打順", "打球方向", "スコアラー"]
+    expected_batting_cols = ["日付", "イニング", "選手名", "位置", "結果", "打点", "得点", "グラウンド", "対戦相手", "試合種別", "打順", "打球方向", "スコアラー", "攻守"]
     if df_batting.empty:
         df_batting = pd.DataFrame(columns=expected_batting_cols)
     else:
@@ -238,7 +238,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     def submit_everything(inn_val):
         rows_to_add = []
         current_date_formatted = pd.to_datetime(selected_date_str).strftime('%Y-%m-%d')
+        
+        # 🌟 スコアラー情報を確実に対象UIのキーまたはセッションから取得
         scorer = st.session_state.get("scorer_name_ui", "")
+        if not scorer:
+            scorer = st.session_state.get("persistent_scorer", "")
         
         display_count = st.session_state.get("display_order_count", 9)
         
@@ -273,6 +277,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
+                        "攻守": kagura_order,
                         "グラウンド": ground_name
                     })
                     st.session_state.setdefault("lineup_states", {})[i] = {
@@ -305,6 +310,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
+                            "攻守": kagura_order,
                             "グラウンド": ground_name
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
@@ -323,6 +329,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
+                            "攻守": kagura_order,
                             "グラウンド": ground_name
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
@@ -351,6 +358,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打点": 0,
                     "得点": 0,
                     "スコアラー": scorer,
+                    "攻守": kagura_order,
                     "グラウンド": ground_name
                 })
                 registered_bench_names.add(clean_b_name)
@@ -396,6 +404,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打点": rbi_val,
                     "得点": auto_run,
                     "スコアラー": scorer,
+                    "攻守": kagura_order,
                     "グラウンド": ground_name
                 })
 
@@ -423,6 +432,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打点": 0,
                         "得点": score_val,
                         "スコアラー": scorer,
+                        "攻守": kagura_order,
                         "グラウンド": ground_name
                     })
 
