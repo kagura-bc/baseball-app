@@ -541,7 +541,7 @@ def show_team_stats(df_batting, df_pitching):
                                         history_texts.append(item_str)
                             
                             extra = []
-                            if sb > 0: extra.append(f"盗{sb}")
+                            if sb > 0: extra.append(f"<span style='color: #9333ea; font-weight: bold;'>盗{sb}</span>")
                             if run > 0: 
                                 extra.append(f"<span style='color: #16a34a; font-weight: bold;'>得{run}</span>")
                             extra_str = f" [{', '.join(extra)}]" if extra else ""
@@ -758,22 +758,64 @@ def show_team_stats(df_batting, df_pitching):
                                     direction = row.get("打球方向", "")
                                     rbi = pd.to_numeric(row.get("打点", 0), errors='coerce')
                                     run = pd.to_numeric(row.get("得点", 0), errors='coerce')
+                                    sb = pd.to_numeric(row.get("盗塁", 0), errors='coerce')
                                     
                                     res_str = str(res)
+                                    is_hit = res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
+                                    rbi_val = int(rbi) if pd.notna(rbi) else 0
+                                    run_val = int(run) if pd.notna(run) else 0
+                                    sb_val = int(sb) if pd.notna(sb) else 0
+
+                                    core_text = ""
                                     if direction and str(direction) not in ["---", "nan", "None", ""]:
-                                        res_str = f"{direction}{res_str}"
-                                    if pd.notna(rbi) and rbi > 0:
-                                        res_str = f"{res_str} ・ 打点{int(rbi)}"
-                                    if pd.notna(run) and run > 0:
-                                        res_str = f"{res_str} 🟢得点"
+                                        core_text += f"{direction}"
+                                    core_text += f"{res_str}"
+
+                                    if is_hit:
+                                        if rbi_val > 0:
+                                            formatted_res = f"<span style='color: #dc2626; font-weight: bold;'>{core_text}（打点{rbi_val}）</span>"
+                                        else:
+                                            formatted_res = f"<span style='color: #2563eb; font-weight: bold;'>{core_text}</span>"
+                                    else:
+                                        formatted_res = core_text
+                                        if rbi_val > 0:
+                                            formatted_res += f" ・ <span style='color: #dc2626; font-weight: bold;'>打点{rbi_val}</span>"
+
+                                    extras = []
+                                    if sb_val > 0:
+                                        extras.append(f"<span style='color: #9333ea; font-weight: bold;'>盗{sb_val}</span>")
+                                    if run_val > 0:
+                                        extras.append(f"<span style='color: #16a34a; font-weight: bold;'>得{run_val}</span>")
+                                    
+                                    if extras:
+                                        formatted_res += f" [{', '.join(extras)}]"
                                         
                                     bat_items.append({
                                         "打順": b_order_str,
                                         "選手名": p_name,
-                                        "結果": res_str
+                                        "結果": formatted_res
                                     })
-                                df_bat_disp = pd.DataFrame(bat_items).T
-                                st.dataframe(df_bat_disp, use_container_width=True)
+                                
+                                df_bat_disp = pd.DataFrame(bat_items)
+                                table_html = (
+                                    "<div style='overflow-x: auto;'>"
+                                    "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white;'>"
+                                    "<thead><tr style='background-color: #f0f0f0;'>"
+                                    "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>打順</th>"
+                                    "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>選手名</th>"
+                                    "<th style='border: 1px solid #444444; padding: 8px; text-align: left; color: #000000; font-weight: bold;'>結果</th>"
+                                    "</tr></thead><tbody>"
+                                )
+                                for _, row in df_bat_disp.iterrows():
+                                    table_html += (
+                                        "<tr>"
+                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['打順']}</td>"
+                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['選手名']}</td>"
+                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: left; color: #000000;'>{row['結果']}</td>"
+                                        "</tr>"
+                                    )
+                                table_html += "</tbody></table></div>"
+                                st.markdown(table_html, unsafe_allow_html=True)
 
                             # --- 相手チームの攻撃（守備） ---
                             inn_pit_df = valid_pitching_df[valid_pitching_df["イニング"] == inn] if not valid_pitching_df.empty else pd.DataFrame()
@@ -790,35 +832,56 @@ def show_team_stats(df_batting, df_pitching):
 
                                     raw_res = str(row.get('結果', ''))
                                     pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
+                                    
+                                    is_hit_pit = raw_res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
+                                    runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
+                                    runs_val = int(runs) if pd.notna(runs) else 0
+
+                                    core_pit = ""
                                     if pos_str and pos_str not in ["nan", "None", ""]:
-                                        raw_res = f"{raw_res}({pos_str})"
+                                        core_pit = f"{pos_str}"
+                                    core_pit += f"{raw_res}"
+
+                                    if is_hit_pit:
+                                        if runs_val > 0:
+                                            formatted_pit = f"<span style='color: #dc2626; font-weight: bold;'>{core_pit} (失点{runs_val})</span>"
+                                        else:
+                                            formatted_pit = f"<span style='color: #2563eb; font-weight: bold;'>{core_pit}</span>"
+                                    else:
+                                        formatted_pit = core_pit
+                                        if runs_val > 0:
+                                            formatted_pit += f" <span style='color: #dc2626; font-weight: bold;'>💥失点{runs_val}</span>"
+
                                     fielder_str = str(row.get('処理野手', ''))
                                     if fielder_str and fielder_str not in ["nan", "None", ""]:
-                                        res_text = f"{raw_res} [{fielder_str}]"
-                                    else:
-                                        res_text = raw_res
-                                    runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
-                                    runs = int(runs) if pd.notna(runs) else 0
-                                    if runs > 0:
-                                        res_text = f"{res_text} 💥失点{runs}"
+                                        formatted_pit += f" [{fielder_str}]"
+
                                     pit_items.append({
                                         "打順": b_idx, 
                                         "投手": row["選手名"], 
-                                        "結果": res_text
+                                        "結果": formatted_pit
                                     })
-                                df_pit_disp = pd.DataFrame(pit_items).T
                                 
-                                def highlight_timely(val):
-                                    if isinstance(val, str) and "💥失点" in val:
-                                        return "color: red; font-weight: bold;"
-                                    return ""
-                                
-                                try:
-                                    styled_df = df_pit_disp.style.map(highlight_timely)
-                                except AttributeError:
-                                    styled_df = df_pit_disp.style.applymap(highlight_timely)
-                                    
-                                st.dataframe(styled_df, use_container_width=True)
+                                df_pit_disp = pd.DataFrame(pit_items)
+                                pit_table_html = (
+                                    "<div style='overflow-x: auto;'>"
+                                    "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white;'>"
+                                    "<thead><tr style='background-color: #f0f0f0;'>"
+                                    "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>打順</th>"
+                                    "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>投手</th>"
+                                    "<th style='border: 1px solid #444444; padding: 8px; text-align: left; color: #000000; font-weight: bold;'>結果</th>"
+                                    "</tr></thead><tbody>"
+                                )
+                                for _, row in df_pit_disp.iterrows():
+                                    pit_table_html += (
+                                        "<tr>"
+                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['打順']}</td>"
+                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['投手']}</td>"
+                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: left; color: #000000;'>{row['結果']}</td>"
+                                        "</tr>"
+                                    )
+                                pit_table_html += "</tbody></table></div>"
+                                st.markdown(pit_table_html, unsafe_allow_html=True)
                     else:
                         st.caption("詳細データはまだありません。")
                 else:
