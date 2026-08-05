@@ -440,7 +440,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=updated_full_df)
                 st.session_state[cache_key] = updated_full_df
                 
-                st.session_state["quick_clear_counter"] += 1
+                st.session_state["quick_clear_counter"] = st.session_state.get("quick_clear_counter", 0) + 1
 
                 st.success("登録しました！")
                 st.rerun()
@@ -493,7 +493,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) + 1
             st.rerun()
 
-    # ▼▼▼ st.fragment により、選択結果が即座にラベルに反映され、かつ無駄な全体リランも防げます ▼▼▼
     @st.fragment
     def batting_input_fragment():
         submitted = st.button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
@@ -554,7 +553,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             """, unsafe_allow_html=True)
 
         with qc[1]:
-            curr_counter = st.session_state["quick_clear_counter"]
+            curr_counter = st.session_state.get("quick_clear_counter", 0)
             current_res = st.session_state.get(f"quick_sr_{curr_counter}")
             current_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
             current_rbi = st.session_state.get(f"quick_si_{curr_counter}")
@@ -582,7 +581,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
                 st.markdown("---")
                 if st.button("🔄 入力をすべてクリア", use_container_width=True, key=f"clear_btn_{curr_counter}"):
-                    st.session_state["quick_clear_counter"] += 1
+                    st.session_state["quick_clear_counter"] = st.session_state.get("quick_clear_counter", 0) + 1
                     st.rerun()
 
         st.divider()
