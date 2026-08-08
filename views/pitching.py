@@ -168,8 +168,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             current_p = st.session_state.get("p_det_pitcher")
             if not current_p or current_p not in ALL_PLAYERS:
                 def_pitcher = ""
-                if not today_batting_df.empty and "位置" in today_batting_df.columns:
-                    latest_pitcher_rows = today_batting_df[today_batting_df["位置"] == "投"]
+                if not today_batting_df.empty and "守備位置" in today_batting_df.columns:
+                    latest_pitcher_rows = today_batting_df[today_batting_df["守備位置"] == "投"]
                     if not latest_pitcher_rows.empty:
                         def_pitcher = str(latest_pitcher_rows.iloc[-1]["選手名"])
                 if not def_pitcher:
@@ -209,8 +209,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             current_c = st.session_state.get("p_det_catcher")
             if not current_c or current_c not in ALL_PLAYERS:
                 def_catcher = ""
-                if not today_batting_df.empty and "位置" in today_batting_df.columns:
-                    latest_catcher_rows = today_batting_df[today_batting_df["位置"] == "捕"]
+                if not today_batting_df.empty and "守備位置" in today_batting_df.columns:
+                    latest_catcher_rows = today_batting_df[today_batting_df["守備位置"] == "捕"]
                     if not latest_catcher_rows.empty:
                         def_catcher = str(latest_catcher_rows.iloc[-1]["選手名"])
                 if not def_catcher:
@@ -398,14 +398,22 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 name_parts = []
                 for pos in target_fielder_pos_list:
                     found_name = ""
+                    # 1. saved_lineup から検索
                     for i in range(20):
                         if lineup.get(f"pos_{i}") == pos:
                             found_name = lineup.get(f"name_{i}", "").split(" (")[0].strip()
                             break
+                    
+                    # 2. saved_lineup で見つからない場合、本日のオーダー/打撃データからポジションで検索
+                    if not found_name and not today_batting_df.empty and "守備位置" in today_batting_df.columns:
+                        match_pos = today_batting_df[today_batting_df["守備位置"] == pos]
+                        if not match_pos.empty:
+                            found_name = str(match_pos.iloc[-1]["選手名"]).split(" (")[0].strip()
+
                     if found_name:
                         name_parts.append(found_name)
                     else:
-                        name_parts.append(f"({pos})")
+                        name_parts.append(f"({pos})")  # どちらにも存在しない場合のみ (二) 等にする
                 fielder_display = "-".join(name_parts)
 
             add_outs = 0
@@ -560,7 +568,22 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                             "結果": res_str
                         })
                     df_bat_disp = pd.DataFrame(bat_items).T
-                    st.dataframe(df_bat_disp, use_container_width=True)
+                    
+                    # 攻撃用の色付けルールを追加
+                    def highlight_batting(val):
+                        if isinstance(val, str):
+                            if "打点" in val:
+                                return "color: red; font-weight: bold;"
+                            elif any(hit in val for hit in ["単打", "二塁打", "三塁打", "本塁打"]):
+                                return "color: blue; font-weight: bold;"
+                        return ""
+                        
+                    try:
+                        styled_bat = df_bat_disp.style.map(highlight_batting)
+                    except AttributeError:
+                        styled_bat = df_bat_disp.style.applymap(highlight_batting)
+                        
+                    st.dataframe(styled_bat, use_container_width=True)
 
                 # --- 相手チームの攻撃（守備） ---
                 inn_pit_df = valid_pitching_df[valid_pitching_df["イニング"] == inn] if not valid_pitching_df.empty and "イニング" in valid_pitching_df.columns else pd.DataFrame()
@@ -579,9 +602,11 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                         pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
                         if pos_str and pos_str not in ["nan", "None", ""]:
                             raw_res = f"{raw_res}({pos_str})"
-                        fielder_str = str(row.get('処理野手', ''))
-                        if fielder_str and fielder_str not in ["nan", "None", ""]:
-                            res_text = f"{raw_res} [{fielder_str}]"
+                        # スプレッドシートの列名「処理野手」から値を取得します
+                        fielder_name = str(row.get('処理野手', ''))
+                        if fielder_name and fielder_name not in ["nan", "None", ""]:
+                            clean_name = fielder_name.replace("(", "").replace(")", "")
+                            res_text = f"{raw_res} [{clean_name}]"
                         else:
                             res_text = raw_res
                         rows_val = pd.to_numeric(row.get('失点', 0), errors='coerce')
@@ -595,17 +620,21 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                         })
                     df_pit_disp = pd.DataFrame(pit_items).T
                     
-                    def highlight_timely(val):
-                        if isinstance(val, str) and "💥失点" in val:
-                            return "color: red; font-weight: bold;"
+                    # 守備用の色付けルール（青字を追加）
+                    def highlight_pitching(val):
+                        if isinstance(val, str):
+                            if "💥失点" in val:
+                                return "color: red; font-weight: bold;"
+                            elif any(hit in val for hit in ["単打", "二塁打", "三塁打", "本塁打"]):
+                                return "color: blue; font-weight: bold;"
                         return ""
                     
                     try:
-                        styled_df = df_pit_disp.style.map(highlight_timely)
+                        styled_pit = df_pit_disp.style.map(highlight_pitching)
                     except AttributeError:
-                        styled_df = df_pit_disp.style.applymap(highlight_timely)
+                        styled_pit = df_pit_disp.style.applymap(highlight_pitching)
                         
-                    st.dataframe(styled_df, use_container_width=True)
+                    st.dataframe(styled_pit, use_container_width=True)
         else:
             st.caption("詳細データはまだありません。")
     else:
