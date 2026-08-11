@@ -6,7 +6,7 @@ from config.settings import MY_TEAM, OFFICIAL_GAME_TYPES, SPREADSHEET_URL
 from utils.db import load_batting_data, load_pitching_data
 from utils.ui import load_css, fmt_player_name
 from utils.players import get_active_players
-from views import batting, pitching, team_stats, personal_stats, edit_data, analysis, ideal_order, player_management
+from views import batting, pitching, team_stats, personal_stats, edit_data, analysis, ideal_order, player_management,team_sharing
 
 ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/logo-192.png?v=3"
 
@@ -106,7 +106,7 @@ st.sidebar.markdown("### ⚾️ KAGUSTA")
 
 page = st.sidebar.radio(
     "メニュー", 
-    [" 📝 試合データ入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正", " 👥 選手管理"]
+    [" 📝 試合データ入力", " 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析", " 🔧 データ修正", " 👥 選手管理"," 🤝 チーム間共有（テスト）",]
 )
 
 # ==========================================
@@ -359,3 +359,6 @@ elif page == " 🔧 データ修正":
 
 elif page == " 👥 選手管理":
     player_management.show_player_management()
+
+elif page == " 🤝 チーム間共有（テスト）": 
+    team_sharing.show_team_sharing_page()

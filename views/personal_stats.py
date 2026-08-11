@@ -233,6 +233,10 @@ def show_personal_stats(df_batting, df_pitching):
                 if not fld_expanded.empty:
                     fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
                     fld_expanded = fld_expanded[fld_expanded["FielderName"].isin(STATS_PLAYERS)]
+                    
+                    # ▼ 本塁打を守備機会から除外 ▼
+                    fld_expanded = fld_expanded[~fld_expanded["結果"].astype(str).str.contains("本塁打", na=False)]
+                    
                     fld_expanded["is_error"] = fld_expanded["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
                     
                     fld_unique = fld_expanded.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(is_error=("is_error", "max")).reset_index()
@@ -397,46 +401,23 @@ def show_personal_stats(df_batting, df_pitching):
             else: st.info("データなし")
 
         with st_fld:
-            if not df_p_tg.empty and "処理野手" in df_p_tg.columns and "守備位置" in df_p_tg.columns:
-                fld_base = df_p_tg.copy().reset_index(drop=True)
-                fld_base["Original_Idx"] = fld_base.index 
-                fld_data = fld_base[fld_base["処理野手"].notna() & (fld_base["処理野手"] != "")].copy()
+            # ▼ 上部で計算済みの `saber_f` を活用し、表示ロジックをシンプル化 ▼
+            if not saber_f.empty:
+                disp_df = saber_f[["選手名", "Defense_Score", "守備機会", "失策数", "守備率"]].copy()
+                disp_df.columns = ["選手名", "守備P", "守備機会", "失策", "守備率"]
                 
-                if not fld_data.empty:
-                    fld_data["処理野手"] = fld_data["処理野手"].astype(str)
-                    fld_data["守備位置"] = fld_data["守備位置"].astype(str)
-                    fld_data["zipped"] = fld_data.apply(lambda x: list(dict.fromkeys(zip(str(x["処理野手"]).split("-"), str(x["守備位置"]).split("-")))), axis=1)
-                    fld_expanded = fld_data.explode("zipped").reset_index(drop=True)
-                    
-                    if not fld_expanded.empty:
-                        fld_expanded[["FielderName", "FielderPos"]] = pd.DataFrame(fld_expanded["zipped"].tolist(), index=fld_expanded.index)
-                        fld_expanded = fld_expanded[fld_expanded["FielderName"].isin(STATS_PLAYERS)]
-                    else:
-                        fld_expanded["FielderName"] = ""; fld_expanded["FielderPos"] = ""
-
-                    if not fld_expanded.empty:
-                        fld_expanded["is_error"] = fld_expanded["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
-                        fld_unique = fld_expanded.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(is_error=("is_error", "max")).reset_index()
-
-                        stats_f = fld_unique.groupby(["FielderName", "FielderPos"]).agg(
-                            守備機会=("FielderName", "count"), 失策数=("is_error", "sum")
-                        ).reset_index()
-                        
-                        stats_f["守備率"] = stats_f.apply(lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, axis=1)
-                        pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                        stats_f["SortKey"] = stats_f["FielderPos"].apply(lambda x: pos_order.index(x) if x in pos_order else 99)
-                        stats_f = stats_f.sort_values(["SortKey", "守備機会"], ascending=[True, False]).reset_index(drop=True)
-                        
-                        disp_df = stats_f[["FielderPos", "FielderName", "守備機会", "失策数", "守備率"]].copy()
-                        disp_df.columns = ["守備位置", "選手名", "守備機会", "失策", "守備率"]
-                        disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
-                        disp_df = disp_df[disp_df["選手名"] != ""].reset_index(drop=True)
-                        disp_df.insert(0, "順位", range(1, len(disp_df) + 1))
-                        
-                        st.dataframe(disp_df, use_container_width=True, hide_index=True)
-                    else: st.info("守備記録なし")
-                else: st.info("守備記録なし")
-            else: st.info("データなし")
+                # 守備Pが高い順（同率なら守備率、次に守備機会が多い順）でソート
+                disp_df = disp_df.sort_values(["守備P", "守備率", "守備機会"], ascending=[False, False, False]).reset_index(drop=True)
+                
+                disp_df["守備P"] = disp_df["守備P"].map(lambda x: f"{x:.1f}")
+                disp_df["守備率"] = disp_df["守備率"].map(lambda x: f"{x:.3f}")
+                
+                disp_df = disp_df[disp_df["選手名"] != ""].reset_index(drop=True)
+                disp_df.insert(0, "順位", range(1, len(disp_df) + 1))
+                
+                st.dataframe(disp_df, use_container_width=True, hide_index=True)
+            else: 
+                st.info("守備記録がありません")
 
         with st_game:
             if not df_batting.empty or not df_pitching.empty:
@@ -642,6 +623,10 @@ def show_personal_stats(df_batting, df_pitching):
                     fld_base_all["Year"] = pd.to_datetime(fld_base_all["日付"], errors='coerce').dt.strftime('%Y').fillna("不明")
                 fld_base_all["Original_Idx"] = fld_base_all.index
                 fld_base = fld_base_all[fld_base_all["処理野手"].notna() & (fld_base_all["処理野手"] != "")].copy()
+                
+                # ▼ 本塁打を守備機会から除外 ▼
+                if not fld_base.empty:
+                    fld_base = fld_base[~fld_base["結果"].astype(str).str.contains("本塁打", na=False)]
                 
                 if not fld_base.empty:
                     fld_base["処理野手"] = fld_base["処理野手"].astype(str)
