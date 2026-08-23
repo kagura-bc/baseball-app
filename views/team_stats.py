@@ -558,14 +558,44 @@ def show_team_stats(df_batting, df_pitching):
 
                         df_summary = pd.DataFrame(summary_list)
                         
-                        first_app = df_batting.reset_index().groupby("選手名")["index"].min()
-                        if "選手名" in df_summary.columns:
-                            df_summary["登場順"] = df_summary["選手名"].map(first_app)
-                        else:
-                            df_summary["登場順"] = df_summary.index.map(first_app)
-                            
+                        # ★ 1. 選手名のスペース表記揺れを統一した作業用データの作成
+                        match_bat_copy = match_bat.copy()
+                        match_bat_copy["選手名_統一"] = match_bat_copy["選手名"].astype(str).str.replace(r'[\s ]+', '', regex=True)
+
+                        # ★ 2. イニングの時系列数値化関数（1回表:2, 1回裏:3, 5回表:10...）
+                        def parse_inn_order(inn_str):
+                            s = str(inn_str).strip()
+                            if not s or s in ["nan", "None", "まとめ入力", "ベンチ", "試合前"]:
+                                return 9999
+                            m = re.search(r'(\d+)', s)
+                            num = int(m.group(1)) if m else 99
+                            is_ext = 100 if "延長" in s else 0
+                            sub = 0 if "表" in s else (1 if "裏" in s else 0.5)
+                            return is_ext + num * 2 + sub
+
+                        # 各レコードの登場イニング順と入力行順をセット
+                        match_bat_copy["inn_order"] = match_bat_copy["イニング"].apply(parse_inn_order)
+                        match_bat_copy["row_id"] = range(len(match_bat_copy))
+
+                        # 選手ごとの「最も早い登場イニング」と「最も早い行番号」を取得
+                        first_app = match_bat_copy.groupby("選手名_統一").agg(
+                            min_inn=("inn_order", "min"),
+                            min_row=("row_id", "min")
+                        ).reset_index()
+
+                        # 照合用辞書の作成
+                        inn_map = dict(zip(first_app["選手名_統一"], first_app["min_inn"]))
+                        row_map = dict(zip(first_app["選手名_統一"], first_app["min_row"]))
+
+                        # ★ 3. df_summary 側も統一名でマッピングして時系列ソート
+                        df_summary["選手名_統一"] = df_summary["選手名"].astype(str).str.replace(r'[\s ]+', '', regex=True)
+                        df_summary["登場イニング"] = df_summary["選手名_統一"].map(inn_map).fillna(9999)
+                        df_summary["登場行順"] = df_summary["選手名_統一"].map(row_map).fillna(9999)
+
                         df_summary["打順"] = pd.to_numeric(df_summary["打順"], errors='coerce')
-                        df_summary = df_summary.sort_values(["打順", "登場順"])
+                        
+                        # 打順 ➔ 登場イニング（時系列） ➔ 登場行順 でソート
+                        df_summary = df_summary.sort_values(["打順", "登場イニング", "登場行順"]).reset_index(drop=True)
                         df_summary["打順"] = df_summary["打順"].fillna(0).astype(int).astype(str).replace("0", "")
                         
                         table_html = (
