@@ -186,13 +186,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 name_val = latest_info["name"]
                 pos_val = latest_info["pos"]
                 
-                if name_key not in st.session_state and name_val and name_val not in ["nan", "チーム記録", ""]:
+                # ★ 修正: 未設定の場合や初回ロード時にスプレッドシートの最新状態から確実に復元
+                if name_val and name_val not in ["nan", "チーム記録", ""]:
                     matched_name = next((p for p in player_options if p.split(" (")[0].strip() == name_val or p == name_val), None)
-                    if matched_name:
+                    if matched_name and (name_key not in st.session_state or not st.session_state[name_key]):
                         st.session_state[name_key] = matched_name
                         
-                if pos_key not in st.session_state and pos_val and pos_val in pos_options and pos_val not in ["nan", "－"]:
-                    st.session_state[pos_key] = pos_val
+                if pos_val and pos_val in pos_options and pos_val not in ["nan", "－"]:
+                    if pos_key not in st.session_state or not st.session_state[pos_key]:
+                        st.session_state[pos_key] = pos_val
 
     # ==========================================
     # 3. スコアボード表示
@@ -274,19 +276,53 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         rows_to_add = []
         current_date_formatted = pd.to_datetime(selected_date_str).strftime('%Y-%m-%d')
         
-        # 🌟 スコアラー情報を確実に対象UIのキーまたはセッションから取得
-        scorer = st.session_state.get("scorer_name_ui", "")
-        if not scorer:
-            scorer = st.session_state.get("persistent_scorer", "")
+        curr_counter = st.session_state.get("quick_clear_counter", 0)
         
+        # ★ 登録実行時点のBSO・球数カウントを取得
+        pitch_count_val = st.session_state.get(f"pitch_count_{curr_counter}", 0)
+        strike_count_val = st.session_state.get(f"s_count_{curr_counter}", 0)
+        ball_count_val = st.session_state.get(f"b_count_{curr_counter}", 0)
+        
+        # ★ グラウンド・対戦相手・試合種別・攻守の空文字防止ガード（補完ロジック）
+        final_ground = ground_name or st.session_state.get("ground_name", "")
+        final_opp = opp_team or st.session_state.get("opp_team", "")
+        final_match_type = match_type or st.session_state.get("match_type", "")
+        final_order = kagura_order or st.session_state.get("kagura_order", "先攻 (表)")
+
+        # 本日の既存データがあればそこから自動補完
+        if not today_batting_df.empty:
+            if not final_ground and "グラウンド" in today_batting_df.columns:
+                valid_g = today_batting_df["グラウンド"].dropna().astype(str).str.strip()
+                valid_g = valid_g[~valid_g.isin(["", "nan", "None"])]
+                if not valid_g.empty: final_ground = valid_g.iloc[-1]
+            if not final_opp and "対戦相手" in today_batting_df.columns:
+                valid_o = today_batting_df["対戦相手"].dropna().astype(str).str.strip()
+                valid_o = valid_o[~valid_o.isin(["", "nan", "None"])]
+                if not valid_o.empty: final_opp = valid_o.iloc[-1]
+            if not final_match_type and "試合種別" in today_batting_df.columns:
+                valid_m = today_batting_df["試合種別"].dropna().astype(str).str.strip()
+                valid_m = valid_m[~valid_m.isin(["", "nan", "None"])]
+                if not valid_m.empty: final_match_type = valid_m.iloc[-1]
+
+        scorer = st.session_state.get("scorer_name_ui", "") or st.session_state.get("persistent_scorer", "")
         display_count = st.session_state.get("display_order_count", 9)
         
         if "saved_lineup" not in st.session_state:
             st.session_state["saved_lineup"] = {}
 
+        # スタメン登録有無のチェック
         has_today_lineup = False
-        if not today_batting_df.empty:
-            has_today_lineup = not today_batting_df[today_batting_df["結果"].astype(str) == "スタメン"].empty
+        if not df_batting.empty and "結果" in df_batting.columns:
+            df_bat_check = df_batting.copy()
+            df_bat_check["_date_str"] = pd.to_datetime(df_bat_check["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+            
+            match_mask = (
+                (df_bat_check["_date_str"] == current_date_formatted) &
+                (df_bat_check["対戦相手"].astype(str).str.strip() == str(final_opp).strip()) &
+                (df_bat_check["試合種別"].astype(str).str.strip() == str(final_match_type).strip()) &
+                (df_bat_check["結果"].astype(str) == "スタメン")
+            )
+            has_today_lineup = not df_bat_check[match_mask].empty
 
         if not has_today_lineup:
             for i in range(display_count):
@@ -301,8 +337,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
                     rows_to_add.append({
                         "日付": current_date_formatted,
-                        "対戦相手": opp_team,
-                        "試合種別": match_type,
+                        "対戦相手": final_opp,
+                        "試合種別": final_match_type,
                         "イニング": "試合前",
                         "打順": i + 1,
                         "選手名": clean_name,
@@ -312,8 +348,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
-                        "攻守": kagura_order,
-                        "グラウンド": ground_name
+                        "攻守": final_order,
+                        "グラウンド": final_ground
                     })
                     st.session_state.setdefault("lineup_states", {})[i] = {
                         "name": clean_name,
@@ -334,8 +370,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     if prev_name and prev_name != clean_name:
                         rows_to_add.append({
                             "日付": current_date_formatted,
-                            "対戦相手": opp_team,
-                            "試合種別": match_type,
+                            "対戦相手": final_opp,
+                            "試合種別": final_match_type,
                             "イニング": inn_val,
                             "打順": i + 1,
                             "選手名": clean_name,
@@ -345,16 +381,16 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
-                            "攻守": kagura_order,
-                            "グラウンド": ground_name
+                            "攻守": final_order,
+                            "グラウンド": final_ground
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
                     
                     elif prev_name == clean_name and prev_pos and prev_pos != current_pos:
                         rows_to_add.append({
                             "日付": current_date_formatted,
-                            "対戦相手": opp_team,
-                            "試合種別": match_type,
+                            "対戦相手": final_opp,
+                            "試合種別": final_match_type,
                             "イニング": inn_val,
                             "打順": i + 1,
                             "選手名": clean_name,
@@ -364,8 +400,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
-                            "攻守": kagura_order,
-                            "グラウンド": ground_name
+                            "攻守": final_order,
+                            "グラウンド": final_ground
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
 
@@ -382,8 +418,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if clean_b_name and clean_b_name not in registered_bench_names:
                 rows_to_add.append({
                     "日付": current_date_formatted,
-                    "対戦相手": opp_team,
-                    "試合種別": match_type,
+                    "対戦相手": final_opp,
+                    "試合種別": final_match_type,
                     "イニング": "試合前",
                     "打順": "",
                     "選手名": clean_b_name,
@@ -393,8 +429,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打点": 0,
                     "得点": 0,
                     "スコアラー": scorer,
-                    "攻守": kagura_order,
-                    "グラウンド": ground_name
+                    "攻守": final_order,
+                    "グラウンド": final_ground
                 })
                 registered_bench_names.add(clean_b_name)
 
@@ -403,6 +439,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         quick_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
         quick_rbi = st.session_state.get(f"quick_si_{curr_counter}")
         
+        target_batter_name = ""
         if quick_res:
             dir_str = "".join(quick_dirs) if quick_dirs else "---"
             rbi_val = int(quick_rbi) if quick_rbi is not None else 0
@@ -432,8 +469,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
                 rows_to_add.append({
                     "日付": current_date_formatted,
-                    "対戦相手": opp_team,
-                    "試合種別": match_type,
+                    "対戦相手": final_opp,
+                    "試合種別": final_match_type,
                     "イニング": inn_val,
                     "打順": batter_idx + 1,
                     "選手名": clean_batter_name,
@@ -443,18 +480,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打点": rbi_val,
                     "得点": auto_run,
                     "スコアラー": scorer,
-                    "攻守": kagura_order,
-                    "グラウンド": ground_name,
+                    "攻守": final_order,
+                    "グラウンド": final_ground,
                     "ストライク": strike_count_val,  
                     "ボール": ball_count_val
                 })
 
-        # ==========================================
-        # ★ 追加: 走者の記録登録と自動残塁判定
-        # ==========================================
+        # 走者の記録登録と自動残塁判定
         single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振", "野選", "牽制死"]
         
-        # 1. すでに記録されているアウト数を計算
         existing_outs = 0
         if not today_batting_df.empty:
             inn_df_check = today_batting_df[today_batting_df["イニング"] == inn_val]
@@ -462,21 +496,16 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
             existing_outs = s_outs + d_outs
 
-        # 2. 今回のプレイで発生したアウト数を加算
         play_outs = 0
-        if quick_res in single_out_list:
-            play_outs += 1
-        elif quick_res == "併殺打":
-            play_outs += 2
+        if quick_res in single_out_list: play_outs += 1
+        elif quick_res == "併殺打": play_outs += 2
             
         for base in ["1b", "2b", "3b"]:
             if st.session_state.get(f"runner_{base}_res_{curr_counter}") in ["走塁死", "盗塁死", "牽制死"]:
                 play_outs += 1
 
-        # 計3アウト以上になったか判定
         is_change = (existing_outs + play_outs >= 3)
 
-        # 3. 各走者の処理を実行
         for base in ["1b", "2b", "3b"]:
             r_name_raw = st.session_state.get(f"runner_{base}_{curr_counter}")
             r_res = st.session_state.get(f"runner_{base}_res_{curr_counter}")
@@ -485,7 +514,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if r_name_raw:
                 clean_r_name = r_name_raw.split(" (")[0].strip()
                 
-                # スコアボード用に該当選手の打順を取得
                 order_num = ""
                 for i in range(display_count):
                     n = st.session_state.get(f"sn{i}")
@@ -494,18 +522,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         break
 
                 if r_res:
-                    # ピルで具体的な走塁結果（得点や盗塁など）が選ばれている場合
                     is_score = (r_res == "得点")
                     res_val = "走塁記録" if is_score else r_res
                     score_val = 1 if is_score else 0
-                    
-                    # 処理野手が選択されている場合は打球方向フィールドに設定
                     dir_val = r_fielder if r_fielder and r_res in ["走塁死", "盗塁死", "牽制死"] else "---"
                     
                     rows_to_add.append({
                         "日付": current_date_formatted,
-                        "対戦相手": opp_team,
-                        "試合種別": match_type,
+                        "対戦相手": final_opp,
+                        "試合種別": final_match_type,
                         "イニング": inn_val,
                         "打順": order_num,
                         "選手名": clean_r_name,
@@ -515,15 +540,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打点": 0,
                         "得点": score_val,
                         "スコアラー": scorer,
-                        "攻守": kagura_order,
-                        "グラウンド": ground_name
+                        "攻守": final_order,
+                        "グラウンド": final_ground
                     })
                 elif is_change:
-                    # 結果が未選択の状態で、3アウトチェンジになった場合は自動で「残塁」
                     rows_to_add.append({
                         "日付": current_date_formatted,
-                        "対戦相手": opp_team,
-                        "試合種別": match_type,
+                        "対戦相手": final_opp,
+                        "試合種別": final_match_type,
                         "イニング": inn_val,
                         "打順": order_num,
                         "選手名": clean_r_name,
@@ -533,48 +557,39 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
-                        "攻守": kagura_order,
-                        "グラウンド": ground_name
+                        "攻守": final_order,
+                        "グラウンド": final_ground
                     })
 
-        # ==========================================
-        # ★ 修正: 次の打席へ走者を引き継ぐ処理（実行ボタン押下時に進塁を計算）
-        # ==========================================
+        # ★ 走者の進塁・引き継ぎ計算（名前に player_options との完全一致補完を適用）
         if is_change:
-            # 3アウトチェンジになった場合は塁をリセット
             st.session_state["persistent_runners"] = {"1b": None, "2b": None, "3b": None}
         else:
-            # 走者の位置を数値で管理 (1: 1塁, 2: 2塁, 3: 3塁, 4以上: 本塁/得点)
             runner_positions = {}
-            
-            # 1. 既存の走者のピル（盗塁、進塁、得点など）による移動を処理
             for base_str, base_num in [("1b", 1), ("2b", 2), ("3b", 3)]:
                 r_name = st.session_state.get(f"runner_{base_str}_{curr_counter}")
                 r_res = st.session_state.get(f"runner_{base_str}_res_{curr_counter}")
                 
                 if r_name:
+                    matched_r = next((p for p in player_options if p == r_name or p.split(" (")[0].strip() == r_name.split(" (")[0].strip()), r_name)
                     if r_res in ["得点", "走塁死", "盗塁死", "牽制死"]:
-                        # 得点やアウトの場合は塁から消去（スキップ）する
                         continue
                     
                     new_base = base_num
                     if r_res in ["盗塁", "進塁"]:
-                        new_base += 1 # 1つ先の塁へ進める
+                        new_base += 1
                         
-                    runner_positions[r_name] = new_base
+                    runner_positions[matched_r] = new_base
 
-            # 2. 打席結果（quick_res）による自動進塁・押し出しを処理
-            batter_raw = target_batter_name if 'target_batter_name' in locals() else None
-            
-            # 押し出し判定用に、指定した塁に誰かいるか確認する関数
-            def get_runner_at(pos):
-                for name, p in runner_positions.items():
-                    if p == pos: return name
-                return None
-
+            batter_raw = target_batter_name
             if batter_raw:
+                matched_b = next((p for p in player_options if p == batter_raw or p.split(" (")[0].strip() == batter_raw.split(" (")[0].strip()), batter_raw)
+                def get_runner_at(pos):
+                    for name, p in runner_positions.items():
+                        if p == pos: return name
+                    return None
+
                 if quick_res in ["四球", "死球"]:
-                    # 押し出し判定（1塁から順に玉突き）
                     r1 = get_runner_at(1)
                     r2 = get_runner_at(2)
                     r3 = get_runner_at(3)
@@ -582,43 +597,32 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     if r1: runner_positions[r1] = 2
                     if r1 and r2: runner_positions[r2] = 3
                     if r1 and r2 and r3: runner_positions[r3] = 4
-                    runner_positions[batter_raw] = 1 # 打者は1塁へ
+                    runner_positions[matched_b] = 1
                     
                 elif quick_res == "単打":
-                    # ランナー全員が1つ進塁し、打者が1塁へ
-                    for name in list(runner_positions.keys()):
-                        runner_positions[name] += 1
-                    runner_positions[batter_raw] = 1
+                    for name in list(runner_positions.keys()): runner_positions[name] += 1
+                    runner_positions[matched_b] = 1
                     
                 elif quick_res == "二塁打":
-                    # ランナー全員が2つ進塁し、打者が2塁へ
-                    for name in list(runner_positions.keys()):
-                        runner_positions[name] += 2
-                    runner_positions[batter_raw] = 2
+                    for name in list(runner_positions.keys()): runner_positions[name] += 2
+                    runner_positions[matched_b] = 2
                     
                 elif quick_res == "三塁打":
-                    # ランナー全員が3つ進塁し、打者が3塁へ
-                    for name in list(runner_positions.keys()):
-                        runner_positions[name] += 3
-                    runner_positions[batter_raw] = 3
+                    for name in list(runner_positions.keys()): runner_positions[name] += 3
+                    runner_positions[matched_b] = 3
                     
                 elif quick_res == "本塁打":
-                    # 全員ホームインして塁を空にする
                     runner_positions.clear()
                     
                 elif quick_res in ["野選", "失策(ゴロ)", "失策(フライ)", "振り逃げ三振", "打撃妨害"]:
-                    # エラー等の場合は打者が1塁へ出塁（他の走者はピルで手動進塁させる想定）
-                    runner_positions[batter_raw] = 1
+                    runner_positions[matched_b] = 1
 
-            # 3. 最終的な塁状況を next_runners にマッピング
             next_runners = {"1b": None, "2b": None, "3b": None}
             for name, pos in runner_positions.items():
                 if pos == 1: next_runners["1b"] = name
                 elif pos == 2: next_runners["2b"] = name
                 elif pos == 3: next_runners["3b"] = name
-                # pos >= 4 はホームイン（得点）扱いとして塁に残さない
 
-            # 4. 計算した次の走者状況をセッションに保存
             st.session_state["persistent_runners"] = next_runners
 
         if rows_to_add:
@@ -636,7 +640,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=df_to_save)
                 st.session_state[cache_key] = updated_full_df
                 
-                st.session_state["quick_clear_counter"] = st.session_state.get("quick_clear_counter", 0) + 1
+                next_counter = curr_counter + 1
+                st.session_state["quick_clear_counter"] = next_counter
+
+                # ★ 打席結果（PA_RESULTS）が確定していない場合（盗塁・進塁などの走塁記録のみの場合）、カウントと球数を維持
+                is_pa_completed = bool(quick_res and quick_res in PA_RESULTS)
+                if not is_pa_completed:
+                    st.session_state[f"b_count_{next_counter}"] = ball_count_val
+                    st.session_state[f"s_count_{next_counter}"] = strike_count_val
+                    st.session_state[f"pitch_count_{next_counter}"] = pitch_count_val
 
                 st.success("登録しました！")
                 st.rerun()
@@ -730,14 +742,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#22c55e;'>🟢 ボール</div>", unsafe_allow_html=True)
                 bc1, bc2 = st.columns(2)
                 with bc1:
-                    if st.button("➖", key=f"btn_b_sub_{curr_counter}", use_container_width=True):
+                    if st.button("➖", key=f"btn_b_sub_{curr_counter}", use_container_width=True, disabled=(b_cnt <= 0)):
                         st.session_state[f"pitch_count_{curr_counter}"] = max(0, p_cnt - 1)
                         st.session_state[f"b_count_{curr_counter}"] = max(0, b_cnt - 1)
                         st.rerun()
                 with bc2:
-                    if st.button("➕", key=f"btn_b_add_{curr_counter}", use_container_width=True):
-                        st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
+                    # ★ B=3の時は ➕ ボタンを無効化し、4個目を入力不可にする
+                    if st.button("➕", key=f"btn_b_add_{curr_counter}", use_container_width=True, disabled=(b_cnt >= 3)):
                         if b_cnt < 3:
+                            st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
                             st.session_state[f"b_count_{curr_counter}"] = b_cnt + 1
                         st.rerun()
 
@@ -746,14 +759,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#eab308;'>🟡 ストライク</div>", unsafe_allow_html=True)
                 sc1, sc2 = st.columns(2)
                 with sc1:
-                    if st.button("➖", key=f"btn_s_sub_{curr_counter}", use_container_width=True):
+                    if st.button("➖", key=f"btn_s_sub_{curr_counter}", use_container_width=True, disabled=(s_cnt <= 0)):
                         st.session_state[f"pitch_count_{curr_counter}"] = max(0, p_cnt - 1)
                         st.session_state[f"s_count_{curr_counter}"] = max(0, s_cnt - 1)
                         st.rerun()
                 with sc2:
-                    if st.button("➕", key=f"btn_s_add_{curr_counter}", use_container_width=True):
-                        st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
+                    # ★ S=2の時は ➕ ボタンを無効化し、3個目を入力不可にする
+                    if st.button("➕", key=f"btn_s_add_{curr_counter}", use_container_width=True, disabled=(s_cnt >= 2)):
                         if s_cnt < 2:
+                            st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
                             st.session_state[f"s_count_{curr_counter}"] = s_cnt + 1
                         st.rerun()
 
@@ -762,10 +776,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#6b7280;'>⚪ ファール</div>", unsafe_allow_html=True)
                 fc1, fc2 = st.columns(2)
                 with fc1:
-                    if st.button("➖", key=f"btn_f_sub_{curr_counter}", use_container_width=True):
+                    if st.button("➖", key=f"btn_f_sub_{curr_counter}", use_container_width=True, disabled=(p_cnt <= 0)):
                         st.session_state[f"pitch_count_{curr_counter}"] = max(0, p_cnt - 1)
                         st.rerun()
                 with fc2:
+                    # ファールは2ストライク後も球数のみ加算（ストライク数は2で保持）
                     if st.button("➕", key=f"btn_f_add_{curr_counter}", use_container_width=True):
                         st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
                         if s_cnt < 2:
@@ -852,12 +867,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         # ==========================================
         # 走者タブ (3塁 ← 2塁 ← 1塁：ダイヤモンド順)
         # ==========================================
-        if f"runner_init_{curr_counter}" not in st.session_state:
-            p_runners = st.session_state.get("persistent_runners", {"1b": None, "2b": None, "3b": None})
-            st.session_state[f"runner_1b_{curr_counter}"] = p_runners.get("1b")
-            st.session_state[f"runner_2b_{curr_counter}"] = p_runners.get("2b")
-            st.session_state[f"runner_3b_{curr_counter}"] = p_runners.get("3b")
-            st.session_state[f"runner_init_{curr_counter}"] = True
+        p_runners = st.session_state.get("persistent_runners", {"1b": None, "2b": None, "3b": None})
+        
+        # ★ カウンター変更時や画面更新時に persistent_runners から走者を確実に引き継ぎ復元
+        for b_key in ["1b", "2b", "3b"]:
+            curr_r_key = f"runner_{b_key}_{curr_counter}"
+            if curr_r_key not in st.session_state or st.session_state[curr_r_key] is None:
+                st.session_state[curr_r_key] = p_runners.get(b_key)
 
         st.markdown("##### 🏃 走者状況")
         
