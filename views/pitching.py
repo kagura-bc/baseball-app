@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
-from config.settings import SPREADSHEET_URL, MY_TEAM
+from config.settings import SPREADSHEET_URL, MY_TEAM, ALL_POSITIONS
 from utils.players import get_active_players
 from utils.ui import fmt_player_name
 from utils.ui import render_scoreboard
@@ -48,6 +48,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     
     ws_pitching = "投手成績"
     is_kagura_top = (kagura_order == "先攻 (表)")
+    pos_options = [p for p in ALL_POSITIONS if p != ""] + ["未選択"]
 
     conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -64,7 +65,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     if st.session_state["last_p_match_id"] != current_match_id:
         keys_to_reset = ["p_det_inn", "opp_batter_index", "pitching_quick_sr", "pitching_quick_sd", "pitching_quick_run", "pitching_quick_er", "quick_dec_pitcher", "quick_dec_type", "p_b_count", "p_s_count", "p_pitch_count", "p_persistent_runners", "p_runner_1b", "p_runner_2b", "p_runner_3b", "p_runner_1b_res", "p_runner_2b_res", "p_runner_3b_res", "p_runner_1b_fielder", "p_runner_2b_fielder", "p_runner_3b_fielder"]
         for k in list(st.session_state.keys()):
-            if k in keys_to_reset or k.startswith("sync_"): 
+            if k in keys_to_reset or k.startswith("sync_") or k.startswith("opp_sp_") or k.startswith("opp_sn_"): 
                 del st.session_state[k]
         st.session_state["last_p_match_id"] = current_match_id
 
@@ -363,7 +364,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         st.divider()
 
         # ==========================================
-        # 🏃 走者状況（打撃入力画面と同じ位置・UI構造）
+        # 🏃 走者状況
         # ==========================================
         st.markdown("##### 🏃 走者状況")
         
@@ -442,12 +443,96 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("1塁処理野手ピル", out_fielder_options, key="p_runner_1b_fielder", label_visibility="collapsed")
 
-        # 走者選択ピルの状態と persistent_runners を同期
         st.session_state["p_persistent_runners"] = {
             "1b": "走者" if st.session_state.get("p_runner_1b") == "走者" else None,
             "2b": "走者" if st.session_state.get("p_runner_2b") == "走者" else None,
             "3b": "走者" if st.session_state.get("p_runner_3b") == "走者" else None,
         }
+
+        st.divider()
+
+        # ==========================================
+        # 👥 相手オーダー一覧（可変人数対応：最大20名）
+        # ==========================================
+        opp_count = st.session_state.get("opp_batter_count", 9)
+        curr_opp_idx = st.session_state.get("opp_batter_index", 1)
+
+        # 打者ごとの本日対戦履歴を事前集計
+        opp_history_dict = {}
+        if not today_pitching_df.empty and "種別" in today_pitching_df.columns:
+            for _, row in today_pitching_df.iterrows():
+                kind_str = str(row.get("種別", ""))
+                if "詳細:" in kind_str:
+                    try:
+                        b_num = int(kind_str.split(":")[1].replace("番打者", ""))
+                        res = row.get("結果", "")
+                        direction = row.get("打球方向", "")
+                        res_text = f"{direction}{res}" if direction and direction != "---" else f"{res}"
+                        runs_val = pd.to_numeric(row.get("失点", 0), errors='coerce')
+                        if pd.notna(runs_val) and int(runs_val) > 0:
+                            res_text += f"💥失点{int(runs_val)}"
+                        opp_history_dict.setdefault(b_num, []).append(res_text)
+                    except:
+                        pass
+
+        for i in range(opp_count):
+            order_num = i + 1
+            pos_key = f"opp_sp_{i}"
+            name_key = f"opp_sn_{i}"
+
+            if pos_key not in st.session_state: st.session_state[pos_key] = "未選択"
+            if name_key not in st.session_state: st.session_state[name_key] = "選手"
+
+            is_current = (order_num == curr_opp_idx)
+
+            with st.container(border=True):
+                c_row = st.columns([0.8, 2.5, 3.5, 5.2])
+
+                with c_row[0]:
+                    prefix = "📍 " if is_current else ""
+                    st.markdown(f"<div style='text-align:center; font-size:16px; font-weight:bold; padding-top:10px; color:{'#22c55e' if is_current else '#333'};'>{prefix}{order_num}</div>", unsafe_allow_html=True)
+
+                with c_row[1]:
+                    cur_pos = st.session_state.get(pos_key, "未選択")
+                    pos_btn_label = f"🟢 {cur_pos} 🔽" if cur_pos != "未選択" else "未選択 🔽"
+                    with st.popover(pos_btn_label, use_container_width=True):
+                        st.markdown(f"##### {order_num}番 守備位置を選択")
+                        st.pills(f"相手守備 {i}", pos_options, key=pos_key, label_visibility="collapsed")
+
+                with c_row[2]:
+                    cur_name = st.session_state.get(name_key, "選手")
+                    name_btn_label = f"🟢 {cur_name} 🔽" if cur_name != "選手" else "選手 🔽"
+                    with st.popover(name_btn_label, use_container_width=True):
+                        st.markdown(f"##### {order_num}番 選手を選択")
+                        st.pills(f"相手選手 {i}", ["選手"], key=name_key, label_visibility="collapsed")
+
+                with c_row[3]:
+                    hist_list = opp_history_dict.get(order_num, [])
+                    hist_html = []
+                    for idx, h in enumerate(hist_list, 1):
+                        color = "color: red;" if "💥" in h else ("color: blue;" if any(hit in h for hit in ["単打", "二塁打", "三塁打", "本塁打"]) else "")
+                        hist_html.append(f"<span style='{color}'>{idx}({h})</span>")
+                    history_text = " ".join(hist_html)
+                    st.markdown(f"<div style='font-size:15px; line-height:1.4; padding-top:6px; color:#444; overflow-x:auto; white-space:nowrap;'>{history_text}</div>", unsafe_allow_html=True)
+
+        # 打順の表示人数追加・削減用UI（打撃成績入力と同等の操作感）
+        st.divider()
+        col_disp1, col_disp2, col_disp3 = st.columns([2.0, 1.0, 1.0])
+        with col_disp1:
+            st.markdown(f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>👥 相手打順の表示人数: {st.session_state.get('opp_batter_count', 9)}人</div>", unsafe_allow_html=True)
+        with col_disp2:
+            if st.button("➖ 減らす", key="btn_opp_dec", use_container_width=True):
+                if st.session_state["opp_batter_count"] > 9:
+                    st.session_state["opp_batter_count"] -= 1
+                    idx = st.session_state["opp_batter_count"]
+                    for k in [f"opp_sn_{idx}", f"opp_sp_{idx}"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
+        with col_disp3:
+            if st.button("➕ 追加 (最大20)", key="btn_opp_inc", use_container_width=True):
+                if st.session_state["opp_batter_count"] < 20:
+                    st.session_state["opp_batter_count"] += 1
+                    st.rerun()
 
         st.divider()
 

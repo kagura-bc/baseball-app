@@ -558,11 +558,9 @@ def show_team_stats(df_batting, df_pitching):
 
                         df_summary = pd.DataFrame(summary_list)
                         
-                        # ★ 1. 選手名のスペース表記揺れを統一した作業用データの作成
                         match_bat_copy = match_bat.copy()
                         match_bat_copy["選手名_統一"] = match_bat_copy["選手名"].astype(str).str.replace(r'[\s ]+', '', regex=True)
 
-                        # ★ 2. イニングの時系列数値化関数（1回表:2, 1回裏:3, 5回表:10...）
                         def parse_inn_order(inn_str):
                             s = str(inn_str).strip()
                             if not s or s in ["nan", "None", "まとめ入力", "ベンチ", "試合前"]:
@@ -573,28 +571,23 @@ def show_team_stats(df_batting, df_pitching):
                             sub = 0 if "表" in s else (1 if "裏" in s else 0.5)
                             return is_ext + num * 2 + sub
 
-                        # 各レコードの登場イニング順と入力行順をセット
                         match_bat_copy["inn_order"] = match_bat_copy["イニング"].apply(parse_inn_order)
                         match_bat_copy["row_id"] = range(len(match_bat_copy))
 
-                        # 選手ごとの「最も早い登場イニング」と「最も早い行番号」を取得
                         first_app = match_bat_copy.groupby("選手名_統一").agg(
                             min_inn=("inn_order", "min"),
                             min_row=("row_id", "min")
                         ).reset_index()
 
-                        # 照合用辞書の作成
                         inn_map = dict(zip(first_app["選手名_統一"], first_app["min_inn"]))
                         row_map = dict(zip(first_app["選手名_統一"], first_app["min_row"]))
 
-                        # ★ 3. df_summary 側も統一名でマッピングして時系列ソート
                         df_summary["選手名_統一"] = df_summary["選手名"].astype(str).str.replace(r'[\s ]+', '', regex=True)
                         df_summary["登場イニング"] = df_summary["選手名_統一"].map(inn_map).fillna(9999)
                         df_summary["登場行順"] = df_summary["選手名_統一"].map(row_map).fillna(9999)
 
                         df_summary["打順"] = pd.to_numeric(df_summary["打順"], errors='coerce')
                         
-                        # 打順 ➔ 登場イニング（時系列） ➔ 登場行順 でソート
                         df_summary = df_summary.sort_values(["打順", "登場イニング", "登場行順"]).reset_index(drop=True)
                         df_summary["打順"] = df_summary["打順"].fillna(0).astype(int).astype(str).replace("0", "")
                         
@@ -644,7 +637,16 @@ def show_team_stats(df_batting, df_pitching):
 
                     summary_list = []
                     for p_name, group in personal_pit.groupby("投手名", sort=False):
-                        balls = pd.to_numeric(group["球数"], errors='coerce').fillna(0).sum()
+                        # 🌟 球数の集計ロジック（「球数」列の合計、未入力時は「ストライク」「ボール」列の合算）
+                        balls = 0
+                        if "球数" in group.columns:
+                            balls = pd.to_numeric(group["球数"], errors='coerce').fillna(0).sum()
+                        
+                        if balls == 0:
+                            s_cnt = pd.to_numeric(group.get("ストライク", 0), errors='coerce').fillna(0).sum()
+                            b_cnt = pd.to_numeric(group.get("ボール", 0), errors='coerce').fillna(0).sum()
+                            balls = s_cnt + b_cnt
+
                         runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
                         er = pd.to_numeric(group["自責点"], errors='coerce').fillna(0).sum()
                         
@@ -706,7 +708,6 @@ def show_team_stats(df_batting, df_pitching):
                     st.write("")
                     st.markdown("##### 📊 全イニング 攻撃・守備 詳細履歴")
                     
-                    # 🌟 画面右下に追従（フローティング）表示する「スコア画面に戻る」ボタン
                     st.markdown(
                         """
                         <style>
@@ -740,7 +741,6 @@ def show_team_stats(df_batting, df_pitching):
                     valid_batting_df = match_bat[~match_bat["結果"].astype(str).isin(exclude_res)].copy() if not match_bat.empty else pd.DataFrame()
                     valid_pitching_df = match_pit[match_pit["種別"].str.contains("詳細", na=False)].copy() if not match_pit.empty else pd.DataFrame()
 
-                    # 存在しているすべてのイニングを収集して重複を削除
                     raw_inns = list(set(
                         valid_batting_df["イニング"].dropna().astype(str).tolist() + 
                         valid_pitching_df["イニング"].dropna().astype(str).tolist()
@@ -749,7 +749,6 @@ def show_team_stats(df_batting, df_pitching):
                     exclude_inns = ["まとめ入力", "試合前", "ベンチ", "", "nan", "None"]
                     active_innings = [inn for inn in raw_inns if inn not in exclude_inns]
 
-                    # ★ イニングの時系列順（1回表 ➔ 1回裏 ➔ 2回表…）に確実に並び替えるソートキー関数
                     def inning_sort_key(inn):
                         inn_str = str(inn)
                         is_ext = 1 if "延長" in inn_str else 0
@@ -760,7 +759,7 @@ def show_team_stats(df_batting, df_pitching):
                         elif "裏" in inn_str:
                             sub = 1
                         else:
-                            sub = 2  # 「6回」など表裏の記載がない場合
+                            sub = 2
                         return (is_ext, num, sub)
 
                     active_innings.sort(key=inning_sort_key)
@@ -770,7 +769,6 @@ def show_team_stats(df_batting, df_pitching):
                             inn_id = inn.replace("回", "").replace("表", "").replace("裏", "")
                             st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
                             
-                            # --- 自チームの攻撃 ---
                             inn_bat_df = valid_batting_df[valid_batting_df["イニング"] == inn] if not valid_batting_df.empty else pd.DataFrame()
                             if not inn_bat_df.empty:
                                 st.markdown("---")
@@ -847,7 +845,6 @@ def show_team_stats(df_batting, df_pitching):
                                 table_html += "</tbody></table></div>"
                                 st.markdown(table_html, unsafe_allow_html=True)
 
-                            # --- 相手チームの攻撃（守備） ---
                             inn_pit_df = valid_pitching_df[valid_pitching_df["イニング"] == inn] if not valid_pitching_df.empty else pd.DataFrame()
                             if not inn_pit_df.empty:
                                 st.markdown("---")

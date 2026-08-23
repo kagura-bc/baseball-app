@@ -558,7 +558,7 @@ def show_analysis_page(df_batting, df_pitching):
                 st.caption("2026年以降の打撃データがありません")
 
             st.write("")
-            st.markdown("##### チーム投手陣のアウト取得傾向")
+            st.markdown("##### チーム投手陣のアアウト取得傾向")
             if not df_p_detail.empty:
                 df_p_out_only = df_p_detail[~df_p_detail["結果"].astype(
                     str).str.contains("失策|振り逃げ", na=False)]
@@ -756,6 +756,29 @@ def show_analysis_page(df_batting, df_pitching):
                         if my_p.empty:
                             st.write("該当選手のデータなし")
                         else:
+                            # 🌟 ストライク・ボール率の集計とメトリクス表示
+                            s_sum = pd.to_numeric(my_p.get("ストライク", 0), errors='coerce').fillna(0).sum()
+                            b_sum = pd.to_numeric(my_p.get("ボール", 0), errors='coerce').fillna(0).sum()
+                            total_pitches = s_sum + b_sum
+                            
+                            st.markdown(f"#### 🎯 {fmt_player_name(target_p_player, STATS_NUMBERS)} の投球カウント・ストライク率")
+                            
+                            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                            if total_pitches > 0:
+                                strike_rate = (s_sum / total_pitches) * 100
+                                m_col1.metric("ストライク率", f"{strike_rate:.1f}%")
+                                m_col2.metric("総投球数", f"{int(total_pitches)} 球")
+                                m_col3.metric("ストライク", f"{int(s_sum)} 球")
+                                m_col4.metric("ボール", f"{int(b_sum)} 球")
+                            else:
+                                m_col1.metric("ストライク率", "-")
+                                m_col2.metric("総投球数", "0 球")
+                                m_col3.metric("ストライク", "0 球")
+                                m_col4.metric("ボール", "0 球")
+
+                            st.write("")
+                            st.divider()
+
                             st.markdown(f"#### {fmt_player_name(target_p_player, STATS_NUMBERS)} のアウトの取り方")
                             my_p_out_only = my_p[~my_p["結果"].astype(str).str.contains("失策", na=False)]
                             
