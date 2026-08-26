@@ -63,7 +63,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         st.session_state["last_p_match_id"] = current_match_id
     
     if st.session_state["last_p_match_id"] != current_match_id:
-        keys_to_reset = ["p_det_inn", "opp_batter_index", "pitching_quick_sr", "pitching_quick_sd", "pitching_quick_run", "pitching_quick_er", "quick_dec_pitcher", "quick_dec_type", "p_b_count", "p_s_count", "p_pitch_count", "p_persistent_runners", "p_runner_1b", "p_runner_2b", "p_runner_3b", "p_runner_1b_res", "p_runner_2b_res", "p_runner_3b_res", "p_runner_1b_fielder", "p_runner_2b_fielder", "p_runner_3b_fielder"]
+        keys_to_reset = ["p_det_inn", "opp_batter_index", "pitching_quick_sr", "pitching_quick_sd", "pitching_quick_run", "pitching_quick_er", "quick_dec_pitcher", "quick_dec_type", "p_b_count", "p_s_count", "p_pitch_count", "p_persistent_runners", "p_runner_1b", "p_runner_2b", "p_runner_3b", "p_runner_1b_res", "p_runner_2b_res", "p_runner_3b_res", "p_runner_1b_fielder", "p_runner_2b_fielder", "p_runner_3b_fielder", "opp_sn_dh_pitcher"]
         for k in list(st.session_state.keys()):
             if k in keys_to_reset or k.startswith("sync_") or k.startswith("opp_sp_") or k.startswith("opp_sn_"): 
                 del st.session_state[k]
@@ -552,6 +552,24 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     history_text = opp_history_dict.get(order_num, "")
                     st.markdown(f"<div style='font-size:15px; line-height:1.4; padding-top:6px; color:#444; overflow-x:auto; white-space:nowrap;'>{history_text}</div>", unsafe_allow_html=True)
 
+        # ------------------------------------------
+        # ⚾ 相手投手専用枠 (DH制使用時)
+        # ------------------------------------------
+        with st.container(border=True):
+            c_dh_row = st.columns([0.8, 2.5, 3.5, 5.2])
+            with c_dh_row[0]:
+                st.markdown("<div style='text-align:center; font-size:16px; font-weight:bold; padding-top:10px;'>投</div>", unsafe_allow_html=True)
+            with c_dh_row[1]:
+                st.markdown("<div style='text-align:center; font-size:14px; font-weight:bold; padding-top:10px; color:#4f46e5;'>🟢 投 (DH時)</div>", unsafe_allow_html=True)
+            with c_dh_row[2]:
+                cur_opp_dh_p = st.session_state.get("opp_sn_dh_pitcher", "選手")
+                name_btn_label = f"🟢 {cur_opp_dh_p} 🔽" if cur_opp_dh_p != "選手" else "相手投手 (DH時) 🔽"
+                with st.popover(name_btn_label, use_container_width=True):
+                    st.markdown("##### ⚾ 相手投手を選択")
+                    st.pills("相手DH投手ピル", ["選手"], key="opp_sn_dh_pitcher", label_visibility="collapsed")
+            with c_dh_row[3]:
+                st.markdown("<div style='font-size:13px; color:#6b7280; padding-top:10px;'>※ DH制で打順に入らない相手投手を設定</div>", unsafe_allow_html=True)
+
         st.divider()
         col_disp1, col_disp2, col_disp3 = st.columns([2.0, 1.0, 1.0])
         with col_disp1:
@@ -615,6 +633,14 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
 
         def get_player_by_position(target_pos):
             if not target_pos: return ""
+
+            # DH使用時の投手優先検索
+            if is_same_pos(target_pos, "投"):
+                dh_p = st.session_state.get("sn_dh_pitcher", "")
+                if dh_p:
+                    clean_n = str(dh_p).split(" (")[0].strip()
+                    if clean_n and clean_n not in ["nan", "None", "", "－"]:
+                        return clean_n
 
             for dict_key in ["shared_lineup", "lineup_states", "saved_lineup"]:
                 data = st.session_state.get(dict_key, {})
@@ -744,6 +770,10 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     target_catcher_name = str(target_catcher_disp).split(" (")[0].strip() if target_catcher_disp else ""
                     fielder_display = target_catcher_name
 
+                # 打球・完了分として1球加算
+                p_cnt_val = st.session_state.get("p_pitch_count", 0)
+                final_pitch_count = p_cnt_val + 1
+
                 rec = {
                     "日付": selected_date_str, 
                     "グラウンド": final_ground, 
@@ -762,6 +792,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                     "奪三振": add_strikeouts,        
                     "アウト数": add_outs, 
                     "種別": f"詳細:{batter_idx_str}番打者",
+                    "球数": final_pitch_count,
                     "ストライク": st.session_state.get("p_s_count", 0),
                     "ボール": st.session_state.get("p_b_count", 0)
                 }

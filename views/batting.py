@@ -77,7 +77,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     if match_changed:
         all_keys = list(st.session_state.keys())
-        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "row_sr", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset", "lineup_states", "batting_error_msg"]
+        target_prefixes = ["sn", "sp", "sr", "si", "st", "sd", "row_sr", "quick_", "persistent_", "batting_inning_select", "scorer_name_ui", "saved_lineup", "batter_offset", "lineup_states", "batting_error_msg", "sn_dh_pitcher"]
         for key in all_keys:
             if any(key.startswith(prefix) for prefix in target_prefixes):
                 del st.session_state[key]
@@ -152,6 +152,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "name": latest_name,
                         "pos": latest_pos if latest_pos and latest_pos != "nan" else "－"
                     }
+        
+        # DH投手の最新状態取得
+        dh_p_rows = lineup_event_df[lineup_event_df["位置"].astype(str) == "投"]
+        if not dh_p_rows.empty:
+            dh_p_latest = str(dh_p_rows.iloc[-1].get("選手名", "")).strip()
+            if dh_p_latest and dh_p_latest not in ["nan", ""]:
+                st.session_state["dh_pitcher_name_state"] = dh_p_latest
 
     if not match_changed and not today_batting_df.empty:
         valid_inn_df = today_batting_df[~today_batting_df["イニング"].astype(str).isin(["まとめ入力", "試合終了", "", "nan"])]
@@ -184,6 +191,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if pos_val and pos_val in pos_options and pos_val not in ["nan", "－"]:
                     if pos_key not in st.session_state or not st.session_state[pos_key]:
                         st.session_state[pos_key] = pos_val
+
+        if "dh_pitcher_name_state" in st.session_state and ("sn_dh_pitcher" not in st.session_state or not st.session_state["sn_dh_pitcher"]):
+            dh_p_val = st.session_state["dh_pitcher_name_state"]
+            matched_dh_p = next((p for p in player_options if p.split(" (")[0].strip() == dh_p_val or p == dh_p_val), None)
+            if matched_dh_p:
+                st.session_state["sn_dh_pitcher"] = matched_dh_p
 
     if not today_batting_df.empty:
         scoreboard_df = today_batting_df[today_batting_df["イニング"] != "まとめ入力"]
@@ -332,6 +345,27 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "name": clean_name,
                         "pos": current_pos
                     }
+            
+            # DH時投手のスタメン追加
+            dh_pitcher_val = st.session_state.get("sn_dh_pitcher")
+            if dh_pitcher_val:
+                clean_dh_p_name = dh_pitcher_val.split(" (")[0].strip()
+                rows_to_add.append({
+                    "日付": current_date_formatted,
+                    "対戦相手": final_opp,
+                    "試合種別": final_match_type,
+                    "イニング": "試合前",
+                    "打順": "",
+                    "選手名": clean_dh_p_name,
+                    "位置": "投",
+                    "結果": "スタメン",
+                    "打球方向": "---",
+                    "打点": 0,
+                    "得点": 0,
+                    "スコアラー": scorer,
+                    "攻守": final_order,
+                    "グラウンド": final_ground
+                })
         else:
             for i in range(display_count):
                 name_val = st.session_state.get(f"sn{i}")
@@ -382,6 +416,30 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
 
+            # DH投手の交代チェック
+            dh_pitcher_val = st.session_state.get("sn_dh_pitcher")
+            if dh_pitcher_val:
+                clean_dh_p_name = dh_pitcher_val.split(" (")[0].strip()
+                prev_dh_p = st.session_state.get("dh_pitcher_name_state", "")
+                if prev_dh_p and prev_dh_p != clean_dh_p_name:
+                    rows_to_add.append({
+                        "日付": current_date_formatted,
+                        "対戦相手": final_opp,
+                        "試合種別": final_match_type,
+                        "イニング": inn_val,
+                        "打順": "",
+                        "選手名": clean_dh_p_name,
+                        "位置": "投",
+                        "結果": "交代",
+                        "打球方向": "---",
+                        "打点": 0,
+                        "得点": 0,
+                        "スコアラー": scorer,
+                        "攻守": final_order,
+                        "グラウンド": final_ground
+                    })
+                    st.session_state["dh_pitcher_name_state"] = clean_dh_p_name
+
         selected_bench = st.session_state.get("persistent_bench", [])
         registered_bench_names = set()
         if not today_batting_df.empty:
@@ -425,6 +483,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             strike_count_val = st.session_state.get(f"s_count_{curr_counter}", 0)
             ball_count_val = st.session_state.get(f"b_count_{curr_counter}", 0)
             
+            # 打球・完了分として1球加算
+            final_pitch_count = pitch_count_val + 1
+            
             active_orders = 9
             for idx_check in range(display_count - 1, -1, -1):
                 if st.session_state.get(f"sn{idx_check}"):
@@ -459,6 +520,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "スコアラー": scorer,
                     "攻守": final_order,
                     "グラウンド": final_ground,
+                    "球数": final_pitch_count,
                     "ストライク": strike_count_val,  
                     "ボール": ball_count_val
                 })
@@ -947,6 +1009,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         if clean_name in player_history_dict:
                             history_text = player_history_dict[clean_name]
                     st.markdown(f"<div style='font-size:15px; line-height:1.4; padding-top:6px; color:#444; overflow-x:auto; white-space:nowrap;'>{history_text}</div>", unsafe_allow_html=True)
+
+        # ------------------------------------------
+        # ⚾ 投手専用枠 (DH制使用時)
+        # ------------------------------------------
+        with st.container(border=True):
+            c_dh_row = st.columns([0.8, 2.5, 3.5, 5.2])
+            with c_dh_row[0]:
+                st.markdown("<div style='text-align:center; font-size:16px; font-weight:bold; padding-top:10px;'>投</div>", unsafe_allow_html=True)
+            with c_dh_row[1]:
+                st.markdown("<div style='text-align:center; font-size:14px; font-weight:bold; padding-top:10px; color:#4f46e5;'>🟢 投 (DH時)</div>", unsafe_allow_html=True)
+            with c_dh_row[2]:
+                cur_dh_p_raw = st.session_state.get("sn_dh_pitcher", "")
+                formatted_dh_p = f"🟢 {local_fmt(cur_dh_p_raw)} 🔽" if cur_dh_p_raw else "投手選択 (DH時) 🔽"
+                with st.popover(formatted_dh_p, use_container_width=True):
+                    st.markdown("##### ⚾ DH時の投手を選択")
+                    st.pills("DH投手ピル", player_options, format_func=local_fmt, key="sn_dh_pitcher", label_visibility="collapsed")
+            with c_dh_row[3]:
+                st.markdown("<div style='font-size:13px; color:#6b7280; padding-top:10px;'>※ DH制で打順に入らない投手を設定（打席は回りません）</div>", unsafe_allow_html=True)
 
         if submitted:
             quick_res = st.session_state.get(f"quick_sr_{curr_counter}")
