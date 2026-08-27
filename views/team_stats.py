@@ -827,7 +827,12 @@ def show_team_stats(df_batting, df_pitching):
                                 df_bat_disp = pd.DataFrame(bat_items)
                                 table_html = (
                                     "<div style='overflow-x: auto;'>"
-                                    "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white;'>"
+                                    "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white; table-layout: fixed;'>"
+                                    "<colgroup>"
+                                    "<col style='width: 20%;'>"
+                                    "<col style='width: 30%;'>"
+                                    "<col style='width: 50%;'>"
+                                    "</colgroup>"
                                     "<thead><tr style='background-color: #f0f0f0;'>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>打順</th>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>選手名</th>"
@@ -892,7 +897,12 @@ def show_team_stats(df_batting, df_pitching):
                                 df_pit_disp = pd.DataFrame(pit_items)
                                 pit_table_html = (
                                     "<div style='overflow-x: auto;'>"
-                                    "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white;'>"
+                                    "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white; table-layout: fixed;'>"
+                                    "<colgroup>"
+                                    "<col style='width: 20%;'>"
+                                    "<col style='width: 30%;'>"
+                                    "<col style='width: 50%;'>"
+                                    "</colgroup>"
                                     "<thead><tr style='background-color: #f0f0f0;'>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>打順</th>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>投手</th>"
