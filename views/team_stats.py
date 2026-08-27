@@ -483,20 +483,41 @@ def show_team_stats(df_batting, df_pitching):
 
                             pos_col = "守備位置" if "守備位置" in player_group.columns else ("守備" if "守備" in player_group.columns else ("位置" if "位置" in player_group.columns else None))
                             seen_pos = []
-                            pos_map = {"1": "投", "2": "捕", "3": "一", "4": "二", "5": "三", "6": "遊", "7": "左", "8": "中", "9": "右", "10": "指", "DH": "指"}
+                            pos_map = {
+                                "1": "投", "投手": "投",
+                                "2": "捕", "捕手": "捕",
+                                "3": "一", "一塁": "一", "一塁手": "一",
+                                "4": "二", "二塁": "二", "二塁手": "二",
+                                "5": "三", "三塁": "三", "三塁手": "三",
+                                "6": "遊", "遊撃": "遊", "遊撃手": "遊",
+                                "7": "左", "左翼": "左", "左翼手": "左",
+                                "8": "中", "中堅": "中", "中堅手": "中",
+                                "9": "右", "右翼": "右", "右翼手": "右",
+                                "10": "指", "DH": "指", "指名打者": "指",
+                                "打": "代打", "走": "代走"
+                            }
 
+                            # 💡 イニング並び順計算関数（events ループより前に定義）
                             def get_inn_order(inn_str):
                                 m = re.search(r'(\d+)回(表|裏)', str(inn_str))
                                 if m:
                                     return int(m.group(1)) * 2 + (0 if m.group(2) == "表" else 1)
                                 return 999
 
+                            seen_pos = []
                             events = []
 
-                            if pos_col:
-                                for _, row in player_group.iterrows():
-                                    inn = str(row.get("イニング", ""))
-                                    p_val = str(row.get(pos_col, ""))
+                            # 打撃データから位置情報を取得（"位置", "守備位置", "守備" のうち値が存在するものを優先）
+                            for _, row in player_group.iterrows():
+                                inn = str(row.get("イニング", ""))
+                                p_val = ""
+                                for c in ["位置", "守備位置", "守備"]:
+                                    if c in row and pd.notna(row[c]):
+                                        v = str(row[c]).strip()
+                                        if v not in ["", "nan", "None", "-"]:
+                                            p_val = v
+                                            break
+                                if p_val:
                                     events.append({"inning": inn, "order": get_inn_order(inn), "pos": p_val, "source": "batting"})
 
                             for _, row in match_pit.iterrows():
@@ -533,7 +554,7 @@ def show_team_stats(df_batting, df_pitching):
                                     if not seen_pos or seen_pos[-1] != p_clean:
                                         seen_pos.append(p_clean)
 
-                            pos_val = "".join(seen_pos)
+                            pos_val = "".join(seen_pos) if seen_pos else "―"
 
                             pa_list = ["単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "凡退(ゴロ)", "凡退(フライ)", "凡退", "失策(ゴロ)", "失策(フライ)", "失策", "併殺打", "野選", "振り逃げ三振", "打撃妨害"]
                             res_col = player_group.get("結果") if "結果" in player_group.columns else None
