@@ -48,6 +48,11 @@ def show_edit_page(df_batting, df_pitching, is_test_mode=False):
     ws_batting = "打撃成績_テスト" if is_test_mode else "打撃成績"
     ws_pitching = "投手成績_テスト" if is_test_mode else "投手成績"
     
+    # 🌟 DBに存在しない不要な集計用列（Year/year）をあらかじめ除外
+    drop_target_cols = ["Year", "year"]
+    df_batting = df_batting.drop(columns=[c for c in drop_target_cols if c in df_batting.columns], errors="ignore")
+    df_pitching = df_pitching.drop(columns=[c for c in drop_target_cols if c in df_pitching.columns], errors="ignore")
+
     import re
     def extract_inning_num(val):
         m = re.search(r'(\d+)', str(val))
@@ -134,7 +139,10 @@ def show_edit_page(df_batting, df_pitching, is_test_mode=False):
         )
 
         if st.button("チェックした行を削除 ＆ 修正内容を保存", type="primary", use_container_width=True, key="del_bat_btn"):
+            conn = st.connection("gsheets", type=GSheetsConnection)
             new_df = edited_b[edited_b["削除選択"] == False].drop(columns=["削除選択"])
+            # 保存時にも念のためYear列を除外
+            new_df = new_df.drop(columns=[c for c in drop_target_cols if c in new_df.columns], errors="ignore")
             conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=new_df)
             st.cache_data.clear()
             st.success("更新しました")
@@ -181,7 +189,10 @@ def show_edit_page(df_batting, df_pitching, is_test_mode=False):
         )
 
         if st.button("チェックした行を削除 ＆ 修正内容を保存 ", type="primary", use_container_width=True, key="del_pitch_btn"):
+            conn = st.connection("gsheets", type=GSheetsConnection)
             new_df = edited_p[edited_p["削除選択"] == False].drop(columns=["削除選択"])
+            # 保存時にも念のためYear列を除外
+            new_df = new_df.drop(columns=[c for c in drop_target_cols if c in new_df.columns], errors="ignore")
             conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=new_df)
             st.cache_data.clear()
             st.success("更新しました")

@@ -69,7 +69,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ws_pitching = "投手成績"
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
 
+    # 守備選択肢に 代打(打)・代走(走) を追加
     pos_options = [p for p in ALL_POSITIONS if p != ""]
+    for extra_pos in ["打", "走"]:
+        if extra_pos not in pos_options:
+            pos_options.append(extra_pos)
+
     player_options = [p for p in ALL_PLAYERS if p != ""]
 
     if "quick_clear_counter" not in st.session_state:
@@ -109,7 +114,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         df_batting = st.session_state[cache_key]
 
     # カラム名を「打者名」「投手名」に変更・追加
-    expected_batting_cols = ["日付", "イニング", "打順", "打者名", "投手名", "位置", "結果", "打球方向", "打点", "得点", "グラウンド", "対戦相手", "試合種別", "スコアラー", "攻守", "球数", "ストライク", "ボール"]
+    # 修正後
+    expected_batting_cols = [
+        "日付", "イニング", "打順", "打者名", "投手名", "位置", 
+        "結果", "打球方向", "打点", "得点", "盗塁", "グラウンド", 
+        "対戦相手", "試合種別", "スコアラー", "攻守", "球数", "ストライク", "ボール"
+    ]
     if df_batting.empty:
         df_batting = pd.DataFrame(columns=expected_batting_cols)
     else:
@@ -323,7 +333,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 valid_m = valid_m[~valid_m.isin(["", "nan", "None"])]
                 if not valid_m.empty: final_match_type = valid_m.iloc[-1]
 
-        scorer = st.session_state.get("scorer_name_ui", "") or st.session_state.get("persistent_scorer", "")
+        # 既存の試合設定枠のスコアラーを使用
+        raw_scorer = st.session_state.get("scorer_name_ui", "") or st.session_state.get("persistent_scorer", "")
+        scorer = raw_scorer.split(" (")[0].strip() if raw_scorer else ""
         display_count = st.session_state.get("display_order_count", 9)
         
         if "saved_lineup" not in st.session_state:
@@ -359,8 +371,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "試合種別": final_match_type,
                         "イニング": "試合前",
                         "打順": i + 1,
-                        "打者名": clean_name,       # 👈 「選手名」から変更
-                        "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                        "打者名": clean_name,
+                        "投手名": opp_pitcher_name,
                         "位置": current_pos,
                         "結果": "スタメン",
                         "打球方向": "---",
@@ -385,8 +397,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "試合種別": final_match_type,
                     "イニング": "試合前",
                     "打順": "",
-                    "打者名": clean_dh_p_name,   # 👈 「選手名」から変更
-                    "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                    "打者名": clean_dh_p_name,
+                    "投手名": opp_pitcher_name,
                     "位置": "投",
                     "結果": "スタメン",
                     "打球方向": "---",
@@ -415,8 +427,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "試合種別": final_match_type,
                             "イニング": inn_val,
                             "打順": i + 1,
-                            "打者名": clean_name,       # 👈 「選手名」から変更
-                            "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                            "打者名": clean_name,
+                            "投手名": opp_pitcher_name,
                             "位置": current_pos,
                             "結果": "交代",
                             "打球方向": "---",
@@ -435,8 +447,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "試合種別": final_match_type,
                             "イニング": inn_val,
                             "打順": i + 1,
-                            "打者名": clean_name,       # 👈 「選手名」から変更
-                            "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                            "打者名": clean_name,
+                            "投手名": opp_pitcher_name,
                             "位置": current_pos,
                             "結果": "守備変更",
                             "打球方向": "---",
@@ -460,8 +472,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "試合種別": final_match_type,
                         "イニング": inn_val,
                         "打順": "",
-                        "打者名": clean_dh_p_name,   # 👈 「選手名」から変更
-                        "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                        "打者名": clean_dh_p_name,
+                        "投手名": opp_pitcher_name,
                         "位置": "投",
                         "結果": "交代",
                         "打球方向": "---",
@@ -490,8 +502,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "試合種別": final_match_type,
                     "イニング": "試合前",
                     "打順": "",
-                    "打者名": clean_b_name,     # 👈 「選手名」から変更
-                    "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                    "打者名": clean_b_name,
+                    "投手名": opp_pitcher_name,
                     "位置": "－",
                     "結果": "ベンチ",
                     "打球方向": "---",
@@ -545,8 +557,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "試合種別": final_match_type,
                     "イニング": inn_val,
                     "打順": batter_idx + 1,
-                    "打者名": clean_batter_name, # 👈 「選手名」から変更
-                    "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                    "打者名": clean_batter_name,
+                    "投手名": opp_pitcher_name,
                     "位置": st.session_state.get(f"sp{batter_idx}", "－"),
                     "結果": quick_res,
                     "打球方向": dir_str,
@@ -594,10 +606,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         order_num = i + 1
                         break
 
+                # 走塁結果の判定部分（448行目付近）
                 if r_res:
                     is_score = (r_res == "得点")
+                    is_stolen = (r_res == "盗塁") # ★ 盗塁判定を追加
                     res_val = "走塁記録" if is_score else r_res
                     score_val = 1 if is_score else 0
+                    stolen_val = 1 if is_stolen else 0 # ★ 盗塁数をカウント
                     dir_val = r_fielder if r_fielder and r_res in ["走塁死", "盗塁死", "牽制死"] else "---"
                     
                     rows_to_add.append({
@@ -606,13 +621,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "試合種別": final_match_type,
                         "イニング": inn_val,
                         "打順": order_num,
-                        "打者名": clean_r_name,      # 👈 「選手名」から変更
-                        "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                        "打者名": clean_r_name,
+                        "投手名": opp_pitcher_name,
                         "位置": "－",
                         "結果": res_val,
                         "打球方向": dir_val,
                         "打点": 0,
                         "得点": score_val,
+                        "盗塁": stolen_val, # ★ 追加
                         "スコアラー": scorer,
                         "攻守": final_order,
                         "グラウンド": final_ground
@@ -624,8 +640,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "試合種別": final_match_type,
                         "イニング": inn_val,
                         "打順": order_num,
-                        "打者名": clean_r_name,      # 👈 「選手名」から変更
-                        "投手名": opp_pitcher_name,  # 👈 【追加】相手投手名
+                        "打者名": clean_r_name,
+                        "投手名": opp_pitcher_name,
                         "位置": "－",
                         "結果": "残塁",
                         "打球方向": "---",
@@ -782,6 +798,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.error(st.session_state["batting_error_msg"])
             st.session_state["batting_error_msg"] = None
 
+        # イニング選択・BSO表示
         c_inn, c_outs = st.columns([1.2, 3.8])
         
         with c_inn:

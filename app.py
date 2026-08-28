@@ -92,7 +92,6 @@ def show_login_screen():
           if not matched.empty:
             target_row = matched.iloc[0]
 
-            # パスワード列の参照（既存の「パスワード」列にも対応）
             admin_pass = str(
                 target_row.get(
                     "管理パスワード", target_row.get("パスワード", "")
@@ -100,7 +99,6 @@ def show_login_screen():
             )
             viewer_pass = str(target_row.get("閲覧パスワード", ""))
 
-            # 判定ロジック
             if input_password == admin_pass and admin_pass != "":
               st.session_state["user_role"] = "admin"
             elif input_password == viewer_pass and viewer_pass != "":
@@ -117,7 +115,6 @@ def show_login_screen():
                 "チーム名", input_team_id
             )
 
-            # 専用スプレッドシートURLのセット
             url_col = next(
                 (
                     c
@@ -150,7 +147,6 @@ if not st.session_state["is_logged_in"]:
 # ==========================================
 MY_DB_URL = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
 
-# 💡 MY_DB_URL を引数として明示的に渡す
 df_batting = load_batting_data(spreadsheet_url=MY_DB_URL)
 df_pitching = load_pitching_data(spreadsheet_url=MY_DB_URL)
 
@@ -208,13 +204,150 @@ def safe_index(lst, val):
 
 
 # ==========================================
-# 🧭 ナビゲーション（権限に応じたメニューの切り替え）
+# 📊 当日投手成績・球数分析表示用ヘルパー関数
+# ==========================================
+def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, match_type, opp_team, all_players):
+    st.markdown("#### 📊 投手成績分析")
+
+    target_dt_str = pd.to_datetime(target_date_str, errors='coerce').strftime('%Y-%m-%d')
+
+    today_p_df = pd.DataFrame()
+    if not df_pitching.empty and "日付" in df_pitching.columns:
+        df_pitching["_date_str"] = pd.to_datetime(df_pitching["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+        today_p_df = df_pitching[
+            (df_pitching["_date_str"] == target_dt_str) &
+            (df_pitching["対戦相手"].astype(str).str.strip() == str(opp_team).strip()) &
+            (df_pitching["試合種別"].astype(str).str.strip() == str(match_type).strip())
+        ].copy()
+
+    today_b_df = pd.DataFrame()
+    if not df_batting.empty and "日付" in df_batting.columns:
+        df_batting["_date_str"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+        today_b_df = df_batting[
+            (df_batting["_date_str"] == target_dt_str) &
+            (df_batting["対戦相手"].astype(str).str.strip() == str(opp_team).strip()) &
+            (df_batting["試合種別"].astype(str).str.strip() == str(match_type).strip())
+        ].copy()
+
+    if today_p_df.empty and today_b_df.empty:
+        st.info("本日の試合データがまだ登録されていません。")
+        return
+
+    clean_all_players = set([p.split(" (")[0].strip() for p in all_players if p])
+
+    p_pitchers = []
+    if not today_p_df.empty and "投手名" in today_p_df.columns:
+        p_pitchers = today_p_df["投手名"].dropna().astype(str).str.strip().tolist()
+
+    b_pitchers = []
+    if not today_b_df.empty and "投手名" in today_b_df.columns:
+        b_pitchers = today_b_df["投手名"].dropna().astype(str).str.strip().tolist()
+
+    all_pitcher_names = [p for p in dict.fromkeys(p_pitchers + b_pitchers) if p not in ["", "nan", "None", "不明"]]
+
+    my_team_pitchers = []
+    opp_team_pitchers = []
+
+    for p in all_pitcher_names:
+        clean_p = p.split(" (")[0].strip()
+        if (p in p_pitchers) or (clean_p in clean_all_players):
+            if p not in my_team_pitchers:
+                my_team_pitchers.append(p)
+        else:
+            if p not in opp_team_pitchers:
+                opp_team_pitchers.append(p)
+
+    tab_my, tab_opp = st.tabs(["🏠 自チーム", "🆚 相手チーム"])
+
+    def display_pitcher_group(pitcher_list, is_my_team=True):
+        if not pitcher_list:
+            team_label = "自チーム" if is_my_team else "相手チーム"
+            st.info(f"{team_label}の登板投手データが見つかりません。")
+            return
+
+        summary_rows = []
+        for p_name in pitcher_list:
+            p_sub = today_p_df[today_p_df["投手名"].astype(str).str.strip() == p_name] if not today_p_df.empty else pd.DataFrame()
+            
+            outs = pd.to_numeric(p_sub.get("アウト数", 0), errors='coerce').sum() if not p_sub.empty else 0
+            hits = pd.to_numeric(p_sub.get("被安打", 0), errors='coerce').sum() if not p_sub.empty else 0
+            so = pd.to_numeric(p_sub.get("奪三振", 0), errors='coerce').sum() if not p_sub.empty else 0
+            runs = pd.to_numeric(p_sub.get("失点", 0), errors='coerce').sum() if not p_sub.empty else 0
+            er = pd.to_numeric(p_sub.get("自責点", 0), errors='coerce').sum() if not p_sub.empty else 0
+
+            bb_hbp = 0
+            if not p_sub.empty and "結果" in p_sub.columns:
+                bb_hbp += len(p_sub[p_sub["結果"].astype(str).isin(["四球", "死球", "四死球"])])
+
+            b_sub = today_b_df[today_b_df["投手名"].astype(str).str.strip() == p_name] if not today_b_df.empty else pd.DataFrame()
+            
+            if not b_sub.empty and "結果" in b_sub.columns:
+                if p_sub.empty:
+                    bb_hbp += len(b_sub[b_sub["結果"].astype(str).isin(["四球", "死球", "四死球"])])
+                    hits += len(b_sub[b_sub["結果"].astype(str).isin(["単打", "二塁打", "三塁打", "本塁打"])])
+                    so += len(b_sub[b_sub["結果"].astype(str).isin(["三振", "振り逃げ三振"])])
+                    runs += pd.to_numeric(b_sub.get("得点", 0), errors='coerce').sum()
+
+            pitches = 0
+            strikes = 0
+            balls = 0
+            
+            if not b_sub.empty:
+                pitches = pd.to_numeric(b_sub.get("球数", 0), errors='coerce').sum()
+                strikes = pd.to_numeric(b_sub.get("ストライク", 0), errors='coerce').sum()
+                balls = pd.to_numeric(b_sub.get("ボール", 0), errors='coerce').sum()
+
+            inn_full = int(outs // 3)
+            inn_rem = int(outs % 3)
+            inn_str = f"{inn_full}" if inn_rem == 0 else f"{inn_full}.{inn_rem}"
+
+            strike_rate = (strikes / pitches * 100) if pitches > 0 else 0.0
+
+            summary_rows.append({
+                "投手名": local_fmt(p_name) if is_my_team else p_name,
+                "投球回": f"{inn_str} 回",
+                "総球数": int(pitches),
+                "ストライク": int(strikes),
+                "ボール": int(balls),
+                "ストライク率": f"{strike_rate:.1f}%",
+                "被安打": int(hits),
+                "奪三振": int(so),
+                "四死球": int(bb_hbp),
+                "失点": int(runs),
+                "自責点": int(er)
+            })
+
+        df_summary = pd.DataFrame(summary_rows)
+
+        for row in summary_rows:
+            with st.container(border=True):
+                st.markdown(f"#### ⚾ **{row['投手名']}**")
+                m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+                m1.metric("投球回", row["投球回"])
+                m2.metric("総球数", f"{row['総球数']} 球")
+                m3.metric("ストライク (S/B)", f"{row['ストライク']} / {row['ボール']}")
+                m4.metric("ストライク率 (S%)", row["ストライク率"])
+                m5.metric("被安打 / 奪三振", f"{row['被安打']} / {row['奪三振']}")
+                m6.metric("四死球", f"{row['四死球']} 個")
+                m7.metric("失点 (自責)", f"{row['失点']} ({row['自責点']})")
+
+        st.write("")
+        st.markdown(f"##### 📋 {'自チーム' if is_my_team else '相手チーム'} 登板投手サマリー")
+        st.dataframe(df_summary, use_container_width=True, hide_index=True)
+
+    with tab_my:
+        display_pitcher_group(my_team_pitchers, is_my_team=True)
+
+    with tab_opp:
+        display_pitcher_group(opp_team_pitchers, is_my_team=False)
+
+
+# ==========================================
+# 🧭 ナビゲーション
 # ==========================================
 st.sidebar.markdown(f"### ⚾️ {st.session_state.get('my_team_name', 'KAGUSTA')}")
 
-# ログイン権限に応じて表示メニューを変更
 if st.session_state.get("user_role") == "admin":
-  # 管理者権限：入力・編集含む全メニュー
   menu_options = [
       " 📝 試合データ入力",
       " 🏆 チーム成績",
@@ -225,12 +358,10 @@ if st.session_state.get("user_role") == "admin":
       " 🤝 チーム間共有（テスト）",
   ]
 else:
-  # 閲覧モード：viewer.pyと同様の閲覧機能のみ
   menu_options = [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析"]
 
 page = st.sidebar.radio("メニュー", menu_options)
 
-# サイドバー下部にログアウトボタンを設置
 if st.sidebar.button("🚪 ログアウト", use_container_width=True):
   st.session_state["is_logged_in"] = False
   st.rerun()
@@ -242,7 +373,6 @@ if page == " 📝 試合データ入力":
 
   st.markdown("### 📝 試合データ入力")
 
-  # --- URLパラメータからの基本復元 ---
   query_date = st.query_params.get(
       "date", datetime.date.today().strftime("%Y-%m-%d")
   )
@@ -252,7 +382,6 @@ if page == " 📝 試合データ入力":
   query_order = st.query_params.get("order", "")
   query_scorer = st.query_params.get("scorer", "")
 
-  # ⚙️ 試合設定枠
   with st.expander("⚙️ 試合設定", expanded=True):
     try:
       default_date = datetime.datetime.strptime(query_date, "%Y-%m-%d").date()
@@ -261,14 +390,12 @@ if page == " 📝 試合データ入力":
 
     c1, c2, c3 = st.columns(3)
 
-    # --- 1列目：試合日 ---
     with c1:
       selected_date = st.date_input(
           "試合日", value=default_date, key="main_selected_date"
       )
       selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-    # 🌟 【自動復元 & データベース存在確認ロジック】
     auto_opp = ""
     auto_match = ""
     auto_ground = ""
@@ -328,8 +455,17 @@ if page == " 📝 試合データ入力":
 
     p_list = ALL_PLAYERS
     scorer_key = "scorer_name_ui"
-    if scorer_key not in st.session_state:
-      st.session_state[scorer_key] = res_scorer if res_scorer else None
+    
+    # 🌟【修正ポイント】選択肢リスト (p_list) に存在する文字列に変換・検証するロジック
+    target_scorer_val = st.session_state.get(scorer_key) or res_scorer
+    matched_scorer = None
+    if target_scorer_val:
+        clean_target_scorer = str(target_scorer_val).split(" (")[0].strip()
+        matched_scorer = next(
+            (p for p in p_list if p == target_scorer_val or p.split(" (")[0].strip() == clean_target_scorer),
+            None
+        )
+    st.session_state[scorer_key] = matched_scorer
 
     match_options = OFFICIAL_GAME_TYPES + ["練習試合", "その他"]
     match_key = f"main_match_type_{selected_date_str}"
@@ -508,9 +644,10 @@ if page == " 📝 試合データ入力":
 
   st.write("")
 
-  tab_batting, tab_pitching, tab_ideal, tab_edit = st.tabs([
+  tab_batting, tab_pitching, tab_game_pitching, tab_ideal, tab_edit = st.tabs([
       " 🏠 打撃成績入力",
       " 🔥 投手成績入力",
+      " 📊 投手成績分析",
       " 🎯 理想オーダー作成",
       " 🔧 データ修正",
   ])
@@ -535,6 +672,16 @@ if page == " 📝 試合データ入力":
         ground_name,
         opp_team,
         kagura_order,
+    )
+
+  with tab_game_pitching:
+    render_today_pitching_analysis(
+        df_batting,
+        df_pitching,
+        current_date_str,
+        match_type,
+        opp_team,
+        ALL_PLAYERS
     )
 
   with tab_ideal:
