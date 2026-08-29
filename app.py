@@ -1,5 +1,6 @@
 import datetime
 import pandas as pd
+import re
 from config.settings import (
     MY_TEAM,
     OFFICIAL_GAME_TYPES,
@@ -233,24 +234,35 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
         st.info("本日の試合データがまだ登録されていません。")
         return
 
-    clean_all_players = set([p.split(" (")[0].strip() for p in all_players if p])
+    # ★ 名前の表記揺れ（全半角スペース・背番号表記）を正規化する関数
+    def clean_name(n):
+        return re.sub(r'[\s ]+', '', str(n)).split("(")[0].strip()
+
+    clean_all_players = set([clean_name(p) for p in all_players if p])
 
     p_pitchers = []
     if not today_p_df.empty and "投手名" in today_p_df.columns:
-        p_pitchers = today_p_df["投手名"].dropna().astype(str).str.strip().tolist()
+        p_pitchers = [p for p in today_p_df["投手名"].dropna().astype(str).tolist() if clean_name(p) not in ["", "nan", "None", "不明"]]
 
     b_pitchers = []
     if not today_b_df.empty and "投手名" in today_b_df.columns:
-        b_pitchers = today_b_df["投手名"].dropna().astype(str).str.strip().tolist()
+        b_pitchers = [p for p in today_b_df["投手名"].dropna().astype(str).tolist() if clean_name(p) not in ["", "nan", "None", "不明"]]
 
-    all_pitcher_names = [p for p in dict.fromkeys(p_pitchers + b_pitchers) if p not in ["", "nan", "None", "不明"]]
+    # 重複除去（正規化名で一意化）
+    all_pitcher_names = []
+    seen_clean = set()
+    for p in (p_pitchers + b_pitchers):
+        c_p = clean_name(p)
+        if c_p and c_p not in seen_clean:
+            seen_clean.add(c_p)
+            all_pitcher_names.append(p)
 
     my_team_pitchers = []
     opp_team_pitchers = []
 
     for p in all_pitcher_names:
-        clean_p = p.split(" (")[0].strip()
-        if (p in p_pitchers) or (clean_p in clean_all_players):
+        c_p = clean_name(p)
+        if c_p in clean_all_players or any(clean_name(x) == c_p for x in p_pitchers):
             if p not in my_team_pitchers:
                 my_team_pitchers.append(p)
         else:
@@ -267,35 +279,52 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
 
         summary_rows = []
         for p_name in pitcher_list:
-            p_sub = today_p_df[today_p_df["投手名"].astype(str).str.strip() == p_name] if not today_p_df.empty else pd.DataFrame()
+            c_p_name = clean_name(p_name)
             
-            outs = pd.to_numeric(p_sub.get("アウト数", 0), errors='coerce').sum() if not p_sub.empty else 0
-            hits = pd.to_numeric(p_sub.get("被安打", 0), errors='coerce').sum() if not p_sub.empty else 0
-            so = pd.to_numeric(p_sub.get("奪三振", 0), errors='coerce').sum() if not p_sub.empty else 0
-            runs = pd.to_numeric(p_sub.get("失点", 0), errors='coerce').sum() if not p_sub.empty else 0
-            er = pd.to_numeric(p_sub.get("自責点", 0), errors='coerce').sum() if not p_sub.empty else 0
+            # 投手データ抽出（スペース非依存照合）
+            if not today_p_df.empty and "投手名" in today_p_df.columns:
+                p_sub = today_p_df[today_p_df["投手名"].astype(str).apply(clean_name) == c_p_name]
+            else:
+                p_sub = pd.DataFrame()
+
+            outs = pd.to_numeric(p_sub.get("アウト数", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
+            hits = pd.to_numeric(p_sub.get("被安打", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
+            so = pd.to_numeric(p_sub.get("奪三振", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
+            runs = pd.to_numeric(p_sub.get("失点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
+            er = pd.to_numeric(p_sub.get("自責点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
 
             bb_hbp = 0
             if not p_sub.empty and "結果" in p_sub.columns:
                 bb_hbp += len(p_sub[p_sub["結果"].astype(str).isin(["四球", "死球", "四死球"])])
 
-            b_sub = today_b_df[today_b_df["投手名"].astype(str).str.strip() == p_name] if not today_b_df.empty else pd.DataFrame()
-            
+            # 打撃データ抽出（スペース非依存照合）
+            if not today_b_df.empty and "投手名" in today_b_df.columns:
+                b_sub = today_b_df[today_b_df["投手名"].astype(str).apply(clean_name) == c_p_name]
+            else:
+                b_sub = pd.DataFrame()
+
             if not b_sub.empty and "結果" in b_sub.columns:
                 if p_sub.empty:
                     bb_hbp += len(b_sub[b_sub["結果"].astype(str).isin(["四球", "死球", "四死球"])])
                     hits += len(b_sub[b_sub["結果"].astype(str).isin(["単打", "二塁打", "三塁打", "本塁打"])])
                     so += len(b_sub[b_sub["結果"].astype(str).isin(["三振", "振り逃げ三振"])])
-                    runs += pd.to_numeric(b_sub.get("得点", 0), errors='coerce').sum()
+                    runs += pd.to_numeric(b_sub.get("得点", 0), errors='coerce').fillna(0).sum()
 
             pitches = 0
             strikes = 0
             balls = 0
-            
+
+            # 1. 打撃シートからの球数・ストライク・ボール集計
             if not b_sub.empty:
-                pitches = pd.to_numeric(b_sub.get("球数", 0), errors='coerce').sum()
-                strikes = pd.to_numeric(b_sub.get("ストライク", 0), errors='coerce').sum()
-                balls = pd.to_numeric(b_sub.get("ボール", 0), errors='coerce').sum()
+                pitches += pd.to_numeric(b_sub.get("球数", 0), errors='coerce').fillna(0).sum()
+                strikes += pd.to_numeric(b_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
+                balls += pd.to_numeric(b_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
+
+            # 2. 投手シート側に記録がある場合のフォールバック
+            if pitches == 0 and not p_sub.empty:
+                pitches += pd.to_numeric(p_sub.get("球数", 0), errors='coerce').fillna(0).sum()
+                strikes += pd.to_numeric(p_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
+                balls += pd.to_numeric(p_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
 
             inn_full = int(outs // 3)
             inn_rem = int(outs % 3)

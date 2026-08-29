@@ -762,24 +762,35 @@ def show_team_stats(df_batting, df_pitching):
 
                     summary_list = []
                     for p_name_val, group in personal_pit.groupby("投手名", sort=False):
-                        balls = 0
-                        if "球数" in group.columns:
-                            balls = pd.to_numeric(group["球数"], errors='coerce').fillna(0).sum()
+                        clean_p_val = re.sub(r'[\s ]+', '', str(p_name_val)).split("(")[0].strip()
 
+                        # 1. 投手シートから球数・ストライク・ボールを取得
+                        balls = pd.to_numeric(group.get("球数", 0), errors='coerce').fillna(0).sum()
                         s_cnt = pd.to_numeric(group.get("ストライク", 0), errors='coerce').fillna(0).sum()
                         b_cnt = pd.to_numeric(group.get("ボール", 0), errors='coerce').fillna(0).sum()
 
-                        if balls == 0:
-                            balls = s_cnt + b_cnt
+                        # 2. 打撃シートから投手名が一致する行を照合（スペース非依存）
+                        if not match_bat.empty and "投手名" in match_bat.columns:
+                            match_bat_copy = match_bat.copy()
+                            match_bat_copy["_p_name_clean"] = match_bat_copy["投手名"].astype(str).apply(lambda x: re.sub(r'[\s ]+', '', str(x)).split("(")[0].strip())
+                            b_sub = match_bat_copy[match_bat_copy["_p_name_clean"] == clean_p_val]
+                        else:
+                            b_sub = pd.DataFrame()
 
-                        b_sub = match_bat[match_bat["投手名"].astype(str).str.strip() == str(p_name_val).strip()] if not match_bat.empty and "投手名" in match_bat.columns else pd.DataFrame()
                         if not b_sub.empty:
                             b_pitches = pd.to_numeric(b_sub.get("球数", 0), errors='coerce').fillna(0).sum()
                             b_strikes = pd.to_numeric(b_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
+                            b_balls = pd.to_numeric(b_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
+
                             if balls == 0 and b_pitches > 0:
                                 balls = b_pitches
                             if s_cnt == 0 and b_strikes > 0:
                                 s_cnt = b_strikes
+                            if b_cnt == 0 and b_balls > 0:
+                                b_cnt = b_balls
+
+                        if balls == 0:
+                            balls = s_cnt + b_cnt
 
                         strike_rate = (s_cnt / balls * 100) if balls > 0 else 0.0
                         strike_rate_str = f"{strike_rate:.1f}%"
