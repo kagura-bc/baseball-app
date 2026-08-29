@@ -904,8 +904,24 @@ def show_team_stats(df_batting, df_pitching):
                     )
 
                     exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan"]
-                    valid_batting_df = match_bat[~match_bat["結果"].astype(str).isin(exclude_res)].copy() if not match_bat.empty and "結果" in match_bat.columns else pd.DataFrame()
-                    valid_pitching_df = match_pit[match_pit["種別"].str.contains("詳細", na=False)].copy() if not match_pit.empty and "種別" in match_pit.columns else pd.DataFrame()
+                    exclude_pattern = "進塁|得点"
+
+                    if not match_bat.empty and "結果" in match_bat.columns:
+                        is_bat_excluded = (
+                            match_bat["結果"].astype(str).isin(exclude_res) | 
+                            match_bat["結果"].astype(str).str.contains(exclude_pattern, na=False)
+                        )
+                        valid_batting_df = match_bat[~is_bat_excluded].copy()
+                    else:
+                        valid_batting_df = pd.DataFrame()
+
+                    if not match_pit.empty and "種別" in match_pit.columns:
+                        mask_pit = match_pit["種別"].str.contains("詳細", na=False)
+                        if "結果" in match_pit.columns:
+                            mask_pit = mask_pit & ~match_pit["結果"].astype(str).str.contains(exclude_pattern, na=False)
+                        valid_pitching_df = match_pit[mask_pit].copy()
+                    else:
+                        valid_pitching_df = pd.DataFrame()
 
                     raw_bat_inns = (
                         valid_batting_df["イニング"].dropna().astype(str).tolist()
