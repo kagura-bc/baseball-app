@@ -264,14 +264,15 @@ def show_team_stats(df_batting, df_pitching):
         df_team_stats = df_team_stats.sort_values("日付", ascending=False)
 
     # 2. フィルタリング
-    if not df_team_stats.empty:
-        df_team_stats["Year"] = df_team_stats["日付"].dt.year.astype(str)
-        all_years = sorted([y for y in df_team_stats["Year"].unique() if y and y != "nan"], reverse=True)
+        if not df_team_stats.empty:
+            df_team_stats["Year"] = df_team_stats["日付"].dt.year.astype(str)
+            all_years = sorted([y for y in df_team_stats["Year"].unique() if y and y != "nan"], reverse=True)
 
-        c_filter1, c_filter2 = st.columns(2)
-        with c_filter1:
-            default_idx = 0
-            target_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx, key="team_stats_year")
+            c_filter1, c_filter2 = st.columns(2)
+            with c_filter1:
+                # 🌟 データが存在する場合は最新年（インデックス 1）をデフォルトに設定
+                default_idx = 1 if len(all_years) > 0 else 0
+                target_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx, key="team_stats_year")
 
         with c_filter2:
             types_list = [x for x in df_team_stats["試合種別"].unique() if str(x) != 'nan']
