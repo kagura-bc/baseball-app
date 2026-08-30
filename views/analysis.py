@@ -422,10 +422,12 @@ def show_analysis_page(df_batting, df_pitching):
                     if df_raw.empty or "イニング" not in df_raw.columns or score_col not in df_raw.columns:
                         return pd.Series(dtype=float)
                     df_i = df_raw.copy()
-                    df_i = df_i[df_i["イニング"].astype(
-                        str).str.match(r"^[1-9]回")]
+                    # 「表」「裏」を取り除いて「〇回」の表記に統一
+                    df_i["イニング"] = df_i["イニング"].astype(str).str.replace(r"[表裏]", "", regex=True)
+                    df_i = df_i[df_i["イニング"].str.match(r"^\d+回")]
                     df_i["得点"] = pd.to_numeric(
                         df_i[score_col], errors='coerce').fillna(0)
+                    # 同じ回（例：1回表・1回裏）の得点を「1回」に合算
                     return df_i.groupby("イニング")["得点"].sum()
 
                 inn_scores = aggregate_innings(df_b, "得点")
@@ -434,8 +436,9 @@ def show_analysis_page(df_batting, df_pitching):
                 df_inn = pd.DataFrame(
                     {"得点": inn_scores, "失点": inn_lost}).fillna(0).reset_index()
                 if not df_inn.empty:
+                    # 2桁の回数にも対応したソート用のイニング数値抽出
                     df_inn["InnNum"] = df_inn["イニング"].apply(
-                        lambda x: int(str(x)[0]) if str(x)[0].isdigit() else 99)
+                        lambda x: int(re.search(r'\d+', str(x)).group()) if re.search(r'\d+', str(x)) else 99)
                     df_inn = df_inn.sort_values("InnNum")
                     df_inn_melt = df_inn.melt(id_vars=["イニング", "InnNum"], value_vars=[
                                               "得点", "失点"], var_name="Type", value_name="Runs")
