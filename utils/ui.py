@@ -61,6 +61,8 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     k_inning, opp_inning = [], []
     total_k, total_opp = 0, 0
     
+    single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振", "野選", "牽制死"]
+
     # 9回まで計算
     for i in range(1, 10):
         target_innings = [f"{i}回", f"{i}回表", f"{i}回裏"]
@@ -68,22 +70,49 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         inn_bat_data = b_df[b_df["イニング"].isin(target_innings)] if not b_df.empty else pd.DataFrame()
         inn_pit_data = p_df[p_df["イニング"].isin(target_innings)] if not p_df.empty else pd.DataFrame()
 
+        # 得点の集計
+        k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum()) if not inn_bat_data.empty else 0
+        opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum()) if not inn_pit_data.empty else 0
+
+        # アウト数の集計（イニングチェンジ判定）
+        k_outs = 0
+        if not inn_bat_data.empty and "結果" in inn_bat_data.columns:
+            k_outs = len(inn_bat_data[inn_bat_data["結果"].isin(single_out_list)]) + len(inn_bat_data[inn_bat_data["結果"] == "併殺打"]) * 2
+
+        opp_outs = 0
+        if not inn_pit_data.empty and "結果" in inn_pit_data.columns:
+            opp_outs = len(inn_pit_data[inn_pit_data["結果"].isin(single_out_list)]) + len(inn_pit_data[inn_pit_data["結果"] == "併殺打"]) * 2
+
+        # それ以降のイニングにデータが存在するか（過去イニング判定）
+        later_target = [f"{j}回{s}" for j in range(i + 1, 10) for s in ["", "表", "裏"]]
+        k_has_later = not b_df[b_df["イニング"].isin(later_target)].empty if not b_df.empty else False
+        opp_has_later = not p_df[p_df["イニング"].isin(later_target)].empty if not p_df.empty else False
+
+        # 表示フラグ判定 (得点あり or 3アウト or 過去のイニング)
+        k_show_zero = (k_outs >= 3) or k_has_later
+        opp_show_zero = (opp_outs >= 3) or opp_has_later
+
+        # 表示用文字列の設定
         if not inn_bat_data.empty and not inn_bat_data[inn_bat_data["結果"] == "✖"].empty:
             k_disp = "✖"
-            k_runs = 0
-        else:
-            k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum()) if not inn_bat_data.empty else 0
+        elif k_runs > 0:
             k_disp = str(k_runs)
-        
+        elif k_show_zero:
+            k_disp = "0"
+        else:
+            k_disp = ""
+
         if not inn_pit_data.empty and not inn_pit_data[inn_pit_data["結果"] == "✖"].empty:
             opp_disp = "✖"
-            opp_runs = 0
-        else:
-            opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum()) if not inn_pit_data.empty else 0
+        elif opp_runs > 0:
             opp_disp = str(opp_runs)
+        elif opp_show_zero:
+            opp_disp = "0"
+        else:
+            opp_disp = ""
 
-        k_exists = not inn_bat_data.empty
-        opp_exists = not inn_pit_data.empty
+        k_exists = bool(k_disp)
+        opp_exists = bool(opp_disp)
         
         total_k += k_runs
         total_opp += opp_runs

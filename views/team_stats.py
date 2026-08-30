@@ -870,10 +870,45 @@ def show_team_stats(df_batting, df_pitching):
                         })
 
                     if summary_list:
-                        st.table(pd.DataFrame(summary_list).set_index("投手名")[["結果", "回", "球数", "S%", "被安", "奪三", "四死", "失点", "自責"]])
+                        df_pit_sum = pd.DataFrame(summary_list)
+                        pit_table_html = (
+                            "<div style='overflow-x: auto;'>"
+                            "<table style='border-collapse: collapse; border: 2px solid #000000; width: 100%; margin-bottom: 20px; font-family: sans-serif; background-color: white;'>"
+                            "<thead><tr style='background-color: #e0e0e0;'>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>投手名</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>結果</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>回</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>球数</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>S%</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>被安</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>奪三</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>四死</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>失点</th>"
+                            "<th style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold; border-bottom: 2px solid #000000;'>自責</th>"
+                            "</tr></thead><tbody>"
+                        )
 
-                    st.write("")
-                    st.markdown("##### 📊 全イニング 攻撃・守備 詳細履歴")
+                        for _, row in df_pit_sum.iterrows():
+                            pit_table_html += (
+                                "<tr>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000; font-weight: bold;'><b>{row['投手名']}</b></td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['結果']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['回']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['球数']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['S%']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['被安']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['奪三']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['四死']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['失点']}</td>"
+                                f"<td style='border: 1px solid #444444; font-size: 18px; padding: 10px; text-align: center; color: #000000;'>{row['自責']}</td>"
+                                "</tr>"
+                            )
+
+                        pit_table_html += "</tbody></table></div>"
+                        st.markdown(pit_table_html, unsafe_allow_html=True)
+
+                        st.write("")
+                        st.markdown("##### 📊 全イニング 攻撃・守備 詳細履歴")
 
                     st.markdown(
                         """

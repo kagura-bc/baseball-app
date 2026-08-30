@@ -118,7 +118,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     expected_batting_cols = [
         "日付", "イニング", "打順", "打者名", "投手名", "位置", 
         "結果", "打球方向", "打点", "得点", "盗塁", "グラウンド", 
-        "対戦相手", "試合種別", "スコアラー", "攻守", "球数", "ストライク", "ボール"
+        "対戦相手", "試合種別", "スコアラー", "攻守", "球数", "ストライク", "ファールボール", "ボール"
     ]
     if df_batting.empty:
         df_batting = pd.DataFrame(columns=expected_batting_cols)
@@ -525,12 +525,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             dir_str = "".join(quick_dirs) if quick_dirs else "---"
             rbi_val = int(quick_rbi) if quick_rbi is not None else 0
 
+            # 入力カウントの取得
             pitch_count_val = st.session_state.get(f"pitch_count_{curr_counter}", 0)
             strike_count_val = st.session_state.get(f"s_count_{curr_counter}", 0)
             ball_count_val = st.session_state.get(f"b_count_{curr_counter}", 0)
+            foul_count_val = st.session_state.get(f"f_count_{curr_counter}", 0)
             
-            # 打球・完了分として1球加算
-            final_pitch_count = pitch_count_val + 1
+            # ★ 打席結果に応じた最終球のカウント判定
+            final_strike_count = strike_count_val + foul_count_val
+            final_ball_count = ball_count_val
+
+            if quick_res in ["四球", "死球"]:
+                # 四球・死球の場合は最後の1球をボールに加算
+                final_ball_count += 1
+            elif quick_res:
+                # フェア打球・三振等の場合は最後の1球をストライクに加算
+                final_strike_count += 1
+            
+            # 総球数の計算
+            final_pitch_count = final_ball_count + final_strike_count
             
             active_orders = 9
             for idx_check in range(display_count - 1, -1, -1):
@@ -568,11 +581,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "攻守": final_order,
                     "グラウンド": final_ground,
                     "球数": final_pitch_count,
-                    "ストライク": strike_count_val,  
+                    "ストライク": final_strike_count,  # ★ 修正後のストライク数
+                    "ファールボール": foul_count_val,   # ★ 新規追加
                     "ボール": ball_count_val
                 })
 
-        single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振", "野選", "牽制死"]
+        single_out_list = [
+        "凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", 
+        "犠飛", "走塁死", "盗塁死", "牽制死"
+        ]
         
         existing_outs = 0
         if not today_batting_df.empty:
@@ -739,6 +756,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if not is_pa_completed:
                     st.session_state[f"b_count_{next_counter}"] = ball_count_val
                     st.session_state[f"s_count_{next_counter}"] = strike_count_val
+                    st.session_state[f"f_count_{next_counter}"] = foul_count_val
                     st.session_state[f"pitch_count_{next_counter}"] = pitch_count_val
 
                 st.success("登録しました！")
@@ -853,16 +871,20 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             st.session_state[f"s_count_{curr_counter}"] = s_cnt + 1
                         st.rerun()
 
+            f_cnt = st.session_state.get(f"f_count_{curr_counter}", 0)
+
             with b_col3:
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#6b7280;'>⚪ ファール</div>", unsafe_allow_html=True)
                 fc1, fc2 = st.columns(2)
                 with fc1:
-                    if st.button("➖", key=f"btn_f_sub_{curr_counter}", use_container_width=True, disabled=(p_cnt <= 0)):
+                    if st.button("➖", key=f"btn_f_sub_{curr_counter}", use_container_width=True, disabled=(f_cnt <= 0)):
                         st.session_state[f"pitch_count_{curr_counter}"] = max(0, p_cnt - 1)
+                        st.session_state[f"f_count_{curr_counter}"] = max(0, f_cnt - 1)
                         st.rerun()
                 with fc2:
                     if st.button("➕", key=f"btn_f_add_{curr_counter}", use_container_width=True):
                         st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
+                        st.session_state[f"f_count_{curr_counter}"] = f_cnt + 1
                         if s_cnt < 2:
                             st.session_state[f"s_count_{curr_counter}"] = s_cnt + 1
                         st.rerun()
@@ -872,6 +894,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if st.button("🔄", key=f"btn_reset_bso_{curr_counter}", use_container_width=True):
                     st.session_state[f"b_count_{curr_counter}"] = 0
                     st.session_state[f"s_count_{curr_counter}"] = 0
+                    st.session_state[f"f_count_{curr_counter}"] = 0
                     st.session_state[f"pitch_count_{curr_counter}"] = 0
                     st.rerun()
 
