@@ -173,8 +173,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "pos": latest_pos if latest_pos and latest_pos != "nan" else "－"
                     }
         
-        # DH投手の最新状態取得
-        dh_p_rows = lineup_event_df[lineup_event_df["位置"].astype(str) == "投"]
+        # DH投手の最新状態取得（打順枠外＝打順が未指定の「投」記録のみを取得）
+        dh_p_rows = lineup_event_df[
+            (lineup_event_df["位置"].astype(str) == "投") & 
+            (
+                lineup_event_df["打順"].isna() | 
+                (lineup_event_df["打順"].astype(str).str.strip() == "") |
+                (lineup_event_df["打順"].astype(str).str.strip() == "nan")
+            )
+        ]
         if not dh_p_rows.empty:
             dh_p_latest = str(dh_p_rows.iloc[-1].get(b_col_name, "")).strip()
             if dh_p_latest and dh_p_latest not in ["nan", ""]:

@@ -195,7 +195,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
         for b_key in ["1b", "2b", "3b"]:
             st.session_state[f"p_runner_{b_key}_res"] = None
             st.session_state[f"p_runner_{b_key}_fielder"] = None
-            st.session_state[f"p_runner_{b_key}"] = "なし"
+            # 【修正】"なし" ではなく None を代入し、p_persistent_runners からの再取得を有効化する
+            st.session_state[f"p_runner_{b_key}"] = None
         st.session_state["needs_pitching_form_clear"] = False
 
     inn_options = [f"{i}回{p_inning_suffix}" for i in range(1, 10)] + [f"延長{p_inning_suffix}"]
@@ -218,7 +219,8 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                 current_outs_total = 0
                 st.session_state["p_persistent_runners"] = {"1b": None, "2b": None, "3b": None}
                 for b_key in ["1b", "2b", "3b"]:
-                    st.session_state[f"p_runner_{b_key}"] = "なし"
+                    # 【修正】ここも None を設定
+                    st.session_state[f"p_runner_{b_key}"] = None
         except ValueError:
             pass
 
@@ -805,13 +807,7 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
             if not target_pos:
                 return ""
 
-            if is_same_pos(target_pos, "投"):
-                dh_p = st.session_state.get("sn_dh_pitcher", "")
-                if dh_p:
-                    clean_n = str(dh_p).split(" (")[0].strip()
-                    if clean_n and clean_n not in ["nan", "None", "", "－"]:
-                        return clean_n
-
+            # 1. まず打順枠（オーダー/スタメン）から守備位置を検索
             for dict_key in ["shared_lineup", "lineup_states", "saved_lineup"]:
                 data = st.session_state.get(dict_key, {})
                 if isinstance(data, dict):
@@ -852,6 +848,14 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
                                 clean_n = str(name_val).split(" (")[0].strip()
                                 if clean_n and clean_n not in ["nan", "None", "", "－"]:
                                     return clean_n
+
+            # 2. 打順枠内に「投」が存在しない場合のみ、DH専用枠 (sn_dh_pitcher) を参照
+            if is_same_pos(target_pos, "投"):
+                dh_p = st.session_state.get("sn_dh_pitcher", "")
+                if dh_p:
+                    clean_n = str(dh_p).split(" (")[0].strip()
+                    if clean_n and clean_n not in ["nan", "None", "", "－"]:
+                        return clean_n
 
             return ""
 
