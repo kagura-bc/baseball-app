@@ -423,7 +423,9 @@ def show_personal_stats(df_batting, df_pitching):
 
                 disp_p = stats_p[["選手名", "Pitching_Score", "防御率", "WHIP", "is_win", "is_lose", "投球回", "TotalSO", "total_bb", "自責点"]].copy()
                 disp_p.columns = ["選手名", "投手P", "防御率", "WHIP", "勝", "敗", "投球回", "奪三振", "四死球", "自責点"]
-                disp_p = disp_p.sort_values("防御率").reset_index(drop=True)
+
+                # 🌟 投手Pの降順（高い順）にソート
+                disp_p = disp_p.sort_values("投手P", ascending=False).reset_index(drop=True)
 
                 disp_p.insert(0, "順位", range(1, len(disp_p) + 1))
                 disp_p["投手P"] = disp_p["投手P"].map(lambda x: f"{x:.1f}")

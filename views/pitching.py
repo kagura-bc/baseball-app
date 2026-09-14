@@ -1151,14 +1151,30 @@ def show_pitching_page(df_batting, df_pitching, selected_date_str, match_type, g
     )
 
     if has_batting_history or has_pitching_history:
-        exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan"]
+        # 【修正】「残塁」「進塁」「得点」等を全列から強力に除外
+        exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "残塁"]
+        exclude_pattern = r"進塁|得点|残塁"
+
         valid_batting_df = pd.DataFrame()
-        if not today_batting_df.empty and "結果" in today_batting_df.columns:
-            valid_batting_df = today_batting_df[~today_batting_df["結果"].astype(str).isin(exclude_res)].copy()
+        if not today_batting_df.empty:
+            res_s = today_batting_df["結果"].astype(str).str.strip() if "結果" in today_batting_df.columns else pd.Series("", index=today_batting_df.index)
+            type_s = today_batting_df["種別"].astype(str).str.strip() if "種別" in today_batting_df.columns else pd.Series("", index=today_batting_df.index)
+            pos_s = today_batting_df["位置"].astype(str).str.strip() if "位置" in today_batting_df.columns else pd.Series("", index=today_batting_df.index)
+
+            is_bat_excluded = (
+                res_s.isin(exclude_res) | 
+                res_s.str.contains(exclude_pattern, na=False) |
+                type_s.str.contains(exclude_pattern, na=False) |
+                pos_s.str.contains(exclude_pattern, na=False)
+            )
+            valid_batting_df = today_batting_df[~is_bat_excluded].copy()
 
         valid_pitching_df = pd.DataFrame()
         if not today_pitching_df.empty and "種別" in today_pitching_df.columns:
-            valid_pitching_df = today_pitching_df[today_pitching_df["種別"].str.contains("詳細", na=False)].copy()
+            mask_pit = today_pitching_df["種別"].str.contains("詳細", na=False)
+            if "結果" in today_pitching_df.columns:
+                mask_pit = mask_pit & ~today_pitching_df["結果"].astype(str).str.contains(exclude_pattern, na=False)
+            valid_pitching_df = today_pitching_df[mask_pit].copy()
 
         raw_inns = list(
             set(

@@ -939,13 +939,20 @@ def show_team_stats(df_batting, df_pitching):
                         unsafe_allow_html=True
                     )
 
-                    exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan"]
-                    exclude_pattern = "進塁|得点"
+                    # 【修正】「残塁」「進塁」「得点」等を「結果・種別・位置」の全列から強力に除外
+                    exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "残塁"]
+                    exclude_pattern = r"進塁|得点|残塁"
 
-                    if not match_bat.empty and "結果" in match_bat.columns:
+                    if not match_bat.empty:
+                        res_s = match_bat["結果"].astype(str).str.strip() if "結果" in match_bat.columns else pd.Series("", index=match_bat.index)
+                        type_s = match_bat["種別"].astype(str).str.strip() if "種別" in match_bat.columns else pd.Series("", index=match_bat.index)
+                        pos_s = match_bat["位置"].astype(str).str.strip() if "位置" in match_bat.columns else pd.Series("", index=match_bat.index)
+
                         is_bat_excluded = (
-                            match_bat["結果"].astype(str).isin(exclude_res) | 
-                            match_bat["結果"].astype(str).str.contains(exclude_pattern, na=False)
+                            res_s.isin(exclude_res) | 
+                            res_s.str.contains(exclude_pattern, na=False) |
+                            type_s.str.contains(exclude_pattern, na=False) |
+                            pos_s.str.contains(exclude_pattern, na=False)
                         )
                         valid_batting_df = match_bat[~is_bat_excluded].copy()
                     else:
