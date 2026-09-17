@@ -225,42 +225,14 @@ def show_team_stats(df_batting, df_pitching):
         if not d_str or pd.isna(d_str):
             continue
 
-        team_rec_rows = group[(group[p_p_col] == "チーム記録") | (group.get("選手名", "") == "チーム記録")]
-        runs_allowed = 0
-        col_errors = 0
-
-        if not team_rec_rows.empty:
-            # チーム記録行の「得点」列の数値、または結果列が「得点」「失点」の行の数を合算
-            for _, tr in team_rec_rows.iterrows():
-                r_val = str(tr.get("結果", ""))
-                # 結果に「得点」または「失点」と書かれている行を1失点としてカウント
-                if "得点" in r_val or "失点" in r_val or "失点" in str(tr.get("イニング", "")):
-                    runs_allowed += 1
-                else:
-                    # それ以外は念のため得点列（または失点列）に数値があれば加算
-                    val = pd.to_numeric(tr.get("失点", tr.get("得点", 0)), errors='coerce')
-                    if pd.notna(val) and val > 0:
-                        runs_allowed += int(val)
-            
-            if "失策" in team_rec_rows.columns:
-                col_errors = pd.to_numeric(team_rec_rows["失策"], errors='coerce').fillna(0).sum()
+        # 🌟 仕様変更：「失点」列の数値を直接合計してチーム総失点とする
+        if "失点" in group.columns:
+            runs_allowed = int(pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum())
         else:
-            # 個人成績ベースの場合
-            # 結果列に「得点」または「失点」が含まれる行数をカウント
-            res_runs = group["結果"].astype(str).str.contains("得点|失点").sum() if "結果" in group.columns else 0
-            
-            # 失点列（または得点列）の数値も念のため合算
-            if "失点" in group.columns:
-                num_runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
-            elif "得点" in group.columns:
-                num_runs = pd.to_numeric(group["得点"], errors='coerce').fillna(0).sum()
-            else:
-                num_runs = 0
-                
-            runs_allowed = int(res_runs) + int(num_runs)
+            runs_allowed = 0
 
-            if "失策" in group.columns:
-                col_errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum()
+        # 失策（エラー）の集計
+        col_errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum() if "失策" in group.columns else 0
         res_errors = group["結果"].astype(str).str.contains("失策").sum() if "結果" in group.columns else 0
         errors = col_errors + res_errors
 
@@ -512,21 +484,6 @@ def show_team_stats(df_batting, df_pitching):
                     sb_bat["失策"] = 0
                     if not sb_bat.empty:
                         sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
-
-                # 🌟 追加：スコアボード描画関数に渡す直前に、結果列の「得点」をスコアボード用の「得点/失点」列の数値に変換
-                if "結果" in sb_bat.columns:
-                    # 自チーム攻撃時：結果が「得点」の行の「得点」列を 1 に設定
-                    mask_bat_runs = sb_bat["結果"].astype(str).str.contains("得点", na=False)
-                    if "得点" not in sb_bat.columns:
-                        sb_bat["得点"] = 0
-                    sb_bat.loc[mask_bat_runs, "得点"] = 1
-
-                if "結果" in sb_pit.columns:
-                    # 相手チーム攻撃（自チーム守備）時：結果が「得点」または「失点」の行の「失点」列を 1 に設定
-                    mask_pit_runs = sb_pit["結果"].astype(str).str.contains("得点|失点", na=False)
-                    if "失点" not in sb_pit.columns:
-                        sb_pit["失点"] = 0
-                    sb_pit.loc[mask_pit_runs, "失点"] = 1
 
                 st.markdown("<div id='viewer-top' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
 
@@ -859,40 +816,75 @@ def show_team_stats(df_batting, df_pitching):
                         strike_rate = (s_cnt / balls * 100) if balls > 0 else 0.0
                         strike_rate_str = f"{strike_rate:.1f}%"
 
-                        res_runs = group["結果"].astype(str).str.contains("得点|失点", na=False).sum() if "結果" in group.columns else 0
-                        num_runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum() if "失点" in group.columns else 0
-                        runs = int(res_runs) if res_runs > 0 else int(num_runs)
+                        # 3. 失点と自責点
+                        runs = int(pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()) if "失点" in group.columns else 0
 
-                        # 自責点：スプレッドシートの「自責点」列の数値をそのまま合計して反映
                         er_col = "自責点" if "自責点" in group.columns else ("自責" if "自責" in group.columns else None)
                         er = int(pd.to_numeric(group[er_col], errors='coerce').fillna(0).sum()) if er_col else 0
 
-                        total_hits = 0; total_so = 0; total_bb = 0
-                        for _, row in group.iterrows():
-                            raw_h = int(row.get("被安打", 0)) if pd.notna(row.get("被安打", 0)) else 0
-                            raw_so = int(row.get("奪三振", 0)) if pd.notna(row.get("奪三振", 0)) else 0
-                            raw_bb = int(row.get("与四球", 0)) if pd.notna(row.get("与四球", 0)) else 0
-                            res = str(row.get("結果", ""))
-                            r_type = str(row.get("種別", ""))
+                        # 4. 結果列からの投球回（アウト数）、被安打、奪三振、四死球の自動集計
+                        total_outs = 0; total_hits = 0; total_so = 0; total_bb = 0
+                        
+                        out_1 = ["凡退", "凡退(ゴロ)", "凡退(フライ)", "三振", "振り逃げ三振", "犠打", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "牽制死"]
+                        out_2 = ["併殺打", "併殺"]
+                        hit_list = ["安打", "単打", "二塁打", "三塁打", "本塁打"]
 
-                            if res == "まとめ" or "まとめ" in str(row.get("イニング", "")):
-                                total_hits += raw_h; total_so += raw_so; total_bb += raw_bb
-                            elif "ダミー" in r_type:
+                        for _, row in group.iterrows():
+                            res = str(row.get("結果", "")).strip()
+                            r_type = str(row.get("種別", "")).strip()
+
+                            raw_outs = pd.to_numeric(row.get("アウト数", 0), errors='coerce')
+                            raw_h = pd.to_numeric(row.get("被安打", 0), errors='coerce')
+                            raw_so = pd.to_numeric(row.get("奪三振", 0), errors='coerce')
+                            raw_bb = pd.to_numeric(row.get("与四球", 0), errors='coerce')
+
+                            # A. 真のまとめ入力行（結果または種別が「まとめ」）
+                            if res == "まとめ" or r_type == "まとめ":
+                                if pd.notna(raw_outs) and raw_outs > 0:
+                                    total_outs += int(raw_outs)
+                                elif "投球回" in row and pd.notna(pd.to_numeric(row.get("投球回"), errors='coerce')):
+                                    total_outs += int(pd.to_numeric(row.get("投球回"), errors='coerce') * 3)
+
+                                if pd.notna(raw_h) and raw_h > 0:
+                                    total_hits += int(raw_h)
+                                if pd.notna(raw_so) and raw_so > 0:
+                                    total_so += int(raw_so)
+                                if pd.notna(raw_bb) and raw_bb > 0:
+                                    total_bb += int(raw_bb)
+
+                            # B. 非プレイ行（交代・スタメン等）
+                            elif "ダミー" in r_type or "スタメン" in res or "交代" in res or "ベンチ" in res:
                                 continue
+
+                            # C. 個別打者イベント行（結果列から判定）
                             else:
-                                if res in ["安打", "単打", "二塁打", "三塁打", "本塁打"]:
+                                # 投球回（アウト数）
+                                if pd.notna(raw_outs) and raw_outs > 0:
+                                    total_outs += int(raw_outs)
+                                elif res in out_1:
+                                    total_outs += 1
+                                elif res in out_2:
+                                    total_outs += 2
+
+                                # 被安打
+                                if pd.notna(raw_h) and raw_h > 0:
+                                    total_hits += int(raw_h)
+                                elif res in hit_list or "被安打" in str(row.get("被安打", "")) or "被安打" in r_type:
                                     total_hits += 1
+
+                                # 奪三振
+                                if pd.notna(raw_so) and raw_so > 0:
+                                    total_so += int(raw_so)
                                 elif res in ["三振", "振り逃げ三振"]:
                                     total_so += 1
+
+                                # 与四球
+                                if pd.notna(raw_bb) and raw_bb > 0:
+                                    total_bb += int(raw_bb)
                                 elif res in ["四球", "死球"]:
                                     total_bb += 1
 
-                        total_outs = 0
-                        if "アウト数" in group.columns:
-                            total_outs += pd.to_numeric(group["アウト数"], errors='coerce').fillna(0).sum()
-                        elif "投球回" in group.columns:
-                            total_outs += pd.to_numeric(group["投球回"], errors='coerce').fillna(0).sum() * 3
-
+                        # 投球回（回）の表記変換（例: 9アウト → 3回）
                         fin = f"{int(total_outs // 3)}"
                         frac = int(total_outs % 3)
                         if frac == 1:

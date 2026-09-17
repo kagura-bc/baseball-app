@@ -70,9 +70,9 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         inn_bat_data = b_df[b_df["イニング"].isin(target_innings)] if not b_df.empty else pd.DataFrame()
         inn_pit_data = p_df[p_df["イニング"].isin(target_innings)] if not p_df.empty else pd.DataFrame()
 
-        # 得点の集計
-        k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').sum()) if not inn_bat_data.empty else 0
-        opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum()) if not inn_pit_data.empty else 0
+        # 得点・失点の集計（各列の数値を数値化して合計）
+        k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').fillna(0).sum()) if not inn_bat_data.empty and "得点" in inn_bat_data.columns else 0
+        opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum()) if not inn_pit_data.empty and "失点" in inn_pit_data.columns else 0
 
         # アウト数の集計（イニングチェンジ判定）
         k_outs = 0
@@ -149,8 +149,17 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     hit_list = ["単打", "二塁打", "三塁打", "本塁打", "安打"]
     k_h = b_df[b_df["結果"].isin(hit_list)].shape[0] if not b_df.empty and "結果" in b_df.columns else 0
     
-    if not p_df.empty and "被安打" in p_df.columns:
-        opp_h = int(pd.to_numeric(p_df["被安打"], errors='coerce').fillna(0).sum())
+    # 🌟 修正：「被安打」列の数値だけでなく、結果列の「単打」「二塁打」「三塁打」「本塁打」も確実にカウントする
+    opp_h = 0
+    if not p_df.empty:
+        # 1. 結果列にヒット系が含まれる行数をカウント
+        if "結果" in p_df.columns:
+            opp_h += p_df["Result" if "Result" in p_df.columns else "結果"].astype(str).str.strip().isin(hit_list).sum()
+        # 2. 「被安打」列に数値が入っている場合（まとめ入力等）も合算
+        if "被安打" in p_df.columns:
+            num_h = pd.to_numeric(p_df["被安打"], errors='coerce').fillna(0).sum()
+            if num_h > opp_h:  # 重複を防ぐため大きい方を採用、または両方足す
+                opp_h = int(num_h)
     else:
         opp_h = p_df[p_df["結果"].isin(hit_list)].shape[0] if not p_df.empty and "結果" in p_df.columns else 0
 
