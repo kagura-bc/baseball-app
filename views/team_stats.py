@@ -106,16 +106,35 @@ def show_team_stats(df_batting, df_pitching):
             continue
 
         team_rec_rows = group[(group[b_p_col] == "チーム記録") | (group.get("選手名", "") == "チーム記録")]
+        is_team_record = False
+        runs = 0
+        team_rec_hits = 0
+        team_rec_ab = 0
+        team_rec_hr = 0
+
         if not team_rec_rows.empty:
-            runs = pd.to_numeric(team_rec_rows["得点"], errors='coerce').fillna(0).sum()
             is_team_record = True
+            runs = pd.to_numeric(team_rec_rows["得点"], errors='coerce').fillna(0).sum()
+            
+            # 結果列から単打などのチーム記録を集計
+            hit_results = ["単打", "二塁打", "三塁打", "本塁打", "安打"]
+            ab_results = ["単打", "二塁打", "三塁打", "本塁打", "三振", "凡退", "失策", "併殺打", "野選", "振り逃げ三振", "犠飛"]
+            
+            for _, r_row in team_rec_rows.iterrows():
+                r_str = str(r_row.get("結果", "")).strip()
+                if r_str in hit_results:
+                    team_rec_hits += 1
+                    team_rec_ab += 1
+                    if r_str == "本塁打":
+                        team_rec_hr += 1
+                elif r_str in ab_results or "凡退" in r_str or "失策" in r_str:
+                    team_rec_ab += 1
         else:
             valid_batting = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
             runs = pd.to_numeric(valid_batting["得点"], errors='coerce').fillna(0).sum()
-            is_team_record = False
 
         individuals = group[(group[b_p_col] != "チーム記録") & (group.get("選手名", "") != "チーム記録")]
-        total_hits = 0; total_ab = 0; total_hr = 0; total_sb = 0
+        total_hits = team_rec_hits; total_ab = team_rec_ab; total_hr = team_rec_hr; total_sb = 0
 
         if not individuals.empty:
             ab_results = [

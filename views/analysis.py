@@ -74,7 +74,6 @@ def show_analysis_page(df_batting, df_pitching):
     def local_fmt(name):
         return fmt_player_name(name, STATS_NUMBERS)
 
-    # 個人成績と同様に、非表示対象の選手をデータフレームからあらかじめ除外する
     allowed_names = STATS_PLAYERS + ["チーム記録"]
     
     if not df_batting.empty:
@@ -89,14 +88,9 @@ def show_analysis_page(df_batting, df_pitching):
         st.info("分析するデータがありません。")
         return
 
-    # 変数の安全な初期化
     df_b_detail = pd.DataFrame()
     df_p_detail = pd.DataFrame()
 
-    # =========================================================
-    # フィルタリング前に全データに対して指標を計算
-    # 助っ人や除外選手を含めた「チーム全体の純粋な打順成績」を出すため
-    # =========================================================
     df_b_all = df_batting.copy()
     df_p_all = df_pitching.copy()
 
@@ -142,11 +136,9 @@ def show_analysis_page(df_batting, df_pitching):
         for c in ["打点", "盗塁", "得点"]:
             df_b_all[c] = pd.to_numeric(df_b_all[c], errors='coerce').fillna(0)
 
-    # 名前の強力クリーニング
     if "選手名" in df_b_all.columns:
         df_b_all["選手名"] = df_b_all["選手名"].astype(str).str.replace(" ", "").str.replace(" ", "").str.strip()
 
-    # 日付変換とYear列の作成
     if "日付" in df_b_all.columns:
         df_b_all["Date"] = pd.to_datetime(df_b_all["日付"], errors='coerce')
         df_b_all["Year"] = df_b_all["Date"].dt.year.astype(str).str.replace('.0', '', regex=False).fillna("不明")
@@ -163,13 +155,9 @@ def show_analysis_page(df_batting, df_pitching):
 
     df_b_unfiltered = df_b_all.copy()
 
-    # =========================================================
-    # 既存タブ用のデータフィルタリング (助っ人などを除外)
-    # =========================================================
     df_b = filter_players(df_b_all, exclude_set)
     df_p = filter_players(df_p_all, exclude_set)
 
-    # 通算成績用の全期間投手データ
     df_p_total_base = df_p.copy()
 
     years = sorted([y for y in df_b["Year"].unique()
@@ -191,9 +179,6 @@ def show_analysis_page(df_batting, df_pitching):
         df_b = df_b[df_b["試合種別"] == "練習試合"]
         df_p = df_p[df_p["試合種別"] == "練習試合"] if "試合種別" in df_p.columns else df_p
 
-    # ---------------------------------------------------------
-    # ゲーム単位のデータセット作成 (得点計算 + FirstScore判定)
-    # ---------------------------------------------------------
     games_list = []
     if "Date" in df_b.columns and "対戦相手" in df_b.columns and "試合種別" in df_b.columns:
         for (d, opp, m_type), g_b in df_b.groupby(["Date", "対戦相手", "試合種別"]):
@@ -255,9 +240,6 @@ def show_analysis_page(df_batting, df_pitching):
 
     df_games = pd.DataFrame(games_list)
 
-    # ---------------------------------------------------------
-    # タブ構成
-    # ---------------------------------------------------------
     tab1, tab2, tab3, tab4 = st.tabs(
         ["📈 チーム傾向", "🆚 対戦相手別", "🔍 詳細投打分析", "🧠 理想オーダー"])
 
@@ -422,12 +404,10 @@ def show_analysis_page(df_batting, df_pitching):
                     if df_raw.empty or "イニング" not in df_raw.columns or score_col not in df_raw.columns:
                         return pd.Series(dtype=float)
                     df_i = df_raw.copy()
-                    # 「表」「裏」を取り除いて「〇回」の表記に統一
                     df_i["イニング"] = df_i["イニング"].astype(str).str.replace(r"[表裏]", "", regex=True)
                     df_i = df_i[df_i["イニング"].str.match(r"^\d+回")]
                     df_i["得点"] = pd.to_numeric(
                         df_i[score_col], errors='coerce').fillna(0)
-                    # 同じ回（例：1回表・1回裏）の得点を「1回」に合算
                     return df_i.groupby("イニング")["得点"].sum()
 
                 inn_scores = aggregate_innings(df_b, "得点")
@@ -436,7 +416,6 @@ def show_analysis_page(df_batting, df_pitching):
                 df_inn = pd.DataFrame(
                     {"得点": inn_scores, "失点": inn_lost}).fillna(0).reset_index()
                 if not df_inn.empty:
-                    # 2桁の回数にも対応したソート用のイニング数値抽出
                     df_inn["InnNum"] = df_inn["イニング"].apply(
                         lambda x: int(re.search(r'\d+', str(x)).group()) if re.search(r'\d+', str(x)) else 99)
                     df_inn = df_inn.sort_values("InnNum")
@@ -582,6 +561,48 @@ def show_analysis_page(df_batting, df_pitching):
         with sub_tab1:
             st.markdown("#### 🏢 チーム全体のプレースタイル")
 
+            # 打数・安打・四死球フラグの事前作成
+            if not df_b_detail.empty and "結果" in df_b_detail.columns:
+                if "is_ab" not in df_b_detail.columns or "is_hit" not in df_b_detail.columns or "is_bb" not in df_b_detail.columns:
+                    non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+                    is_valid = ~df_b_detail["結果"].astype(str).isin(["", "nan", "None", "-"])
+                    is_not_excluded = ~df_b_detail["結果"].astype(str).str.contains(non_ab_pattern, na=False)
+                    df_b_detail["is_ab"] = (is_valid & is_not_excluded).astype(int)
+                    df_b_detail["is_hit"] = df_b_detail["結果"].astype(str).str.contains("単打|二塁打|三塁打|本塁打", na=False).astype(int)
+                    df_b_detail["is_bb"] = df_b_detail["結果"].astype(str).str.contains("四球|死球|四死球", na=False).astype(int)
+
+            if not df_p_detail.empty and "結果" in df_p_detail.columns:
+                if "is_ab" not in df_p_detail.columns or "is_hit" not in df_p_detail.columns or "is_bb" not in df_p_detail.columns:
+                    non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+                    is_valid = ~df_p_detail["結果"].astype(str).isin(["", "nan", "None", "-"])
+                    is_not_excluded = ~df_p_detail["結果"].astype(str).str.contains(non_ab_pattern, na=False)
+                    df_p_detail["is_ab"] = (is_valid & is_not_excluded).astype(int)
+                    df_p_detail["is_hit"] = df_p_detail["結果"].astype(str).str.contains("単打|二塁打|三塁打|本塁打", na=False).astype(int)
+                    df_p_detail["is_bb"] = df_p_detail["結果"].astype(str).str.contains("四球|死球|四死球", na=False).astype(int)
+
+            # チーム全体の打率・被打率・防御率の計算とメトリクス表示
+            t_ab = df_b_detail["is_ab"].sum() if not df_b_detail.empty and "is_ab" in df_b_detail.columns else 0
+            t_hit = df_b_detail["is_hit"].sum() if not df_b_detail.empty and "is_hit" in df_b_detail.columns else 0
+            team_avg = t_hit / t_ab if t_ab > 0 else 0.0
+
+            tp_ab = df_p_detail["is_ab"].sum() if not df_p_detail.empty and "is_ab" in df_p_detail.columns else 0
+            tp_hit = df_p_detail["is_hit"].sum() if not df_p_detail.empty and "is_hit" in df_p_detail.columns else 0
+            team_p_avg = tp_hit / tp_ab if tp_ab > 0 else 0.0
+
+            outs_sum = pd.to_numeric(df_p_detail.get("アウト数", 0), errors='coerce').fillna(0).sum() if not df_p_detail.empty and "アウト数" in df_p_detail.columns else 0
+            ip_val = outs_sum / 3.0
+            run_col = "自責点" if "自責点" in df_p_detail.columns else ("失点" if "失点" in df_p_detail.columns else None)
+            er_sum = pd.to_numeric(df_p_detail[run_col], errors='coerce').fillna(0).sum() if not df_p_detail.empty and run_col else 0
+            team_era = (er_sum * 7) / ip_val if ip_val > 0 else 0.0
+
+            tm1, tm2, tm3 = st.columns(3)
+            tm1.metric("チーム打率", f"{team_avg:.3f}")
+            tm2.metric("チーム被打率", f"{team_p_avg:.3f}")
+            tm3.metric("チーム防御率", f"{team_era:.2f}")
+
+            st.write("")
+            st.divider()
+
             st.markdown("##### チーム打球傾向 (アウトの内訳)")
             if not df_b_detail.empty and "結果" in df_b_detail.columns:
                 t_goro = len(
@@ -683,6 +704,99 @@ def show_analysis_page(df_batting, df_pitching):
                 else:
                     st.caption("データがありません")
 
+            st.write("")
+            st.divider()
+
+            # 🌟【移動箇所】最下部に移動したボールカウント別 チーム打撃・投手成績
+            st.markdown("##### ⚾ ボールカウント別 チーム打撃・投手成績")
+            c_cnt1, c_cnt2 = st.columns(2)
+
+            with c_cnt1:
+                st.markdown("**▼ チーム打率（カウント別）**")
+                if not df_b_detail.empty:
+                    if "ボール" in df_b_detail.columns and "ストライク" in df_b_detail.columns:
+                        df_b_detail["ball_count_str"] = df_b_detail.apply(
+                            lambda r: f"{int(float(r['ボール']))}B-{min(2, int(float(r['ストライク'])))}S" 
+                            if pd.notna(r.get("ボール")) and pd.notna(r.get("ストライク")) and str(r.get("ボール")) != "nan" and str(r.get("ストライク")) != "nan" else None, 
+                            axis=1
+                        )
+                        cnt_col_b = "ball_count_str"
+                    elif "カウント" in df_b_detail.columns:
+                        df_b_detail["ball_count_str"] = df_b_detail["カウント"].astype(str).apply(
+                            lambda x: re.sub(r'(\d+)S', lambda m: f"{min(2, int(m.group(1)))}S", x) if x and x != "nan" else None
+                        )
+                        cnt_col_b = "ball_count_str"
+                    else:
+                        cnt_col_b = None
+
+                    if cnt_col_b and cnt_col_b in df_b_detail.columns and not df_b_detail[cnt_col_b].dropna().empty:
+                        df_b_valid_c = df_b_detail[df_b_detail[cnt_col_b].notna() & (df_b_detail[cnt_col_b] != "") & (df_b_detail[cnt_col_b] != "nan")].copy()
+                        if not df_b_valid_c.empty:
+                            tc_stats = df_b_valid_c.groupby(cnt_col_b).agg(
+                                打数=("is_ab", "sum"),
+                                四死球=("is_bb", "sum"),
+                                安打=("is_hit", "sum")
+                            ).reset_index()
+                            tc_stats["打率"] = tc_stats.apply(lambda x: x["安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+                            tc_stats = tc_stats.rename(columns={cnt_col_b: "カウント"})
+                            tc_stats = tc_stats[["カウント", "打数", "四死球", "安打", "打率"]]
+
+                            st.dataframe(
+                                tc_stats.style.format({"打率": "{:.3f}"})
+                                .background_gradient(subset=["打率"], cmap="Reds"),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        else:
+                            st.caption("ボールカウント別のデータがありません。")
+                    else:
+                        st.caption("ボールカウント別のデータがありません。")
+                else:
+                    st.caption("2026年以降の打撃データがありません")
+
+            with c_cnt2:
+                st.markdown("**▼ チーム被打率（カウント別）**")
+                if not df_p_detail.empty:
+                    if "ボール" in df_p_detail.columns and "ストライク" in df_p_detail.columns:
+                        df_p_detail["ball_count_str"] = df_p_detail.apply(
+                            lambda r: f"{int(float(r['ボール']))}B-{min(2, int(float(r['ストライク'])))}S" 
+                            if pd.notna(r.get("ボール")) and pd.notna(r.get("ストライク")) and str(r.get("ボール")) != "nan" and str(r.get("ストライク")) != "nan" else None, 
+                            axis=1
+                        )
+                        cnt_col_p = "ball_count_str"
+                    elif "カウント" in df_p_detail.columns:
+                        df_p_detail["ball_count_str"] = df_p_detail["カウント"].astype(str).apply(
+                            lambda x: re.sub(r'(\d+)S', lambda m: f"{min(2, int(m.group(1)))}S", x) if x and x != "nan" else None
+                        )
+                        cnt_col_p = "ball_count_str"
+                    else:
+                        cnt_col_p = None
+
+                    if cnt_col_p and cnt_col_p in df_p_detail.columns and not df_p_detail[cnt_col_p].dropna().empty:
+                        df_p_valid_c = df_p_detail[df_p_detail[cnt_col_p].notna() & (df_p_detail[cnt_col_p] != "") & (df_p_detail[cnt_col_p] != "nan")].copy()
+                        if not df_p_valid_c.empty:
+                            tpc_stats = df_p_valid_c.groupby(cnt_col_p).agg(
+                                打数=("is_ab", "sum"),
+                                四死球=("is_bb", "sum"),
+                                被安打=("is_hit", "sum")
+                            ).reset_index()
+                            tpc_stats["被打率"] = tpc_stats.apply(lambda x: x["被安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+                            tpc_stats = tpc_stats.rename(columns={cnt_col_p: "カウント"})
+                            tpc_stats = tpc_stats[["カウント", "打数", "四死球", "被安打", "被打率"]]
+
+                            st.dataframe(
+                                tpc_stats.style.format({"被打率": "{:.3f}"})
+                                .background_gradient(subset=["被打率"], cmap="Blues"),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        else:
+                            st.caption("ボールカウント別のデータがありません。")
+                    else:
+                        st.caption("ボールカウント別のデータがありません。")
+                else:
+                    st.caption("2026年以降の投手データがありません")
+
         # --- 個人の打撃分析 ---
         with sub_tab2:
             if not df_b_detail.empty and "選手名" in df_b_detail.columns:
@@ -712,6 +826,52 @@ def show_analysis_page(df_batting, df_pitching):
                         my_b = df_b_detail[df_b_detail["選手名"] == target_b_player].copy()
 
                         if not my_b.empty:
+                            if "is_ab" not in my_b.columns or "is_hit" not in my_b.columns or "is_bb" not in my_b.columns:
+                                non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+                                is_valid = ~my_b["結果"].astype(str).isin(["", "nan", "None", "-"])
+                                is_not_excluded = ~my_b["結果"].astype(str).str.contains(non_ab_pattern, na=False)
+                                my_b["is_ab"] = (is_valid & is_not_excluded).astype(int)
+                                my_b["is_hit"] = my_b["結果"].astype(str).str.contains("単打|二塁打|三塁打|本塁打", na=False).astype(int)
+                                my_b["is_bb"] = my_b["結果"].astype(str).str.contains("四球|死球|四死球", na=False).astype(int)
+
+                            total_b_df = df_batting[df_batting["選手名"] == target_b_player] if not df_batting.empty else pd.DataFrame()
+                            if not total_b_df.empty:
+                                non_ab_pat = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+                                t_res = total_b_df["結果"].astype(str)
+                                t_ab = (~t_res.isin(["", "nan", "None", "-"]) & ~t_res.str.contains(non_ab_pat, na=False)).sum()
+                                t_hit = t_res.str.contains("単打|二塁打|三塁打|本塁打", na=False).sum()
+                                avg_total = t_hit / t_ab if t_ab > 0 else 0.0
+                            else:
+                                avg_total = 0.0
+
+                            s_ab = my_b["is_ab"].sum()
+                            s_hit = my_b["is_hit"].sum()
+                            avg_season = s_hit / s_ab if s_ab > 0 else 0.0
+
+                            pa_cnt = my_b["is_pa"].sum() if "is_pa" in my_b.columns else len(my_b)
+
+                            if "球数" in my_b.columns:
+                                r_pitches_b = pd.to_numeric(my_b["球数"], errors='coerce').fillna(0)
+                            else:
+                                s_b_cnt = pd.to_numeric(my_b.get("ストライク", 0), errors='coerce').fillna(0)
+                                b_b_cnt = pd.to_numeric(my_b.get("ボール", 0), errors='coerce').fillna(0)
+                                r_pitches_b = s_b_cnt + b_b_cnt
+
+                            my_b_counted = my_b[r_pitches_b > 0]
+                            pa_cnt_counted = my_b_counted["is_pa"].sum() if "is_pa" in my_b_counted.columns else len(my_b_counted)
+                            total_b_pitches_counted = r_pitches_b[r_pitches_b > 0].sum()
+                            ppa_val = total_b_pitches_counted / pa_cnt_counted if pa_cnt_counted > 0 else 0.0
+
+                            st.markdown(f"#### 📊 {fmt_player_name(target_b_player, STATS_NUMBERS)} の打撃指標")
+                            b_m1, b_m2, b_m3, b_m4 = st.columns(4)
+                            b_m1.metric("通算打率", f"{avg_total:.3f}")
+                            b_m2.metric("今季打率 (2026〜)", f"{avg_season:.3f}")
+                            b_m3.metric("1打席平均球数(P/PA)", f"{ppa_val:.2f}球" if pa_cnt_counted > 0 else "-")
+                            b_m4.metric("総打席数 (2026〜)", f"{int(pa_cnt)} 打席")
+
+                            st.write("")
+                            st.divider()
+
                             st.markdown(f"#### {fmt_player_name(target_b_player, STATS_NUMBERS)} の打球傾向（方向×種類）")
 
                             def show_player_direction_chart(data_df, title_label):
@@ -764,6 +924,74 @@ def show_analysis_page(df_batting, df_pitching):
                                     "GO/AO (ゴロ÷フライ)", f"{my_goro / my_fly:.2f}", help="1.0以上ならゴロヒッター、未満ならフライヒッターと言えます。")
                             else:
                                 st.write("※ フライアウトが0のため比率計算不可")
+
+                            st.divider()
+                            st.markdown(f"#### 🏃 {fmt_player_name(target_b_player, STATS_NUMBERS)} の走者状況別打率")
+                            
+                            r_col = "ランナー状況" if "ランナー状況" in my_b.columns else ("走者状況" if "走者状況" in my_b.columns else None)
+                            if r_col and not my_b[r_col].dropna().empty:
+                                my_b_valid_r = my_b[my_b[r_col].notna() & (my_b[r_col] != "") & (my_b[r_col] != "nan")].copy()
+                                if not my_b_valid_r.empty:
+                                    r_stats = my_b_valid_r.groupby(r_col).agg(
+                                        打数=("is_ab", "sum"),
+                                        安打=("is_hit", "sum")
+                                    ).reset_index()
+                                    r_stats["打率"] = r_stats.apply(lambda x: x["安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+                                    
+                                    r_order = ["ランナーなし", "ランナー1塁", "得点圏", "満塁"]
+                                    r_stats[r_col] = pd.Categorical(r_stats[r_col], categories=r_order, ordered=True)
+                                    r_stats = r_stats.sort_values(r_col).dropna(subset=[r_col])
+
+                                    st.dataframe(
+                                        r_stats.style.format({"打率": "{:.3f}"})
+                                        .background_gradient(subset=["打率"], cmap="Reds"),
+                                        use_container_width=True,
+                                        hide_index=True
+                                    )
+                                else:
+                                    st.caption("走者状況のデータがありません。")
+                            else:
+                                st.caption("走者状況のデータがありません。")
+
+                            st.write("")
+                            st.markdown(f"#### ⚾ {fmt_player_name(target_b_player, STATS_NUMBERS)} のボールカウント別打率")
+                            
+                            cnt_col = None
+                            if "ボール" in my_b.columns and "ストライク" in my_b.columns:
+                                my_b["ball_count_str"] = my_b.apply(
+                                    lambda r: f"{int(float(r['ボール']))}B-{min(2, int(float(r['ストライク'])))}S" 
+                                    if pd.notna(r.get("ボール")) and pd.notna(r.get("ストライク")) and str(r.get("ボール")) != "nan" and str(r.get("ストライク")) != "nan" else None, 
+                                    axis=1
+                                )
+                                cnt_col = "ball_count_str"
+                            elif "カウント" in my_b.columns:
+                                my_b["ball_count_str"] = my_b["カウント"].astype(str).apply(
+                                    lambda x: re.sub(r'(\d+)S', lambda m: f"{min(2, int(m.group(1)))}S", x) if x and x != "nan" else None
+                                )
+                                cnt_col = "ball_count_str"
+
+                            if cnt_col and cnt_col in my_b.columns and not my_b[cnt_col].dropna().empty:
+                                my_b_valid_c = my_b[my_b[cnt_col].notna() & (my_b[cnt_col] != "") & (my_b[cnt_col] != "nan")].copy()
+                                if not my_b_valid_c.empty:
+                                    c_stats = my_b_valid_c.groupby(cnt_col).agg(
+                                        打数=("is_ab", "sum"),
+                                        四死球=("is_bb", "sum"),
+                                        安打=("is_hit", "sum")
+                                    ).reset_index()
+                                    c_stats["打率"] = c_stats.apply(lambda x: x["安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+                                    c_stats = c_stats.rename(columns={cnt_col: "カウント"})
+                                    c_stats = c_stats[["カウント", "打数", "四死球", "安打", "打率"]]
+
+                                    st.dataframe(
+                                        c_stats.style.format({"打率": "{:.3f}"})
+                                        .background_gradient(subset=["打率"], cmap="Reds"),
+                                        use_container_width=True,
+                                        hide_index=True
+                                    )
+                                else:
+                                    st.caption("ボールカウント別のデータがありません。")
+                            else:
+                                st.caption("ボールカウント別のデータがありません。")
                         else:
                             st.write("該当選手のデータなし")
                 else:
@@ -806,24 +1034,54 @@ def show_analysis_page(df_batting, df_pitching):
                         if my_p.empty:
                             st.write("該当選手のデータなし")
                         else:
+                            if "is_ab" not in my_p.columns or "is_hit" not in my_p.columns or "is_bb" not in my_p.columns:
+                                non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+                                is_valid = ~my_p["結果"].astype(str).isin(["", "nan", "None", "-"])
+                                is_not_excluded = ~my_p["結果"].astype(str).str.contains(non_ab_pattern, na=False)
+                                my_p["is_ab"] = (is_valid & is_not_excluded).astype(int)
+                                my_p["is_hit"] = my_p["結果"].astype(str).str.contains("単打|二塁打|三塁打|本塁打", na=False).astype(int)
+                                my_p["is_bb"] = my_p["結果"].astype(str).str.contains("四球|死球|四死球", na=False).astype(int)
+
                             s_sum = pd.to_numeric(my_p.get("ストライク", 0), errors='coerce').fillna(0).sum()
                             b_sum = pd.to_numeric(my_p.get("ボール", 0), errors='coerce').fillna(0).sum()
                             total_pitches = s_sum + b_sum
-                            
+
+                            give_bb = len(my_p[my_p["結果"].astype(str).str.contains("四球|死球|四死球", na=False)]) if "結果" in my_p.columns else 0
+                            total_pa_p = len(my_p)
+                            bb_rate = (give_bb / total_pa_p * 100) if total_pa_p > 0 else 0.0
+
+                            if "球数" in my_p.columns:
+                                r_pitches_p = pd.to_numeric(my_p["球数"], errors='coerce').fillna(0)
+                            else:
+                                s_p_cnt = pd.to_numeric(my_p.get("ストライク", 0), errors='coerce').fillna(0)
+                                b_p_cnt = pd.to_numeric(my_p.get("ボール", 0), errors='coerce').fillna(0)
+                                r_pitches_p = s_p_cnt + b_p_cnt
+
+                            my_p_counted = my_p[r_pitches_p > 0]
+                            total_p_cnt_counted = r_pitches_p[r_pitches_p > 0].sum()
+                            outs_sum_counted = pd.to_numeric(my_p_counted.get("アウト数", 0), errors='coerce').fillna(0).sum() if "アウト数" in my_p_counted.columns else 0
+                            ip_val_counted = outs_sum_counted / 3.0
+
+                            pip_val = total_p_cnt_counted / ip_val_counted if ip_val_counted > 0 else 0.0
+
                             st.markdown(f"#### 🎯 {fmt_player_name(target_p_player, STATS_NUMBERS)} の投球カウント・ストライク率")
                             
-                            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                            m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
                             if total_pitches > 0:
                                 strike_rate = (s_sum / total_pitches) * 100
                                 m_col1.metric("ストライク率", f"{strike_rate:.1f}%")
-                                m_col2.metric("総投球数", f"{int(total_pitches)} 球")
-                                m_col3.metric("ストライク", f"{int(s_sum)} 球")
-                                m_col4.metric("ボール", f"{int(b_sum)} 球")
+                                m_col2.metric("1回平均球数(P/IP)", f"{pip_val:.2f}球" if ip_val_counted > 0 else "-")
+                                m_col3.metric("総投球数", f"{int(total_pitches)} 球")
+                                m_col4.metric("ストライク", f"{int(s_sum)} 球")
+                                m_col5.metric("ボール", f"{int(b_sum)} 球")
+                                m_col6.metric("四死球率", f"{bb_rate:.1f}%")
                             else:
                                 m_col1.metric("ストライク率", "-")
-                                m_col2.metric("総投球数", "0 球")
-                                m_col3.metric("ストライク", "0 球")
-                                m_col4.metric("ボール", "0 球")
+                                m_col2.metric("1回平均球数(P/IP)", "-")
+                                m_col3.metric("総投球数", "0 球")
+                                m_col4.metric("ストライク", "0 球")
+                                m_col5.metric("ボール", "0 球")
+                                m_col6.metric("四死球率", f"{bb_rate:.1f}%")
 
                             st.write("")
                             st.divider()
@@ -916,6 +1174,75 @@ def show_analysis_page(df_batting, df_pitching):
                                     st.info("被安打・四死球の詳細データがありません。")
                             else:
                                 st.info("被安打・四死球の詳細データがありません。")
+
+                            st.write("")
+                            st.divider()
+                            st.markdown(f"#### 🏃 {fmt_player_name(target_p_player, STATS_NUMBERS)} の走者状況別 被打率")
+                            
+                            r_col_p = "ランナー状況" if "ランナー状況" in my_p.columns else ("走者状況" if "走者状況" in my_p.columns else None)
+                            if r_col_p and not my_p[r_col_p].dropna().empty:
+                                my_p_valid_r = my_p[my_p[r_col_p].notna() & (my_p[r_col_p] != "") & (my_p[r_col_p] != "nan")].copy()
+                                if not my_p_valid_r.empty:
+                                    pr_stats = my_p_valid_r.groupby(r_col_p).agg(
+                                        打数=("is_ab", "sum"),
+                                        被安打=("is_hit", "sum")
+                                    ).reset_index()
+                                    pr_stats["被打率"] = pr_stats.apply(lambda x: x["被安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+                                    
+                                    r_order = ["ランナーなし", "ランナー1塁", "得点圏", "満塁"]
+                                    pr_stats[r_col_p] = pd.Categorical(pr_stats[r_col_p], categories=r_order, ordered=True)
+                                    pr_stats = pr_stats.sort_values(r_col_p).dropna(subset=[r_col_p])
+
+                                    st.dataframe(
+                                        pr_stats.style.format({"被打率": "{:.3f}"})
+                                        .background_gradient(subset=["被打率"], cmap="Blues"),
+                                        use_container_width=True,
+                                        hide_index=True
+                                    )
+                                else:
+                                    st.caption("走者状況のデータがありません。")
+                            else:
+                                st.caption("走者状況のデータがありません。")
+
+                            st.write("")
+                            st.markdown(f"#### ⚾ {fmt_player_name(target_p_player, STATS_NUMBERS)} のボールカウント別 被打率")
+                            
+                            cnt_col_p = None
+                            if "ボール" in my_p.columns and "ストライク" in my_p.columns:
+                                my_p["ball_count_str"] = my_p.apply(
+                                    lambda r: f"{int(float(r['ボール']))}B-{min(2, int(float(r['ストライク'])))}S" 
+                                    if pd.notna(r.get("ボール")) and pd.notna(r.get("ストライク")) and str(r.get("ボール")) != "nan" and str(r.get("ストライク")) != "nan" else None, 
+                                    axis=1
+                                )
+                                cnt_col_p = "ball_count_str"
+                            elif "カウント" in my_p.columns:
+                                my_p["ball_count_str"] = my_p["カウント"].astype(str).apply(
+                                    lambda x: re.sub(r'(\d+)S', lambda m: f"{min(2, int(m.group(1)))}S", x) if x and x != "nan" else None
+                                )
+                                cnt_col_p = "ball_count_str"
+
+                            if cnt_col_p and cnt_col_p in my_p.columns and not my_p[cnt_col_p].dropna().empty:
+                                my_p_valid_c = my_p[my_p[cnt_col_p].notna() & (my_p[cnt_col_p] != "") & (my_p[cnt_col_p] != "nan")].copy()
+                                if not my_p_valid_c.empty:
+                                    pc_stats = my_p_valid_c.groupby(cnt_col_p).agg(
+                                        打数=("is_ab", "sum"),
+                                        四死球=("is_bb", "sum"),
+                                        被安打=("is_hit", "sum")
+                                    ).reset_index()
+                                    pc_stats["被打率"] = pc_stats.apply(lambda x: x["被安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+                                    pc_stats = pc_stats.rename(columns={cnt_col_p: "カウント"})
+                                    pc_stats = pc_stats[["カウント", "打数", "四死球", "被安打", "被打率"]]
+
+                                    st.dataframe(
+                                        pc_stats.style.format({"被打率": "{:.3f}"})
+                                        .background_gradient(subset=["被打率"], cmap="Blues"),
+                                        use_container_width=True,
+                                        hide_index=True
+                                    )
+                                else:
+                                    st.caption("ボールカウント別のデータがありません。")
+                            else:
+                                st.caption("ボールカウント別のデータがありません。")
 
     # =========================================================
     # Tab 4: 🧠 理想オーダー
@@ -1248,7 +1575,6 @@ def show_analysis_page(df_batting, df_pitching):
                     df_order["打順_num"] = df_order["打順"].apply(safe_extract_order)
                     df_order_base["打順_num"] = df_order_base["打順"].apply(safe_extract_order)
 
-                    # 9番までの試合のみを抽出
                     merge_cols = [c for c in ["Date", "対戦相手", "試合種別"] if c in df_order_base.columns]
                     if merge_cols:
                         game_max_order = df_order_base.groupby(merge_cols)["打順_num"].max().reset_index()
