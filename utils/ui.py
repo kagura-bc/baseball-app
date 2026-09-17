@@ -83,17 +83,19 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         if not inn_pit_data.empty and "結果" in inn_pit_data.columns:
             opp_outs = len(inn_pit_data[inn_pit_data["結果"].isin(single_out_list)]) + len(inn_pit_data[inn_pit_data["結果"] == "併殺打"]) * 2
 
-        # それ以降のイニングにデータが存在するか（過去イニング判定）
+        # 1. それ以降のイニングにデータが存在するか（過去イニング判定）
         later_target = [f"{j}回{s}" for j in range(i + 1, 10) for s in ["", "表", "裏"]]
         k_has_later = not b_df[b_df["イニング"].isin(later_target)].empty if not b_df.empty else False
         opp_has_later = not p_df[p_df["イニング"].isin(later_target)].empty if not p_df.empty else False
 
-        # 表示フラグ判定 (得点あり or 3アウト or 過去のイニング)
-        k_show_zero = (k_outs >= 3) or k_has_later
-        opp_show_zero = (opp_outs >= 3) or opp_has_later
+        # 🌟 2. 修正：データが存在する場合（「ー」や「チーム記録」行含む）も 0 表示対象にする
+        k_show_zero = (not inn_bat_data.empty) or (k_outs >= 3) or k_has_later
+        opp_show_zero = (not inn_pit_data.empty) or (opp_outs >= 3) or opp_has_later
 
-        # 表示用文字列の設定
-        if not inn_bat_data.empty and not inn_bat_data[inn_bat_data["結果"] == "✖"].empty:
+        # 3. 表示用文字列の設定（「ー」などの記録があれば 0 に変えて表示）
+        dash_list = ["ー", "－", "-", "―", "‐"]
+
+        if not inn_bat_data.empty and not inn_bat_data[inn_bat_data["結果"].isin(["✖", "X", "x"])].empty:
             k_disp = "✖"
         elif k_runs > 0:
             k_disp = str(k_runs)
@@ -102,7 +104,7 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         else:
             k_disp = ""
 
-        if not inn_pit_data.empty and not inn_pit_data[inn_pit_data["結果"] == "✖"].empty:
+        if not inn_pit_data.empty and not inn_pit_data[inn_pit_data["結果"].isin(["✖", "X", "x"])].empty:
             opp_disp = "✖"
         elif opp_runs > 0:
             opp_disp = str(opp_runs)
@@ -124,13 +126,21 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
                     opp_disp = "✖"
                     opp_exists = True
                 elif total_opp > total_k:
-                    opp_disp = f"{opp_disp}✖"
+                    # 🌟 修正：「0」の場合は「0✖」ではなく「✖」のみにする
+                    if opp_disp == "0":
+                        opp_disp = "✖"
+                    else:
+                        opp_disp = f"{opp_disp}✖"
             else:
                 if not k_exists:
                     k_disp = "✖"
                     k_exists = True
                 elif total_k > total_opp:
-                    k_disp = f"{k_disp}✖"
+                    # 🌟 修正：「0」の場合は「0✖」ではなく「✖」のみにする
+                    if k_disp == "0":
+                        k_disp = "✖"
+                    else:
+                        k_disp = f"{k_disp}✖"
 
         k_inning.append(k_disp if k_exists else "")
         opp_inning.append(opp_disp if opp_exists else "")

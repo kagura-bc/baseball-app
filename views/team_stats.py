@@ -226,13 +226,41 @@ def show_team_stats(df_batting, df_pitching):
             continue
 
         team_rec_rows = group[(group[p_p_col] == "チーム記録") | (group.get("選手名", "") == "チーム記録")]
-        if not team_rec_rows.empty:
-            runs_allowed = pd.to_numeric(team_rec_rows["失点"], errors='coerce').fillna(0).sum()
-            col_errors = pd.to_numeric(team_rec_rows["失策"], errors='coerce').fillna(0).sum() if "失策" in team_rec_rows.columns else 0
-        else:
-            runs_allowed = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
-            col_errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum() if "失策" in group.columns else 0
+        runs_allowed = 0
+        col_errors = 0
 
+        if not team_rec_rows.empty:
+            # チーム記録行の「得点」列の数値、または結果列が「得点」「失点」の行の数を合算
+            for _, tr in team_rec_rows.iterrows():
+                r_val = str(tr.get("結果", ""))
+                # 結果に「得点」または「失点」と書かれている行を1失点としてカウント
+                if "得点" in r_val or "失点" in r_val or "失点" in str(tr.get("イニング", "")):
+                    runs_allowed += 1
+                else:
+                    # それ以外は念のため得点列（または失点列）に数値があれば加算
+                    val = pd.to_numeric(tr.get("失点", tr.get("得点", 0)), errors='coerce')
+                    if pd.notna(val) and val > 0:
+                        runs_allowed += int(val)
+            
+            if "失策" in team_rec_rows.columns:
+                col_errors = pd.to_numeric(team_rec_rows["失策"], errors='coerce').fillna(0).sum()
+        else:
+            # 個人成績ベースの場合
+            # 結果列に「得点」または「失点」が含まれる行数をカウント
+            res_runs = group["結果"].astype(str).str.contains("得点|失点").sum() if "結果" in group.columns else 0
+            
+            # 失点列（または得点列）の数値も念のため合算
+            if "失点" in group.columns:
+                num_runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
+            elif "得点" in group.columns:
+                num_runs = pd.to_numeric(group["得点"], errors='coerce').fillna(0).sum()
+            else:
+                num_runs = 0
+                
+            runs_allowed = int(res_runs) + int(num_runs)
+
+            if "失策" in group.columns:
+                col_errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum()
         res_errors = group["結果"].astype(str).str.contains("失策").sum() if "結果" in group.columns else 0
         errors = col_errors + res_errors
 
@@ -463,8 +491,8 @@ def show_team_stats(df_batting, df_pitching):
                 p_p_name = "投手名" if "投手名" in match_pit.columns else "選手名"
 
                 if has_team_rec:
-                    sb_bat = match_bat[match_bat[b_p_name] == "チーム記録"].copy()
-                    sb_pit = match_pit[match_pit[p_p_name] == "チーム記録"].copy()
+                    sb_bat = match_bat.copy() # 個人の安打も反映させるため全行コピーに変更
+                    sb_pit = match_pit.copy()
 
                     sb_pit["失策"] = 0
                     if not sb_pit.empty:
@@ -485,8 +513,24 @@ def show_team_stats(df_batting, df_pitching):
                     if not sb_bat.empty:
                         sb_bat.iloc[0, sb_bat.columns.get_loc("失策")] = opp_errors
 
+                # 🌟 追加：スコアボード描画関数に渡す直前に、結果列の「得点」をスコアボード用の「得点/失点」列の数値に変換
+                if "結果" in sb_bat.columns:
+                    # 自チーム攻撃時：結果が「得点」の行の「得点」列を 1 に設定
+                    mask_bat_runs = sb_bat["結果"].astype(str).str.contains("得点", na=False)
+                    if "得点" not in sb_bat.columns:
+                        sb_bat["得点"] = 0
+                    sb_bat.loc[mask_bat_runs, "得点"] = 1
+
+                if "結果" in sb_pit.columns:
+                    # 相手チーム攻撃（自チーム守備）時：結果が「得点」または「失点」の行の「失点」列を 1 に設定
+                    mask_pit_runs = sb_pit["結果"].astype(str).str.contains("得点|失点", na=False)
+                    if "失点" not in sb_pit.columns:
+                        sb_pit["失点"] = 0
+                    sb_pit.loc[mask_pit_runs, "失点"] = 1
+
                 st.markdown("<div id='viewer-top' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
 
+                # スコアボード描画（※結果列の単打等の安打カウントは、前回の ui.py の修正で機能します）
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
 
                 st.divider()
@@ -815,8 +859,13 @@ def show_team_stats(df_batting, df_pitching):
                         strike_rate = (s_cnt / balls * 100) if balls > 0 else 0.0
                         strike_rate_str = f"{strike_rate:.1f}%"
 
-                        runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum() if "失点" in group.columns else 0
-                        er = pd.to_numeric(group["自責点"], errors='coerce').fillna(0).sum() if "自責点" in group.columns else 0
+                        res_runs = group["結果"].astype(str).str.contains("得点|失点", na=False).sum() if "結果" in group.columns else 0
+                        num_runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum() if "失点" in group.columns else 0
+                        runs = int(res_runs) if res_runs > 0 else int(num_runs)
+
+                        # 自責点：スプレッドシートの「自責点」列の数値をそのまま合計して反映
+                        er_col = "自責点" if "自責点" in group.columns else ("自責" if "自責" in group.columns else None)
+                        er = int(pd.to_numeric(group[er_col], errors='coerce').fillna(0).sum()) if er_col else 0
 
                         total_hits = 0; total_so = 0; total_bb = 0
                         for _, row in group.iterrows():
