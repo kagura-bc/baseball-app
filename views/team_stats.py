@@ -215,11 +215,15 @@ def show_team_stats(df_batting, df_pitching):
         if is_team_record:
             games_map[key]["has_team_record"] = True
 
-    # --- B. 投手データから集計 ---
+    # --- B. 投手データから集計 (【修正箇所】投球回／アウト数の自動判定を強化) ---
     df_p_work = df_pitching.copy()
     df_p_work["DateStr"] = pd.to_datetime(df_p_work["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
 
     p_p_col = "投手名" if "投手名" in df_p_work.columns else "選手名"
+
+    # アウト数カウント用の判定用リスト
+    out_1 = ["凡退", "凡退(ゴロ)", "凡退(フライ)", "三振", "振り逃げ三振", "犠打", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "牽制死"]
+    out_2 = ["併殺打", "併殺"]
 
     for (d_str, opp, m_type), group in df_p_work.groupby(["DateStr", "対戦相手", "試合種別"]):
         if not d_str or pd.isna(d_str):
@@ -243,11 +247,31 @@ def show_team_stats(df_batting, df_pitching):
             if "自責点" in individuals_p.columns:
                 er = pd.to_numeric(individuals_p["自責点"], errors='coerce').fillna(0).sum()
 
-            if "アウト数" in individuals_p.columns:
-                total_outs = pd.to_numeric(individuals_p["アウト数"], errors='coerce').fillna(0).sum()
-                outs = total_outs / 3
-            elif "投球回" in individuals_p.columns:
-                outs = pd.to_numeric(individuals_p["投球回"], errors='coerce').fillna(0).sum()
+            total_outs = 0
+            for _, r in individuals_p.iterrows():
+                res = str(r.get("結果", "")).strip()
+                r_type = str(r.get("種別", "")).strip()
+                raw_outs = pd.to_numeric(r.get("アウト数", 0), errors='coerce')
+
+                # A. まとめ入力行
+                if res == "まとめ" or r_type == "まとめ":
+                    if pd.notna(raw_outs) and raw_outs > 0:
+                        total_outs += int(raw_outs)
+                    elif "投球回" in r and pd.notna(pd.to_numeric(r.get("投球回"), errors='coerce')):
+                        total_outs += int(pd.to_numeric(r.get("投球回"), errors='coerce') * 3)
+                # B. スタメン・交代等
+                elif "ダミー" in r_type or "スタメン" in res or "交代" in res or "ベンチ" in res:
+                    continue
+                # C. 通常のプレイ行（アウト数判定）
+                else:
+                    if pd.notna(raw_outs) and raw_outs > 0:
+                        total_outs += int(raw_outs)
+                    elif res in out_1:
+                        total_outs += 1
+                    elif res in out_2:
+                        total_outs += 2
+
+            outs = total_outs / 3
 
         key = (d_str, opp, m_type)
         if key not in games_map:
@@ -487,7 +511,7 @@ def show_team_stats(df_batting, df_pitching):
 
                 st.markdown("<div id='viewer-top' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
 
-                # スコアボード描画（※結果列の単打等の安打カウントは、前回の ui.py の修正で機能します）
+                # スコアボード描画
                 render_scoreboard(sb_bat, sb_pit, target_date_str, target_row["試合種別"], target_row["グラウンド"], target_opp, is_top_first=detected_top)
 
                 st.divider()
@@ -535,7 +559,7 @@ def show_team_stats(df_batting, df_pitching):
                                 "10": "指", "DH": "指", "指名打者": "指", "指": "指",
                                 "打": "打", "代打": "打",
                                 "走": "走", "代走": "走"
-}
+                            }
 
                             def get_inn_order(inn_str):
                                 m = re.search(r'(\d+)回(表|裏)', str(inn_str))
@@ -596,7 +620,7 @@ def show_team_stats(df_batting, df_pitching):
                             res_col = player_group.get("結果") if "結果" in player_group.columns else None
                             tpa = res_col.isin(pa_list).sum() if res_col is not None else 0
 
-                            # 🌟 個人詳細表示での盗塁数の集計補正
+                            # 個人詳細表示での盗塁数の集計補正
                             sb_col = player_group.get("盗塁")
                             sb_num = int(pd.to_numeric(sb_col, errors='coerce').fillna(0).sum()) if sb_col is not None else 0
                             sb_res_count = int(player_group["結果"].astype(str).str.contains("盗塁").sum()) if "結果" in player_group.columns else 0
@@ -790,7 +814,7 @@ def show_team_stats(df_batting, df_pitching):
                         s_cnt = pd.to_numeric(group.get("ストライク", 0), errors='coerce').fillna(0).sum()
                         b_cnt = pd.to_numeric(group.get("ボール", 0), errors='coerce').fillna(0).sum()
 
-                        # 2. 打撃シートから投手名が一致する行を照合（スペース非依存）
+                        # 2. 打撃シートから投手名が一致する行を照合
                         if not match_bat.empty and "投手名" in match_bat.columns:
                             match_bat_copy = match_bat.copy()
                             match_bat_copy["_p_name_clean"] = match_bat_copy["投手名"].astype(str).apply(lambda x: re.sub(r'[\s ]+', '', str(x)).split("(")[0].strip())
@@ -825,8 +849,8 @@ def show_team_stats(df_batting, df_pitching):
                         # 4. 結果列からの投球回（アウト数）、被安打、奪三振、四死球の自動集計
                         total_outs = 0; total_hits = 0; total_so = 0; total_bb = 0
                         
-                        out_1 = ["凡退", "凡退(ゴロ)", "凡退(フライ)", "三振", "振り逃げ三振", "犠打", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "牽制死"]
-                        out_2 = ["併殺打", "併殺"]
+                        out_1_det = ["凡退", "凡退(ゴロ)", "凡退(フライ)", "三振", "振り逃げ三振", "犠打", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "牽制死"]
+                        out_2_det = ["併殺打", "併殺"]
                         hit_list = ["安打", "単打", "二塁打", "三塁打", "本塁打"]
 
                         for _, row in group.iterrows():
@@ -838,7 +862,7 @@ def show_team_stats(df_batting, df_pitching):
                             raw_so = pd.to_numeric(row.get("奪三振", 0), errors='coerce')
                             raw_bb = pd.to_numeric(row.get("与四球", 0), errors='coerce')
 
-                            # A. 真のまとめ入力行（結果または種別が「まとめ」）
+                            # A. まとめ入力行
                             if res == "まとめ" or r_type == "まとめ":
                                 if pd.notna(raw_outs) and raw_outs > 0:
                                     total_outs += int(raw_outs)
@@ -852,39 +876,34 @@ def show_team_stats(df_batting, df_pitching):
                                 if pd.notna(raw_bb) and raw_bb > 0:
                                     total_bb += int(raw_bb)
 
-                            # B. 非プレイ行（交代・スタメン等）
+                            # B. 非プレイ行
                             elif "ダミー" in r_type or "スタメン" in res or "交代" in res or "ベンチ" in res:
                                 continue
 
-                            # C. 個別打者イベント行（結果列から判定）
+                            # C. 個別打者イベント行
                             else:
-                                # 投球回（アウト数）
                                 if pd.notna(raw_outs) and raw_outs > 0:
                                     total_outs += int(raw_outs)
-                                elif res in out_1:
+                                elif res in out_1_det:
                                     total_outs += 1
-                                elif res in out_2:
+                                elif res in out_2_det:
                                     total_outs += 2
 
-                                # 被安打
                                 if pd.notna(raw_h) and raw_h > 0:
                                     total_hits += int(raw_h)
                                 elif res in hit_list or "被安打" in str(row.get("被安打", "")) or "被安打" in r_type:
                                     total_hits += 1
 
-                                # 奪三振
                                 if pd.notna(raw_so) and raw_so > 0:
                                     total_so += int(raw_so)
                                 elif res in ["三振", "振り逃げ三振"]:
                                     total_so += 1
 
-                                # 与四球
                                 if pd.notna(raw_bb) and raw_bb > 0:
                                     total_bb += int(raw_bb)
                                 elif res in ["四球", "死球"]:
                                     total_bb += 1
 
-                        # 投球回（回）の表記変換（例: 9アウト → 3回）
                         fin = f"{int(total_outs // 3)}"
                         frac = int(total_outs % 3)
                         if frac == 1:
@@ -999,7 +1018,6 @@ def show_team_stats(df_batting, df_pitching):
                         unsafe_allow_html=True
                     )
 
-                    # 【修正】「残塁」「進塁」「得点」等を「結果・種別・位置」の全列から強力に除外
                     exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "残塁"]
                     exclude_pattern = r"進塁|得点|残塁"
 

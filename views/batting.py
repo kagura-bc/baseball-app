@@ -12,6 +12,8 @@ from utils.ui import fmt_player_name, render_out_indicator_3, render_scoreboard,
 
 # --- ヘルパー関数 ---
 def local_fmt(name):
+    if not name:
+        return ""
     return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
 
 
@@ -62,22 +64,23 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
     for i in range(20):
         pos = st.session_state.get(f"opp_sp_{i}")
         name = st.session_state.get(f"opp_sn_{i}")
-        if pos in ["投", "投手", "P"] and name and name not in ["選手", "nan", "None", "", "未選択"]:
-            opp_pitcher_options.append(name)
+        if pos in ["投", "投手", "P"] and name and str(name).strip() not in ["選手", "nan", "None", "", "未選択"]:
+            opp_pitcher_options.append(str(name).strip())
+            
     dh_p = st.session_state.get("opp_sn_dh_pitcher")
-    if dh_p and dh_p not in ["相手投手", "nan", "None", ""]:
-        opp_pitcher_options.append(dh_p)
+    if dh_p and str(dh_p).strip() not in ["相手投手", "nan", "None", ""]:
+        opp_pitcher_options.append(str(dh_p).strip())
 
     if not df_pitching.empty:
         p_col = "投手名" if "投手名" in df_pitching.columns else "選手名"
-        today_p = df_pitching[
-            (df_pitching["日付"].astype(str) == selected_date_str) &
-            (df_pitching["対戦相手"].astype(str).str.strip() == str(opp_team).strip())
-        ] if "日付" in df_pitching.columns and "対戦相手" in df_pitching.columns else pd.DataFrame()
-
-        if not today_p.empty and p_col in today_p.columns:
-            existing_p = today_p[p_col].dropna().astype(str).str.strip().tolist()
-            opp_pitcher_options.extend([p for p in existing_p if p not in ALL_PLAYERS])
+        if "日付" in df_pitching.columns and "対戦相手" in df_pitching.columns:
+            today_p = df_pitching[
+                (df_pitching["日付"].astype(str) == selected_date_str) &
+                (df_pitching["対戦相手"].astype(str).str.strip() == str(opp_team).strip())
+            ]
+            if not today_p.empty and p_col in today_p.columns:
+                existing_p = today_p[p_col].dropna().astype(str).str.strip().tolist()
+                opp_pitcher_options.extend([p for p in existing_p if p not in ALL_PLAYERS])
 
     default_opps = [f"相手投手{i}" for i in range(1, 10)]
     opp_pitcher_options = list(dict.fromkeys([p for p in opp_pitcher_options + default_opps if p and p not in ["nan", "None", ""]]))
@@ -89,32 +92,32 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
 
     if not df_pitching.empty and "勝敗" in df_pitching.columns:
         p_col = "投手名" if "投手名" in df_pitching.columns else "選手名"
-        today_p = df_pitching[
-            (df_pitching["日付"].astype(str) == selected_date_str) &
-            (df_pitching["対戦相手"].astype(str).str.strip() == str(opp_team).strip())
-        ] if "日付" in df_pitching.columns and "対戦相手" in df_pitching.columns else pd.DataFrame()
+        if "日付" in df_pitching.columns and "対戦相手" in df_pitching.columns:
+            today_p = df_pitching[
+                (df_pitching["日付"].astype(str) == selected_date_str) &
+                (df_pitching["対戦相手"].astype(str).str.strip() == str(opp_team).strip())
+            ]
+            for _, r in today_p.iterrows():
+                p_name = str(r.get(p_col, "")).strip()
+                dec = str(r.get("勝敗", "")).strip()
+                if not p_name or dec in ["", "ー", "nan", "None"]:
+                    continue
 
-        for _, r in today_p.iterrows():
-            p_name = str(r.get(p_col, "")).strip()
-            dec = str(r.get("勝敗", "")).strip()
-            if not p_name or dec in ["", "ー", "nan", "None"]:
-                continue
+                is_my_team = any(p.split(" (")[0].strip() == p_name or p == p_name for p in ALL_PLAYERS)
 
-            is_my_team = any(p.split(" (")[0].strip() == p_name or p == p_name for p in ALL_PLAYERS)
-
-            if is_my_team:
-                matched_p = next((p for p in ALL_PLAYERS if p.split(" (")[0].strip() == p_name or p == p_name), p_name)
-                if dec in ["勝利", "勝", "○"]: init_win = matched_p
-                elif dec in ["敗戦", "敗", "●"]: init_lose = matched_p
-                elif dec in ["セーブ", "S"]: init_save = matched_p
-                elif dec in ["ホールド", "H"]:
-                    if matched_p not in init_holds: init_holds.append(matched_p)
-            else:
-                if dec in ["勝利", "勝", "○"]: init_opp_win = p_name
-                elif dec in ["敗戦", "敗", "●"]: init_opp_lose = p_name
-                elif dec in ["セーブ", "S"]: init_opp_save = p_name
-                elif dec in ["ホールド", "H"]:
-                    if p_name not in init_opp_holds: init_opp_holds.append(p_name)
+                if is_my_team:
+                    matched_p = next((p for p in ALL_PLAYERS if p.split(" (")[0].strip() == p_name or p == p_name), p_name)
+                    if dec in ["勝利", "勝", "○"]: init_win = matched_p
+                    elif dec in ["敗戦", "敗", "●"]: init_lose = matched_p
+                    elif dec in ["セーブ", "S"]: init_save = matched_p
+                    elif dec in ["ホールド", "H"]:
+                        if matched_p not in init_holds: init_holds.append(matched_p)
+                else:
+                    if dec in ["勝利", "勝", "○"]: init_opp_win = p_name
+                    elif dec in ["敗戦", "敗", "●"]: init_opp_lose = p_name
+                    elif dec in ["セーブ", "S"]: init_opp_save = p_name
+                    elif dec in ["ホールド", "H"]:
+                        if p_name not in init_opp_holds: init_opp_holds.append(p_name)
 
     summary_parts = []
     if init_win != "なし": summary_parts.append(f"勝:{local_fmt(init_win).split(' (')[0]}")
@@ -269,6 +272,7 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
             except Exception as e:
                 st.error(f"保存失敗: {e}")
 
+
 # ==========================================
 # メイン表示関数
 # ==========================================
@@ -325,11 +329,17 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if cache_key in st.session_state:
         df_batting = st.session_state[cache_key]
 
+    # 「攻守」列を除外した期待するカラム一覧
     expected_batting_cols = [
-        "日付", "イニング", "打順", "打者名", "投手名", "位置", 
+        "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
         "結果", "打球方向", "打点", "得点", "盗塁", "グラウンド", 
-        "対戦相手", "試合種別", "スコアラー", "攻守", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
+        "対戦相手", "試合種別", "スコアラー", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
     ]
+    
+    # 旧データ「位置」が存在し「守備位置」がない場合は補正
+    if not df_batting.empty and "守備位置" not in df_batting.columns and "位置" in df_batting.columns:
+        df_batting["守備位置"] = df_batting["位置"]
+
     if df_batting.empty:
         df_batting = pd.DataFrame(columns=expected_batting_cols)
     else:
@@ -367,6 +377,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["lineup_states"] = {}
 
     b_col_name = "打者名" if "打者名" in today_batting_df.columns else "選手名"
+    pos_col_name = "守備位置" if "守備位置" in today_batting_df.columns else ("位置" if "位置" in today_batting_df.columns else "守備位置")
 
     if not today_batting_df.empty:
         lineup_event_df = today_batting_df[today_batting_df["結果"].astype(str).isin(["スタメン", "守備変更", "交代", "試合前"])]
@@ -376,7 +387,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if not order_rows.empty:
                 latest_row = order_rows.iloc[-1]
                 latest_name = str(latest_row.get(b_col_name, "")).strip()
-                latest_pos = str(latest_row.get("位置", "")).strip()
+                latest_pos = str(latest_row.get(pos_col_name, "")).strip()
                 if latest_name and latest_name not in ["nan", "チーム記録", ""]:
                     st.session_state["lineup_states"][i] = {
                         "name": latest_name,
@@ -384,7 +395,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     }
         
         dh_p_rows = lineup_event_df[
-            (lineup_event_df["位置"].astype(str) == "投") & 
+            (lineup_event_df[pos_col_name].astype(str) == "投") & 
             (
                 lineup_event_df["打順"].isna() | 
                 (lineup_event_df["打順"].astype(str).str.strip() == "") |
@@ -434,10 +445,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if matched_dh_p:
                 st.session_state["sn_dh_pitcher"] = matched_dh_p
 
-    if not today_batting_df.empty:
-        scoreboard_df = today_batting_df[today_batting_df["イニング"] != "まとめ入力"]
-    else:
-        scoreboard_df = today_batting_df
+    scoreboard_df = today_batting_df[today_batting_df["イニング"] != "まとめ入力"] if not today_batting_df.empty else today_batting_df
 
     render_scoreboard(scoreboard_df, today_pitching_df, selected_date_str, match_type, ground_name, opp_team, is_kagura_top)
     
@@ -478,7 +486,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     
                     raw_dir = row['打球方向']
                     p_dir = str(raw_dir) if pd.notna(raw_dir) and raw_dir != "---" else ""
-                    
                     rbi_num = int(rbi_val) if pd.notna(rbi_val) else 0
                     
                     if rbi_num > 0:
@@ -517,7 +524,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         final_ground = ground_name or st.session_state.get("ground_name", "")
         final_opp = opp_team or st.session_state.get("opp_team", "")
         final_match_type = match_type or st.session_state.get("match_type", "")
-        final_order = kagura_order or st.session_state.get("kagura_order", "先攻 (表)")
 
         opp_pitcher_name = "不明"
         for i in range(20):
@@ -589,13 +595,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打順": i + 1,
                         "打者名": clean_name,
                         "投手名": opp_pitcher_name,
-                        "位置": current_pos,
+                        "守備位置": current_pos,
                         "結果": "スタメン",
                         "打球方向": "---",
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
-                        "攻守": final_order,
                         "グラウンド": final_ground
                     })
                     st.session_state.setdefault("lineup_states", {})[i] = {
@@ -614,13 +619,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打順": "",
                     "打者名": clean_dh_p_name,
                     "投手名": opp_pitcher_name,
-                    "位置": "投",
+                    "守備位置": "投",
                     "結果": "スタメン",
                     "打球方向": "---",
                     "打点": 0,
                     "得点": 0,
                     "スコアラー": scorer,
-                    "攻守": final_order,
                     "グラウンド": final_ground
                 })
         else:
@@ -644,13 +648,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打順": i + 1,
                             "打者名": clean_name,
                             "投手名": opp_pitcher_name,
-                            "位置": current_pos,
+                            "守備位置": current_pos,
                             "結果": "交代",
                             "打球方向": "---",
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
-                            "攻守": final_order,
                             "グラウンド": final_ground
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
@@ -664,13 +667,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打順": i + 1,
                             "打者名": clean_name,
                             "投手名": opp_pitcher_name,
-                            "位置": current_pos,
+                            "守備位置": current_pos,
                             "結果": "守備変更",
                             "打球方向": "---",
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
-                            "攻守": final_order,
                             "グラウンド": final_ground
                         })
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
@@ -688,13 +690,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打順": "",
                         "打者名": clean_dh_p_name,
                         "投手名": opp_pitcher_name,
-                        "位置": "投",
+                        "守備位置": "投",
                         "結果": "交代",
                         "打球方向": "---",
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
-                        "攻守": final_order,
                         "グラウンド": final_ground
                     })
                     st.session_state["dh_pitcher_name_state"] = clean_dh_p_name
@@ -718,13 +719,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打順": "",
                     "打者名": clean_b_name,
                     "投手名": opp_pitcher_name,
-                    "位置": "－",
+                    "守備位置": "－",
                     "結果": "ベンチ",
                     "打球方向": "---",
                     "打点": 0,
                     "得点": 0,
                     "スコアラー": scorer,
-                    "攻守": final_order,
                     "グラウンド": final_ground
                 })
                 registered_bench_names.add(clean_b_name)
@@ -739,7 +739,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             dir_str = "".join(quick_dirs) if quick_dirs else "---"
             rbi_val = int(quick_rbi) if quick_rbi is not None else 0
 
-            # 🏃‍♂️【修正】走者状況を判定（満塁を追加）
             c_1b = st.session_state.get(f"runner_1b_{curr_counter}")
             c_2b = st.session_state.get(f"runner_2b_{curr_counter}")
             c_3b = st.session_state.get(f"runner_3b_{curr_counter}")
@@ -774,10 +773,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     active_orders = idx_check + 1
                     break
             
-            if not today_batting_df.empty:
-                pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)]
-            else:
-                pa_df = pd.DataFrame()
+            pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)] if not today_batting_df.empty else pd.DataFrame()
             
             total_pa = len(pa_df)
             batter_idx = (total_pa + st.session_state.get("batter_offset", 0)) % active_orders
@@ -795,13 +791,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打順": batter_idx + 1,
                     "打者名": clean_batter_name,
                     "投手名": opp_pitcher_name,
-                    "位置": st.session_state.get(f"sp{batter_idx}", "－"),
+                    "守備位置": st.session_state.get(f"sp{batter_idx}", "－"),
                     "結果": quick_res,
                     "打球方向": dir_str,
                     "打点": rbi_val,
                     "得点": auto_run,
                     "スコアラー": scorer,
-                    "攻守": final_order,
                     "グラウンド": final_ground,
                     "球数": final_pitch_count,
                     "ストライク": final_strike_count,
@@ -863,14 +858,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打順": order_num,
                         "打者名": clean_r_name,
                         "投手名": opp_pitcher_name,
-                        "位置": "－",
+                        "守備位置": "－",
                         "結果": res_val,
                         "打球方向": dir_val,
                         "打点": 0,
                         "得点": score_val,
                         "盗塁": stolen_val,
                         "スコアラー": scorer,
-                        "攻守": final_order,
                         "グラウンド": final_ground
                     })
                 elif is_change:
@@ -882,13 +876,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打順": order_num,
                         "打者名": clean_r_name,
                         "投手名": opp_pitcher_name,
-                        "位置": "－",
+                        "守備位置": "－",
                         "結果": "残塁",
                         "打球方向": "---",
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
-                        "攻守": final_order,
                         "グラウンド": final_ground
                     })
 
@@ -918,9 +911,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if cur_2b_name and res_2b:
                 if res_2b in ["盗塁", "進塁1", "進塁"]:
                     r2_next = "3b"
-                elif res_2b in ["進塁2", "得点"]:
-                    r2_next = None
-                elif res_2b in ["走塁死", "盗塁死", "牽制死"]:
+                elif res_2b in ["進塁2", "得点", "走塁死", "盗塁死", "牽制死"]:
                     r2_next = None
 
             if cur_3b_name and res_3b:
@@ -956,7 +947,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         if rows_to_add:
             new_df_to_append = pd.DataFrame(rows_to_add)
-
             updated_full_df = pd.concat([df_batting, new_df_to_append], ignore_index=True)
             
             save_cols = [c for c in expected_batting_cols if c not in ["日付_dt", "Year", "_date_str"] and c in updated_full_df.columns]
@@ -1121,11 +1111,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 active_orders = i + 1
                 break
 
-        if not today_batting_df.empty:
-            valid_pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)]
-            total_pa_count = len(valid_pa_df)
-        else:
-            total_pa_count = 0
+        valid_pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)] if not today_batting_df.empty else pd.DataFrame()
+        total_pa_count = len(valid_pa_df)
 
         current_batter_index = (total_pa_count + st.session_state.get("batter_offset", 0)) % active_orders
         current_order_num = current_batter_index + 1
