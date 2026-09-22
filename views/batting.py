@@ -1323,6 +1323,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if quick_res in require_dir_results and not quick_dirs:
                 st.session_state["batting_error_msg"] = f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。"
                 st.rerun()
+            # ⬇️ 【追加】野選選択時に、塁上にいる全ランナーの走塁結果選択を必須化
+            elif quick_res == "野選" and ((cur_1b_runner and not res_1b) or (cur_2b_runner and not res_2b) or (cur_3b_runner and not res_3b)):
+                st.session_state["batting_error_msg"] = "⚠️ 野選が選択されています。ランナーの走塁結果（得点・進塁・走塁死）を選択してください。"
+                st.rerun()
             elif cur_1b_runner and quick_res in b_to_1b_results and not res_1b:
                 st.session_state["batting_error_msg"] = "⚠️ 1塁走者がいます。走塁結果を選択してください。"
                 st.rerun()

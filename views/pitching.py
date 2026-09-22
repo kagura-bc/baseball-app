@@ -1120,6 +1120,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         elif p_res == "本塁打" and p_run == 0:
             st.session_state["pitching_error_msg"] = "⚠️ 本塁打は失点1以上必須です。"
             st.rerun()
+        # ⬇️ 【追加】野選選択時に、塁上にいる全ランナーの走塁結果選択を必須化
+        elif p_res == "野選" and ((cur_1b and not res_1b) or (cur_2b and not res_2b) or (cur_3b and not res_3b)):
+            st.session_state["pitching_error_msg"] = "⚠️ 野選が選択されています。ランナーの走塁結果（得点・進塁・走塁死）を選択してください。"
+            st.rerun()
         elif cur_1b and p_res in b_to_1b_results and not res_1b:
             st.session_state["pitching_error_msg"] = "⚠️ 1塁走者がいます。走塁結果を選択してください。"
             st.rerun()
