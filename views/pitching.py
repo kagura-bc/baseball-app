@@ -37,10 +37,13 @@ def calculate_outs(df: pd.DataFrame) -> int:
     """データフレームから累積アウト数を計算"""
     if df.empty or "結果" not in df.columns:
         return 0
+    
+    # 1アウト判定用（「野選」を除外）
     single_out_list = [
         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
-        "犠飛", "牽制死", "盗塁死", "走塁死", "野選", "振り逃げ三振"
+        "犠飛", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
     ]
+    
     s_outs = len(df[df["結果"].isin(single_out_list)])
     d_outs = len(df[df["結果"] == "併殺打"]) * 2
     return s_outs + d_outs

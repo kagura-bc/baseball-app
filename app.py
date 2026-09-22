@@ -204,6 +204,37 @@ def safe_index(lst, val):
     return 0
 
 
+# 🔹 集計用ヘルパー関数
+def calc_pitching_stats_from_results(p_sub: pd.DataFrame):
+    """結果列からアウト数、被安打、奪三振、四死球を正確に集計する"""
+    if p_sub.empty or "結果" not in p_sub.columns:
+        return {"outs": 0, "hits": 0, "so": 0, "bb_hbp": 0}
+
+    res_s = p_sub["結果"].astype(str).str.strip()
+
+    # 1. アウト数の計算（「野選」を除外）
+    single_out_list = [
+        "三振", "凡退(ゴロ)", "凡退(フライ)", "ゴロ", "フライ", "ライナー",
+        "犠打(ゴロ)", "犠打(フライ)", "犠打", "犠飛",
+        "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
+    ]
+    s_outs = len(p_sub[res_s.isin(single_out_list)])
+    d_outs = len(p_sub[res_s == "併殺打"]) * 2
+    t_outs = len(p_sub[res_s == "三重殺"]) * 3
+    total_outs = s_outs + d_outs + t_outs
+
+    # 2. 被安打の計算
+    hits = len(p_sub[res_s.isin(["単打", "二塁打", "三塁打", "本塁打", "安打"])])
+
+    # 3. 奪三振の計算
+    so = len(p_sub[res_s.isin(["三振", "振り逃げ三振"])])
+
+    # 4. 四死球の計算
+    bb_hbp = len(p_sub[res_s.isin(["四球", "死球", "四死球"])])
+
+    return {"outs": total_outs, "hits": hits, "so": so, "bb_hbp": bb_hbp}
+
+
 # ==========================================
 # 📊 当日投手成績・球数分析表示用ヘルパー関数
 # ==========================================
@@ -281,55 +312,58 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
         for p_name in pitcher_list:
             c_p_name = clean_name(p_name)
             
-            # 投手データ抽出（スペース非依存照合）
+            # 投手シートデータ抽出
             if not today_p_df.empty and "投手名" in today_p_df.columns:
                 p_sub = today_p_df[today_p_df["投手名"].astype(str).apply(clean_name) == c_p_name]
             else:
                 p_sub = pd.DataFrame()
 
-            outs = pd.to_numeric(p_sub.get("アウト数", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
-            hits = pd.to_numeric(p_sub.get("被安打", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
-            so = pd.to_numeric(p_sub.get("奪三振", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
-            runs = pd.to_numeric(p_sub.get("失点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
-            er = pd.to_numeric(p_sub.get("自責点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
+            # 1. 投手シート側からの集計（完全一致・野選除外）
+            stats = calc_pitching_stats_from_results(p_sub)
+            outs = stats["outs"]
+            hits = stats["hits"]
+            so = stats["so"]
+            bb_hbp = stats["bb_hbp"]
 
-            bb_hbp = 0
-            if not p_sub.empty and "結果" in p_sub.columns:
-                bb_hbp += len(p_sub[p_sub["結果"].astype(str).isin(["四球", "死球", "四死球"])])
-
-            # 打撃データ抽出（スペース非依存照合）
+            # 2. 打撃シート(today_b_df)側に相手投手としての記録がある場合
             if not today_b_df.empty and "投手名" in today_b_df.columns:
                 b_sub = today_b_df[today_b_df["投手名"].astype(str).apply(clean_name) == c_p_name]
             else:
                 b_sub = pd.DataFrame()
 
+            # 相手投手などで投手シートに記録がない（または補完が必要な）場合
             if not b_sub.empty and "結果" in b_sub.columns:
-                if p_sub.empty:
-                    bb_hbp += len(b_sub[b_sub["結果"].astype(str).isin(["四球", "死球", "四死球"])])
-                    hits += len(b_sub[b_sub["結果"].astype(str).isin(["単打", "二塁打", "三塁打", "本塁打"])])
-                    so += len(b_sub[b_sub["結果"].astype(str).isin(["三振", "振り逃げ三振"])])
-                    runs += pd.to_numeric(b_sub.get("得点", 0), errors='coerce').fillna(0).sum()
+                b_stats = calc_pitching_stats_from_results(b_sub)
+                if outs == 0:
+                    outs = b_stats["outs"]
+                if hits == 0:
+                    hits = b_stats["hits"]
+                if so == 0:
+                    so = b_stats["so"]
+                if bb_hbp == 0:
+                    bb_hbp = b_stats["bb_hbp"]
+
+            runs = pd.to_numeric(p_sub.get("失点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
+            er = pd.to_numeric(p_sub.get("自責点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
 
             pitches = 0
             strikes = 0
             balls = 0
 
-            # 1. 打撃シートからの球数・ストライク・ボール集計
             if not b_sub.empty:
                 pitches += pd.to_numeric(b_sub.get("球数", 0), errors='coerce').fillna(0).sum()
                 strikes += pd.to_numeric(b_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
                 balls += pd.to_numeric(b_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
 
-            # 2. 投手シート側に記録がある場合のフォールバック
             if pitches == 0 and not p_sub.empty:
                 pitches += pd.to_numeric(p_sub.get("球数", 0), errors='coerce').fillna(0).sum()
                 strikes += pd.to_numeric(p_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
                 balls += pd.to_numeric(p_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
 
+            # 投球回の表記（21アウト -> 7.0回）
             inn_full = int(outs // 3)
             inn_rem = int(outs % 3)
             inn_str = f"{inn_full}" if inn_rem == 0 else f"{inn_full}.{inn_rem}"
-
             strike_rate = (strikes / pitches * 100) if pitches > 0 else 0.0
 
             summary_rows.append({
@@ -485,7 +519,7 @@ if page == " 📝 試合データ入力":
     p_list = ALL_PLAYERS
     scorer_key = "scorer_name_ui"
     
-    # 🌟【修正ポイント】選択肢リスト (p_list) に存在する文字列に変換・検証するロジック
+    # 🌟選択肢リスト (p_list) に存在する文字列に変換・検証するロジック
     target_scorer_val = st.session_state.get(scorer_key) or res_scorer
     matched_scorer = None
     if target_scorer_val:
