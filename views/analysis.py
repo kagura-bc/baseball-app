@@ -680,9 +680,8 @@ def show_analysis_page(df_batting, df_pitching):
             df_p_detail["打球種類"] = df_p_detail["結果"].apply(classify_hit_type)
 
         hit_type_color_scale = alt.Scale(
-            domain=["ゴロ", "フライ", "ライナー", "安打", "非打球", "その他"],
-            range=["#eab308", "#3b82f6", "#22c55e",
-                   "#ef4444", "#64748b", "#9ca3af"]
+            domain=["ゴロ", "フライ", "ライナー", "安打"],
+            range=["#eab308", "#3b82f6", "#22c55e", "#ef4444"]
         )
         pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
 
@@ -721,8 +720,28 @@ def show_analysis_page(df_batting, df_pitching):
             tp_hit = df_p_detail["is_hit"].sum() if not df_p_detail.empty and "is_hit" in df_p_detail.columns else 0
             team_p_avg = tp_hit / tp_ab if tp_ab > 0 else 0.0
 
-            outs_sum = pd.to_numeric(df_p_detail.get("アウト数", 0), errors='coerce').fillna(0).sum() if not df_p_detail.empty and "アウト数" in df_p_detail.columns else 0
+            # 打撃・投球結果から正確なアウト数を動的に算出
+            single_out_list = [
+                "三振", "凡退(ゴロ)", "凡退(フライ)", "ゴロ", "フライ", "ライナー",
+                "犠打(ゴロ)", "犠打(フライ)", "犠打", "犠飛",
+                "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
+            ]
+
+            if not df_p_detail.empty and "結果" in df_p_detail.columns:
+                res_s = df_p_detail["結果"].astype(str).str.strip()
+                s_outs = len(df_p_detail[res_s.isin(single_out_list)])
+                d_outs = len(df_p_detail[res_s == "併殺打"]) * 2
+                t_outs = len(df_p_detail[res_s == "三重殺"]) * 3
+                outs_sum = s_outs + d_outs + t_outs
+            else:
+                outs_sum = pd.to_numeric(df_p_detail.get("アウト数", 0), errors='coerce').fillna(0).sum() if not df_p_detail.empty and "アウト数" in df_p_detail.columns else 0
+
             ip_val = outs_sum / 3.0
+            run_col = "自責点" if "自責点" in df_p_detail.columns else ("失点" if "失点" in df_p_detail.columns else None)
+            er_sum = pd.to_numeric(df_p_detail[run_col], errors='coerce').fillna(0).sum() if not df_p_detail.empty and run_col else 0
+
+            # 防御率計算（7回制）
+            team_era = (er_sum * 7) / ip_val if ip_val > 0 else 0.0
             run_col = "自責点" if "自責点" in df_p_detail.columns else ("失点" if "失点" in df_p_detail.columns else None)
             er_sum = pd.to_numeric(df_p_detail[run_col], errors='coerce').fillna(0).sum() if not df_p_detail.empty and run_col else 0
             team_era = (er_sum * 7) / ip_val if ip_val > 0 else 0.0
@@ -789,20 +808,24 @@ def show_analysis_page(df_batting, df_pitching):
             with c_dir1:
                 st.markdown("**▼ チーム打撃 (どこへ・どんな打球を打っているか)**")
                 if not df_b_detail.empty and "打球方向" in df_b_detail.columns:
-                    b_dir_data = df_b_detail[df_b_detail["打球方向"].notna() & (
-                        df_b_detail["打球方向"] != "") & (df_b_detail["打球方向"] != "nan")].copy()
+                    # 方向が有効なもの（空文字、nan、--- を除外）かつ「その他」「非打球」を除外
+                    b_dir_data = df_b_detail[
+                        df_b_detail["打球方向"].notna() & 
+                        (~df_b_detail["打球方向"].astype(str).str.strip().isin(["", "nan", "---"])) &
+                        (~df_b_detail["打球種類"].isin(["その他", "非打球"]))
+                    ].copy()
+                    
                     if not b_dir_data.empty:
-                        b_dir_data["方向"] = b_dir_data["打球方向"].astype(
-                            str).str.strip()
-                        b_dir_counts = b_dir_data.groupby(
-                            ["方向", "打球種類"]).size().reset_index(name="数")
+                        # 🌟 複合表記（二-捕など）は最初の文字に統合し、基本9ポジションに絞り込む
+                        b_dir_data["方向"] = b_dir_data["打球方向"].astype(str).str.strip().apply(lambda x: x.split("-")[0])
+                        b_dir_data = b_dir_data[b_dir_data["方向"].isin(pos_order)]
+
+                        b_dir_counts = b_dir_data.groupby(["方向", "打球種類"]).size().reset_index(name="数")
 
                         bar_b_dir = alt.Chart(b_dir_counts).mark_bar().encode(
-                            x=alt.X("方向:N", sort=pos_order, title="ポジション",
-                                    axis=alt.Axis(labelAngle=0)),
+                            x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
                             y=alt.Y("数:Q", title="打球数"),
-                            color=alt.Color(
-                                "打球種類:N", scale=hit_type_color_scale),
+                            color=alt.Color("打球種類:N", scale=hit_type_color_scale),
                             tooltip=["方向", "打球種類", "数"]
                         ).properties(height=280)
                         st.altair_chart(bar_b_dir, use_container_width=True)
@@ -814,20 +837,24 @@ def show_analysis_page(df_batting, df_pitching):
             with c_dir2:
                 st.markdown("**▼ チーム投手陣 (どこへ・どんな打球を打たせているか)**")
                 if not df_p_detail.empty and "打球方向" in df_p_detail.columns:
-                    p_dir_data = df_p_detail[df_p_detail["打球方向"].notna() & (
-                        df_p_detail["打球方向"] != "") & (df_p_detail["打球方向"] != "nan")].copy()
+                    # 方向が有効なもの（空文字、nan、--- を除外）かつ「その他」「非打球」を除外
+                    p_dir_data = df_p_detail[
+                        df_p_detail["打球方向"].notna() & 
+                        (~df_p_detail["打球方向"].astype(str).str.strip().isin(["", "nan", "---"])) &
+                        (~df_p_detail["打球種類"].isin(["その他", "非打球"]))
+                    ].copy()
+                    
                     if not p_dir_data.empty:
-                        p_dir_data["方向"] = p_dir_data["打球方向"].astype(
-                            str).str.strip()
-                        p_dir_counts = p_dir_data.groupby(
-                            ["方向", "打球種類"]).size().reset_index(name="数")
+                        # 🌟 複合表記（二-捕など）は最初の文字に統合し、基本9ポジションに絞り込む
+                        p_dir_data["方向"] = p_dir_data["打球方向"].astype(str).str.strip().apply(lambda x: x.split("-")[0])
+                        p_dir_data = p_dir_data[p_dir_data["方向"].isin(pos_order)]
+
+                        p_dir_counts = p_dir_data.groupby(["方向", "打球種類"]).size().reset_index(name="数")
 
                         bar_p_dir = alt.Chart(p_dir_counts).mark_bar().encode(
-                            x=alt.X("方向:N", sort=pos_order, title="ポジション",
-                                    axis=alt.Axis(labelAngle=0)),
+                            x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
                             y=alt.Y("数:Q", title="打球数"),
-                            color=alt.Color(
-                                "打球種類:N", scale=hit_type_color_scale),
+                            color=alt.Color("打球種類:N", scale=hit_type_color_scale),
                             tooltip=["方向", "打球種類", "数"]
                         ).properties(height=280)
                         st.altair_chart(bar_p_dir, use_container_width=True)
@@ -1009,24 +1036,23 @@ def show_analysis_page(df_batting, df_pitching):
                             def show_player_direction_chart(data_df, title_label):
                                 if "打球方向" not in data_df.columns:
                                     return
-                                valid_df = data_df[data_df["打球方向"].notna() & (
-                                    data_df["打球方向"] != "") & (data_df["打球方向"] != "nan")].copy()
+                                valid_df = data_df[
+                                    data_df["打球方向"].notna() & 
+                                    (~data_df["打球方向"].astype(str).str.strip().isin(["", "nan", "---"])) &
+                                    (~data_df["打球種類"].isin(["その他", "非打球"]))
+                                ].copy()
+                                
                                 if not valid_df.empty:
-                                    valid_df["方向"] = valid_df["打球方向"].astype(
-                                        str).str.strip()
-                                    dir_counts = valid_df.groupby(
-                                        ["方向", "打球種類"]).size().reset_index(name="数")
+                                    valid_df["方向"] = valid_df["打球方向"].astype(str).str.strip()
+                                    dir_counts = valid_df.groupby(["方向", "打球種類"]).size().reset_index(name="数")
 
                                     bar_dir = alt.Chart(dir_counts).mark_bar().encode(
-                                        x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(
-                                            labelAngle=0)),
+                                        x=alt.X("方向:N", sort=pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
                                         y=alt.Y("数:Q", title="打球数"),
-                                        color=alt.Color(
-                                            "打球種類:N", scale=hit_type_color_scale),
+                                        color=alt.Color("打球種類:N", scale=hit_type_color_scale),
                                         tooltip=["方向", "打球種類", "数"]
                                     ).properties(height=250)
-                                    st.altair_chart(
-                                        bar_dir, use_container_width=True)
+                                    st.altair_chart(bar_dir, use_container_width=True)
                                 else:
                                     st.caption(f"（{title_label} の方向データはありません）")
 
@@ -1191,8 +1217,24 @@ def show_analysis_page(df_batting, df_pitching):
 
                             my_p_counted = my_p[r_pitches_p > 0]
                             total_p_cnt_counted = r_pitches_p[r_pitches_p > 0].sum()
-                            outs_sum_counted = pd.to_numeric(my_p_counted.get("アウト数", 0), errors='coerce').fillna(0).sum() if "アウト数" in my_p_counted.columns else 0
+                            # 打撃・投球結果から正確なアウト数を動的に算出（「野選」を除外）
+                            single_out_list = [
+                                "三振", "凡退(ゴロ)", "凡退(フライ)", "ゴロ", "フライ", "ライナー",
+                                "犠打(ゴロ)", "犠打(フライ)", "犠打", "犠飛",
+                                "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
+                            ]
+
+                            if "結果" in my_p_counted.columns:
+                                res_s = my_p_counted["結果"].astype(str).str.strip()
+                                s_outs = len(my_p_counted[res_s.isin(single_out_list)])
+                                d_outs = len(my_p_counted[res_s == "併殺打"]) * 2
+                                t_outs = len(my_p_counted[res_s == "三重殺"]) * 3
+                                outs_sum_counted = s_outs + d_outs + t_outs
+                            else:
+                                outs_sum_counted = pd.to_numeric(my_p_counted.get("アウト数", 0), errors='coerce').fillna(0).sum()
+
                             ip_val_counted = outs_sum_counted / 3.0
+                            pip_val = total_p_cnt_counted / ip_val_counted if ip_val_counted > 0 else 0.0
 
                             pip_val = total_p_cnt_counted / ip_val_counted if ip_val_counted > 0 else 0.0
 

@@ -1170,11 +1170,18 @@ def show_team_stats(df_batting, df_pitching):
                                 st.markdown(f"### 📍 **{inn}（守備）**")
                                 pit_items = []
                                 for _, row in inn_pit_df.iterrows():
-                                    raw_b_idx = str(row["種別"]).split(":")[1].replace("番打者", "") if ":" in str(row.get("種別", "")) else "?"
-                                    try:
-                                        b_idx = f"{int(float(raw_b_idx))}番"
-                                    except (ValueError, TypeError):
-                                        b_idx = f"{raw_b_idx}番" if raw_b_idx != "?" else "?"
+                                    b_ord_val = row.get("打順")
+                                    if pd.notna(b_ord_val) and str(b_ord_val).strip() not in ["", "nan", "None"]:
+                                        try:
+                                            b_idx = f"{int(float(b_ord_val))}番"
+                                        except (ValueError, TypeError):
+                                            b_idx = f"{b_ord_val}番"
+                                    else:
+                                        raw_b_idx = str(row.get("種別", "")).split(":")[1].replace("番打者", "") if ":" in str(row.get("種別", "")) else "?"
+                                        try:
+                                            b_idx = f"{int(float(raw_b_idx))}番"
+                                        except (ValueError, TypeError):
+                                            b_idx = f"{raw_b_idx}番" if raw_b_idx != "?" else "?"
 
                                     raw_res = str(row.get('結果', ''))
                                     pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
