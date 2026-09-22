@@ -1355,24 +1355,24 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         valid_batting_df = pd.DataFrame()
         if not today_batting_df.empty:
             res_s = today_batting_df["結果"].astype(str).str.strip() if "結果" in today_batting_df.columns else pd.Series("", index=today_batting_df.index)
-            type_s = today_batting_df["種別"].astype(str).str.strip() if "種別" in today_batting_df.columns else pd.Series("", index=today_batting_df.index)
-            
             pos_col = "守備位置" if "守備位置" in today_batting_df.columns else ("位置" if "位置" in today_batting_df.columns else "")
             pos_s = today_batting_df[pos_col].astype(str).str.strip() if pos_col else pd.Series("", index=today_batting_df.index)
 
+            # type_s（種別）の参照を削除
             is_bat_excluded = (
                 res_s.isin(exclude_res) | 
                 res_s.str.contains(exclude_pattern, na=False) |
-                type_s.str.contains(exclude_pattern, na=False) |
                 pos_s.str.contains(exclude_pattern, na=False)
             )
             valid_batting_df = today_batting_df[~is_bat_excluded].copy()
 
         valid_pitching_df = pd.DataFrame()
         if not today_pitching_df.empty:
-            mask_pit = ~today_pitching_df["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"])
-            if "種別" in today_pitching_df.columns:
-                mask_pit = mask_pit & (today_pitching_df["種別"].str.contains("詳細", na=False) | today_pitching_df["打順"].notna())
+            # 「種別」列の判定を外し、イニングと打順の有無で判定するように修正
+            mask_pit = (
+                ~today_pitching_df["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"]) &
+                today_pitching_df["打順"].notna()
+            )
             if "結果" in today_pitching_df.columns:
                 mask_pit = mask_pit & ~today_pitching_df["結果"].astype(str).str.contains(exclude_pattern, na=False)
             valid_pitching_df = today_pitching_df[mask_pit].copy()

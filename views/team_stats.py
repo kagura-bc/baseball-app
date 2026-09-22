@@ -1036,10 +1036,14 @@ def show_team_stats(df_batting, df_pitching):
                     else:
                         valid_batting_df = pd.DataFrame()
 
-                    if not match_pit.empty and "種別" in match_pit.columns:
-                        mask_pit = match_pit["種別"].str.contains("詳細", na=False)
+                    # 修正後の該当ブロック例
+                    if not match_pit.empty:
+                        mask_pit = (
+                            ~match_pit["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"]) &
+                            match_pit["打順"].notna()
+                        )
                         if "結果" in match_pit.columns:
-                            mask_pit = mask_pit & ~match_pit["結果"].astype(str).str.contains(exclude_pattern, na=False)
+                            mask_pit = mask_pit & ~match_pit["結果"].astype(str).str.contains(r"進塁|得点|残塁", na=False)
                         valid_pitching_df = match_pit[mask_pit].copy()
                     else:
                         valid_pitching_df = pd.DataFrame()
