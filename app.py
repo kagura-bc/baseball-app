@@ -116,6 +116,7 @@ def show_login_screen():
                 "チーム名", input_team_id
             )
 
+            # --- 修正後（安全装置つき） ---
             url_col = next(
                 (
                     c
@@ -124,10 +125,19 @@ def show_login_screen():
                 ),
                 None,
             )
-            if url_col and pd.notna(target_row.get(url_col)):
-              st.session_state["my_spreadsheet_url"] = target_row[url_col]
+            
+            target_url = target_row.get(url_col) if url_col else None
+            
+            # URLが設定されている場合のみ割り当て
+            if pd.notna(target_url) and str(target_url).strip() != "":
+                st.session_state["my_spreadsheet_url"] = str(target_url).strip()
             else:
-              st.session_state["my_spreadsheet_url"] = SPREADSHEET_URL
+                # kagura 以外でURL未設定の場合は警告を出してストップ（カグラ本番DBへの上書きを防止）
+                if input_team_id != "kagura":
+                    st.error("⚠️ このチームIDには専用のスプレッドシートURLが設定されていません。管理者に確認してください。")
+                    st.stop()
+                else:
+                    st.session_state["my_spreadsheet_url"] = SPREADSHEET_URL
 
             st.success(
                 f"{st.session_state['my_team_name']} としてログインしました！"
