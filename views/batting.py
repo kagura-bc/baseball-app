@@ -1316,24 +1316,24 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 "野選", "併殺打"
             ]
 
-            b_to_1b_results = ["単打", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"]
-            b_to_2b_results = ["二塁打"]
-            b_to_3b_results = ["三塁打"]
+            must_advance_results = [
+                "単打", "二塁打", "三塁打", 
+                "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"
+            ]
 
             if quick_res in require_dir_results and not quick_dirs:
                 st.session_state["batting_error_msg"] = f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。"
                 st.rerun()
-            # ⬇️ 【追加】野選選択時に、塁上にいる全ランナーの走塁結果選択を必須化
             elif quick_res == "野選" and ((cur_1b_runner and not res_1b) or (cur_2b_runner and not res_2b) or (cur_3b_runner and not res_3b)):
                 st.session_state["batting_error_msg"] = "⚠️ 野選が選択されています。ランナーの走塁結果（得点・進塁・走塁死）を選択してください。"
                 st.rerun()
-            elif cur_1b_runner and quick_res in b_to_1b_results and not res_1b:
+            elif cur_1b_runner and quick_res in must_advance_results and not res_1b:
                 st.session_state["batting_error_msg"] = "⚠️ 1塁走者がいます。走塁結果を選択してください。"
                 st.rerun()
-            elif cur_2b_runner and quick_res in b_to_2b_results and not res_2b:
+            elif cur_2b_runner and quick_res in must_advance_results and not res_2b:
                 st.session_state["batting_error_msg"] = "⚠️ 2塁走者がいます。走塁結果を選択してください。"
                 st.rerun()
-            elif cur_3b_runner and quick_res in b_to_3b_results and not res_3b:
+            elif cur_3b_runner and quick_res in must_advance_results and not res_3b:
                 st.session_state["batting_error_msg"] = "⚠️ 3塁走者がいます。走塁結果を選択してください。"
                 st.rerun()
             else:

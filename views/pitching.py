@@ -1098,9 +1098,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         res_2b = st.session_state.get(f"p_runner_2b_res_{curr_counter}")
         res_3b = st.session_state.get(f"p_runner_3b_res_{curr_counter}")
 
-        b_to_1b_results = ["単打", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"]
-        b_to_2b_results = ["二塁打"]
-        b_to_3b_results = ["三塁打"]
+        must_advance_results = [
+            "単打", "二塁打", "三塁打", 
+            "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"
+        ]
 
         if not p_res and not (res_1b or res_2b or res_3b):
             st.session_state["pitching_error_msg"] = "⚠️ 投球結果または走塁結果を選択してください。"
@@ -1114,13 +1115,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         elif p_res == "野選" and ((cur_1b and not res_1b) or (cur_2b and not res_2b) or (cur_3b and not res_3b)):
             st.session_state["pitching_error_msg"] = "⚠️ 野選が選択されています。ランナーの走塁結果（得点・進塁・走塁死）を選択してください。"
             st.rerun()
-        elif cur_1b and p_res in b_to_1b_results and not res_1b:
+        elif cur_1b and p_res in must_advance_results and not res_1b:
             st.session_state["pitching_error_msg"] = "⚠️ 1塁走者がいます。走塁結果を選択してください。"
             st.rerun()
-        elif cur_2b and p_res in b_to_2b_results and not res_2b:
+        elif cur_2b and p_res in must_advance_results and not res_2b:
             st.session_state["pitching_error_msg"] = "⚠️ 2塁走者がいます。走塁結果を選択してください。"
             st.rerun()
-        elif cur_3b and p_res in b_to_3b_results and not res_3b:
+        elif cur_3b and p_res in must_advance_results and not res_3b:
             st.session_state["pitching_error_msg"] = "⚠️ 3塁走者がいます。走塁結果を選択してください。"
             st.rerun()
         else:
@@ -1327,7 +1328,22 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 }
 
             # 🔹 カウンターをインクリメントして入力フォームをクリア
-            st.session_state["p_clear_counter"] = curr_counter + 1
+            next_counter = curr_counter + 1
+            st.session_state["p_clear_counter"] = next_counter
+
+            # 打席が完了していない場合（盗塁などの走塁のみの場合）、ボールカウントを維持
+            PA_RESULTS = [
+                "凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打",
+                "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "振り逃げ三振",
+                "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害"
+            ]
+            is_pa_completed = bool(p_res and p_res in PA_RESULTS)
+            
+            if not is_pa_completed:
+                st.session_state[f"p_b_count_{next_counter}"] = st.session_state.get(f"p_b_count_{curr_counter}", 0)
+                st.session_state[f"p_s_count_{next_counter}"] = st.session_state.get(f"p_s_count_{curr_counter}", 0)
+                st.session_state[f"p_f_count_{next_counter}"] = st.session_state.get(f"p_f_count_{curr_counter}", 0)
+                st.session_state[f"p_pitch_count_{next_counter}"] = st.session_state.get(f"p_pitch_count_{curr_counter}", 0)
 
             st.success(f"✅ {target_pitcher_name}投手の記録を保存しました")
             time.sleep(0.5)
