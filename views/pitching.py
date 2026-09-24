@@ -34,11 +34,9 @@ def filter_today_df(df: pd.DataFrame, selected_date_str: str, opp_team: str = No
 
 
 def calculate_outs(df: pd.DataFrame) -> int:
-    """データフレームから累積アウト数を計算"""
     if df.empty or "結果" not in df.columns:
         return 0
     
-    # 1アウト判定用（「野選」を除外）
     single_out_list = [
         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
         "犠飛", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
@@ -46,7 +44,8 @@ def calculate_outs(df: pd.DataFrame) -> int:
     
     s_outs = len(df[df["結果"].isin(single_out_list)])
     d_outs = len(df[df["結果"] == "併殺打"]) * 2
-    return s_outs + d_outs
+    t_outs = len(df[df["結果"] == "三重殺"]) * 3
+    return s_outs + d_outs + t_outs
 
 
 def apply_dataframe_style(df: pd.DataFrame, highlight_func):
@@ -605,7 +604,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             st.markdown("##### ⚾ 投球結果を選択")
             res_options = [
                 "凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打",
-                "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "振り逃げ三振",
+                "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "三重殺", "振り逃げ三振",
                 "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "ボーク", "暴投", "捕逸",
                 "牽制死", "盗塁死", "盗塁", "走塁死"
             ]
@@ -778,7 +777,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         "本塁打": "本", "三塁打": "三", "二塁打": "二", "単打": "安", "三振": "振",
         "凡退(ゴロ)": "ゴ", "凡退(フライ)": "飛", "四球": "球", "死球": "死", "犠打(ゴロ)": "犠",
         "犠打(フライ)": "犠", "犠飛": "犠飛", "失策(ゴロ)": "失", "失策(フライ)": "失",
-        "野選": "野", "併殺打": "併", "振り逃げ三振": "逃", "打撃妨害": "妨",
+        "野選": "野", "併殺打": "併", "三重殺": "三殺", "振り逃げ三振": "逃", "打撃妨害": "妨",
     }
 
     opp_history_dict = {}
@@ -1083,7 +1082,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
         require_dir_results = [
             "凡退(ゴロ)", "凡退(フライ)", "失策(ゴロ)", "失策(フライ)",
-            "併殺打", "犠打(ゴロ)", "犠打(フライ)", "野選"
+            "併殺打", "三重殺", "犠打(ゴロ)", "犠打(フライ)", "野選"
         ]
 
         cur_1b_runner_name = st.session_state.get(f"p_runner_1b_{curr_counter}")
@@ -1156,6 +1155,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 add_outs = 0
                 if p_res == "併殺打":
                     add_outs = 2
+                elif p_res == "三重殺":
+                    add_outs = 3
                 elif p_res in [
                     "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
                     "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
@@ -1316,7 +1317,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 elif p_res == "三塁打":
                     if not next_3b:
                         next_3b = current_batter_name
-                elif p_res in ["本塁打", "併殺打"]:
+                elif p_res in ["本塁打", "併殺打", "三重殺"]:
                     next_1b = None
                     next_2b = None
                     next_3b = None
@@ -1334,7 +1335,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             # 打席が完了していない場合（盗塁などの走塁のみの場合）、ボールカウントを維持
             PA_RESULTS = [
                 "凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打",
-                "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "振り逃げ三振",
+                "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "三重殺", "振り逃げ三振",
                 "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害"
             ]
             is_pa_completed = bool(p_res and p_res in PA_RESULTS)

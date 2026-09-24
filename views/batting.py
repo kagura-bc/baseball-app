@@ -21,7 +21,7 @@ def local_fmt(name):
 PA_RESULTS = [
     "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", 
     "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
-    "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"
+    "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "三重殺", "振り逃げ三振", "打撃妨害"
 ]
 
 
@@ -480,7 +480,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     count += 1
                     res_short = {
                         "本塁打":"本", "三塁打":"三", "二塁打":"二", "単打":"安", 
-                        "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "失策(ゴロ)":"失", "失策(フライ)":"失", "野選":"野", "併殺打":"併", 
+                        "三振":"振", "凡退(ゴロ)":"ゴ", "凡退(フライ)":"飛", "四球":"球", "死球":"死", "犠打(ゴロ)":"犠", "犠打(フライ)":"犠", "犠飛":"犠飛", "失策(ゴロ)":"失", "失策(フライ)":"失", "野選":"野", "併殺打":"併", "三重殺":"三殺",
                         "振り逃げ三振":"逃", "打撃妨害":"妨"
                     }.get(res, res[:2])
                     
@@ -815,11 +815,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             inn_df_check = today_batting_df[today_batting_df["イニング"] == inn_val]
             s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
             d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
-            existing_outs = s_outs + d_outs
+            t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
+            existing_outs = s_outs + d_outs + t_outs
 
         play_outs = 0
         if quick_res in single_out_list: play_outs += 1
         elif quick_res == "併殺打": play_outs += 2
+        elif quick_res == "三重殺": play_outs += 3
             
         for base in ["1b", "2b", "3b"]:
             if st.session_state.get(f"runner_{base}_res_{curr_counter}") in ["走塁死", "盗塁死", "牽制死"]:
@@ -988,8 +990,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振", "牽制死"]
         s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
         d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
+        t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
         
-        if (s_outs + d_outs) >= 3:
+        if (s_outs + d_outs + t_outs) >= 3:
             try:
                 curr_idx = inn_list.index(current_inn_val)
                 if curr_idx < len(inn_list) - 1:
@@ -1037,7 +1040,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "振り逃げ三振", "牽制死"]
                 s_outs = len(inn_df[inn_df["結果"].isin(single_out_list)])
                 d_outs = len(inn_df[inn_df["結果"] == "併殺打"]) * 2
-                disp_outs = (s_outs + d_outs) % 3
+                t_outs = len(inn_df[inn_df["結果"] == "三重殺"]) * 3
+                disp_outs = (s_outs + d_outs + t_outs) % 3
 
             b_cnt = st.session_state.get(f"b_count_{curr_counter}", 0)
             s_cnt = st.session_state.get(f"s_count_{curr_counter}", 0)
@@ -1121,7 +1125,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         formatted_batter_name = local_fmt(raw_batter_name) if raw_batter_name else "（未設定）"
 
         batting_results = ["凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打", "三振", "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", 
-                           "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "振り逃げ三振", "打撃妨害"]
+                           "失策(ゴロ)", "失策(フライ)", "野選", "併殺打", "三重殺", "振り逃げ三振", "打撃妨害"]
 
         q_cols = [4.0, 5.0]
         qc = st.columns(q_cols)
@@ -1313,7 +1317,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             require_dir_results = [
                 "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打",
                 "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)",
-                "野選", "併殺打"
+                "野選", "併殺打", "三重殺"
             ]
 
             must_advance_results = [

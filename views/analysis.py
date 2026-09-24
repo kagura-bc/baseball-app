@@ -776,7 +776,7 @@ def show_analysis_page(df_batting, df_pitching):
                 st.caption("2026年以降の打撃データがありません")
 
             st.write("")
-            st.markdown("##### チーム投手陣のアアウト取得傾向")
+            st.markdown("##### チーム投球傾向 (アウトの内訳)")
             if not df_p_detail.empty and "結果" in df_p_detail.columns:
                 df_p_out_only = df_p_detail[~df_p_detail["結果"].astype(
                     str).str.contains("失策|振り逃げ", na=False)]
@@ -789,10 +789,10 @@ def show_analysis_page(df_batting, df_pitching):
                     df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("三振")])
 
                 df_p_out = pd.DataFrame(
-                    {"種類": ["ゴロで打たせてとる", "フライアウト", "三振で奪う"], "数": [p_goro, p_fly, p_so]})
+                    {"種類": ["ゴロアウト", "フライアウト", "三振"], "数": [p_goro, p_fly, p_so]})
                 if df_p_out["数"].sum() > 0:
                     pie_p_out = alt.Chart(df_p_out).mark_arc(innerRadius=40).encode(
-                        theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロで打たせてとる", "フライアウト", "三振で奪う"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
+                        theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロアウト", "フライアウト", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
                     ).properties(height=300)
                     st.altair_chart(pie_p_out, use_container_width=True)
                 else:
