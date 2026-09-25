@@ -236,7 +236,7 @@ def show_personal_stats(df_batting, df_pitching):
             saber_b["Batting_Score"] = (
                 saber_b["OPS"] * 50.0 
                 + saber_b["RC"] * 3.0 
-                + saber_b["盗塁"] * 1.0 
+                + saber_b["盗塁"] * 3.0 
                 - saber_b["盗塁死"] * 1.0 
                 - saber_b["is_dp"] * 1.5
             )
@@ -379,7 +379,7 @@ def show_personal_stats(df_batting, df_pitching):
                 with st.expander("ℹ️ 総合ポイントの算出モデル解説"):
                     st.markdown("""
                     * **総合ポイント** = 打撃P + 投手P + 守備P + (試合参加数 × 1.0)
-                    * **打撃P**: `(OPS × 50.0) + (RC × 3.0) + (盗塁 × 1.0) - (盗塁死 × 1.0) - (併殺打 × 1.5)`
+                    * **打撃P**: `(OPS × 50.0) + (RC × 3.0) + (盗塁 × 3.0) - (盗塁死 × 1.0) - (併殺打 × 1.5)`
                     * **投手P**: `(投球回 × 1.8) + (奪三振 × 0.3) + (4.00 - 防御率) × 投球回 × 0.2`
                     * **守備P**: `(成功守備機会 × 1.0) + (捕手守備機会 × 0.5) - (失策数 × 2.0)`
                     * **RC (創出得点)**: `((安打 + 四死球) × 塁打) ÷ (打数 + 四死球)`
