@@ -258,6 +258,7 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
                             "失点": 0,
                             "自責点": 0,
                             "勝敗": dec_val,
+                            "エラー野手": "",
                             "種別": "責任投手"
                         }
                         updated_df = pd.concat([updated_df, pd.DataFrame([new_row])], ignore_index=True)
@@ -331,7 +332,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     expected_batting_cols = [
         "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
-        "結果", "打球方向", "打点", "得点", "盗塁", "グラウンド", 
+        "結果", "打球方向", "エラー野手", "打点", "得点", "自責点", "盗塁", "グラウンド", 
         "対戦相手", "試合種別", "スコアラー", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
     ]
     
@@ -346,7 +347,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 df_batting[col] = ""
 
     if not df_pitching.empty:
-        expected_pitching_cols = ["日付", "イニング", "投手名", "打順", "打者名", "結果", "失点", "自責点", "被安打", "奪三振", "アウト数", "種別", "対戦相手", "試合種別"]
+        expected_pitching_cols = ["日付", "イニング", "投手名", "打順", "打者名", "結果", "失点", "自責点", "被安打", "奪三振", "アウト数", "種別", "対戦相手", "試合種別", "エラー野手"]
         for col in expected_pitching_cols:
             if col not in df_pitching.columns:
                 df_pitching[col] = ""
@@ -596,6 +597,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "守備位置": current_pos,
                         "結果": "スタメン",
                         "打球方向": "---",
+                        "エラー野手": "",
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
@@ -620,6 +622,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "守備位置": "投",
                     "結果": "スタメン",
                     "打球方向": "---",
+                    "エラー野手": "",
                     "打点": 0,
                     "得点": 0,
                     "スコアラー": scorer,
@@ -651,6 +654,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "守備位置": current_pos,
                             "結果": "交代",
                             "打球方向": "---",
+                            "エラー野手": "",
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
@@ -673,6 +677,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "守備位置": current_pos,
                             "結果": "守備変更",
                             "打球方向": "---",
+                            "エラー野手": "",
                             "打点": 0,
                             "得点": 0,
                             "スコアラー": scorer,
@@ -696,6 +701,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "守備位置": "投",
                         "結果": "交代",
                         "打球方向": "---",
+                        "エラー野手": "",
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
@@ -750,6 +756,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "守備位置": "－",
                     "結果": "ベンチ",
                     "打球方向": "---",
+                    "エラー野手": "",
                     "打点": 0,
                     "得点": 0,
                     "スコアラー": scorer,
@@ -760,12 +767,17 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         curr_counter = st.session_state.get("quick_clear_counter", 0)
         quick_res = st.session_state.get(f"quick_sr_{curr_counter}")
         quick_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
+        quick_ef = st.session_state.get(f"quick_ef_{curr_counter}", "") or ""
         quick_rbi = st.session_state.get(f"quick_si_{curr_counter}")
+        # 🔹 自責点の入力値を取得
+        quick_er = st.session_state.get(f"quick_er_{curr_counter}")
         
         target_batter_name = ""
         if quick_res:
-            dir_str = "".join(quick_dirs) if quick_dirs else "---"
+            dir_str = "-".join(quick_dirs) if quick_dirs else "---"
             rbi_val = int(quick_rbi) if quick_rbi is not None else 0
+            # 🔹 自責点の数値化（None の場合は 0）
+            er_val = int(quick_er) if quick_er is not None else 0
 
             c_1b = st.session_state.get(f"runner_1b_{curr_counter}")
             c_2b = st.session_state.get(f"runner_2b_{curr_counter}")
@@ -797,7 +809,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             active_orders = 9
             for idx_check in range(display_count - 1, -1, -1):
-                if st.session_state.get(f"sn{idx_check}"):
+                if st.session_state.get(f"sn{idx}"):
                     active_orders = idx_check + 1
                     break
             
@@ -822,8 +834,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "守備位置": st.session_state.get(f"sp{batter_idx}", "－"),
                     "結果": quick_res,
                     "打球方向": dir_str,
+                    "エラー野手": quick_ef,
                     "打点": rbi_val,
                     "得点": auto_run,
+                    "自責点": er_val,
                     "スコアラー": scorer,
                     "グラウンド": final_ground,
                     "球数": final_pitch_count,
@@ -891,6 +905,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "守備位置": "－",
                         "結果": res_val,
                         "打球方向": dir_val,
+                        "エラー野手": "",
                         "打点": 0,
                         "得点": score_val,
                         "盗塁": stolen_val,
@@ -909,6 +924,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "守備位置": "－",
                         "結果": "残塁",
                         "打球方向": "---",
+                        "エラー野手": "",
                         "打点": 0,
                         "得点": 0,
                         "スコアラー": scorer,
@@ -1010,7 +1026,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     else:
         df_this_season = pd.DataFrame()
 
-    # ★ 変更点: イニングリストを「表・裏」両方から自由選択可能に拡張
     inn_list = []
     for i in range(1, 10):
         inn_list.extend([f"{i}回表", f"{i}回裏"])
@@ -1147,9 +1162,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         active_orders = 9
         display_count = st.session_state.get("display_order_count", 9)
-        for i in range(display_count - 1, -1, -1):
-            if st.session_state.get(f"sn{i}"):
-                active_orders = i + 1
+        for idx_check in range(display_count - 1, -1, -1):
+            if st.session_state.get(f"sn{idx_check}"):
+                active_orders = idx_check + 1
                 break
 
         valid_pa_df = today_batting_df[today_batting_df["結果"].astype(str).isin(PA_RESULTS)] if not today_batting_df.empty else pd.DataFrame()
@@ -1180,13 +1195,22 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             curr_counter = st.session_state.get("quick_clear_counter", 0)
             current_res = st.session_state.get(f"quick_sr_{curr_counter}")
             current_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
+            current_ef = st.session_state.get(f"quick_ef_{curr_counter}")
             current_rbi = st.session_state.get(f"quick_si_{curr_counter}")
+            
+            # 🔹 自責点の選択状態を取得
+            current_er = st.session_state.get(f"quick_er_{curr_counter}")
             
             res_label = f" 🟢 {current_res}" if current_res else ""
             dir_label = f" ({''.join(current_dirs)})" if current_dirs else ""
+            ef_label = f" [E:{current_ef}]" if current_ef else ""
             rbi_label = f" [打点{current_rbi}]" if current_rbi is not None else ""
             
-            summary_btn_label = f"打席結果{res_label}{dir_label}{rbi_label} 🔽"
+            # 🔹 ボタンラベル用のテキストを作成
+            er_label = f" [自責{current_er}]" if current_er is not None else ""
+            
+            # 🔹 ボタン表示ラベルに er_label を追加
+            summary_btn_label = f"打席結果{res_label}{dir_label}{ef_label}{rbi_label}{er_label} 🔽"
             
             with st.popover(summary_btn_label, use_container_width=True):
 
@@ -1194,14 +1218,25 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.pills("打席結果", batting_results, key=f"quick_sr_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
-                st.markdown("##### ⚾ 打球方向を選択（複数選択可）")
+                st.markdown("##### ⚾ 打球方向・送球経路を選択（複数選択可）")
                 dir_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
                 st.pills("打球方向", dir_options, selection_mode="multi", key=f"quick_sd_{curr_counter}", label_visibility="collapsed")
+
+                st.markdown("---")
+                st.markdown("##### ⚠️ エラー野手を選択（エラー発生時）")
+                ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                st.pills("エラー野手", ef_options, key=f"quick_ef_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
                 rbi_options = [0, 1, 2, 3, 4]
                 st.pills("打点", rbi_options, key=f"quick_si_{curr_counter}", label_visibility="collapsed")
+
+                # 🔹 以下を追加：自責点の選択ピル
+                st.markdown("---")
+                st.markdown("##### ⚾ 自責点がある場合は選択 (0〜4)")
+                er_options = [0, 1, 2, 3, 4]
+                st.pills("自責点", er_options, key=f"quick_er_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
                 if st.button("🔄 入力をすべてクリア", use_container_width=True, key=f"clear_btn_{curr_counter}"):
@@ -1343,6 +1378,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         if submitted:
             quick_res = st.session_state.get(f"quick_sr_{curr_counter}")
             quick_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
+            quick_ef = st.session_state.get(f"quick_ef_{curr_counter}")
             
             cur_1b_runner = st.session_state.get(f"runner_1b_{curr_counter}")
             cur_2b_runner = st.session_state.get(f"runner_2b_{curr_counter}")
@@ -1365,6 +1401,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             if quick_res in require_dir_results and not quick_dirs:
                 st.session_state["batting_error_msg"] = f"⚠️ 「{quick_res}」を登録するには、打球方向を選択してください。"
+                st.rerun()
+            elif quick_res in ["失策(ゴロ)", "失策(フライ)"] and not quick_ef:
+                st.session_state["batting_error_msg"] = f"⚠️ 「{quick_res}」を登録するには、エラー野手を選択してください。"
                 st.rerun()
             elif quick_res == "野選" and ((cur_1b_runner and not res_1b) or (cur_2b_runner and not res_2b) or (cur_3b_runner and not res_3b)):
                 st.session_state["batting_error_msg"] = "⚠️ 野選が選択されています。ランナーの走塁結果（得点・進塁・走塁死）を選択してください。"
