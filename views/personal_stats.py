@@ -752,7 +752,123 @@ def show_personal_stats(df_batting, df_pitching):
     # 3. ランキング・歴代記録
     # ----------------------------------------------------
     with t_rank_rec:
-        sub_tab_rec, sub_tab_period = st.tabs(["👑 歴代記録 (通算・シーズン)", "📅 期間別ランキング"])
+        sub_tab_period, sub_tab_rec = st.tabs(["📅 期間別ランキング", "👑 歴代記録 (通算・シーズン)"])
+
+        with sub_tab_period:
+            st.markdown("#### 🏆 期間別ランキング")
+            period = st.radio("集計期間", ["年度別", "月間", "直近3試合"], horizontal=True, key="period_mode_radio")
+            df_b_sub = df_b_calc.copy()
+            df_p_sub = df_p_calc.copy()
+
+            if "日付" in df_b_sub.columns and not df_b_sub.empty:
+                df_b_sub["Date"] = pd.to_datetime(df_b_sub["日付"], errors='coerce')
+            else:
+                df_b_sub["Date"] = pd.Series(dtype="datetime64[ns]")
+
+            if "日付" in df_p_sub.columns and not df_p_sub.empty:
+                df_p_sub["Date"] = pd.to_datetime(df_p_sub["日付"], errors='coerce')
+            else:
+                df_p_sub["Date"] = pd.Series(dtype="datetime64[ns]")
+
+            def_ab = 1
+            def_inn = 1
+            key_suffix = ""
+
+            if period == "年度別":
+                ys = sorted([y for y in df_b_sub["Date"].dt.year.dropna().unique()], reverse=True)
+                sy = st.selectbox("年度選択", ys, key="period_year_select") if len(ys) > 0 else datetime.date.today().year
+                key_suffix = str(sy)
+
+                df_b_sub = df_b_sub[df_b_sub["Date"].dt.year == sy] if not df_b_sub.empty else df_b_sub
+                df_p_sub = df_p_sub[df_p_sub["Date"].dt.year == sy] if not df_p_sub.empty else df_p_sub
+                if not df_b_sub.empty:
+                    def_ab = int(df_b_sub["日付"].nunique() * 1.0)
+                    def_inn = int(df_b_sub["日付"].nunique() * 0.8)
+
+            elif period == "月間":
+                if not df_b_sub.empty:
+                    df_b_sub["YM"] = df_b_sub["Date"].dt.strftime('%Y-%m')
+                    ms = sorted([m for m in df_b_sub["YM"].dropna().unique()], reverse=True)
+                else:
+                    ms = []
+
+                sm = st.selectbox("月選択", ms, key="period_month_select") if len(ms) > 0 else None
+
+                if sm:
+                    key_suffix = str(sm)
+                    df_b_sub = df_b_sub[df_b_sub["YM"] == sm]
+                    if not df_p_sub.empty:
+                        df_p_sub["YM"] = df_p_sub["Date"].dt.strftime('%Y-%m')
+                        df_p_sub = df_p_sub[df_p_sub["YM"] == sm]
+                    def_ab = int(df_b_sub["日付"].nunique())
+                    def_inn = def_ab
+                else:
+                    df_b_sub = pd.DataFrame()
+                    df_p_sub = pd.DataFrame()
+
+            else:
+                dates = sorted([d for d in df_b_sub["Date"].dropna().unique()], reverse=True)[:3]
+                df_b_sub = df_b_sub[df_b_sub["Date"].isin(dates)] if not df_b_sub.empty else df_b_sub
+                df_p_sub = df_p_sub[df_p_sub["Date"].isin(dates)] if not df_p_sub.empty else df_p_sub
+                def_ab = 3
+                def_inn = 3
+                key_suffix = "recent"
+
+            c_f1, c_f2 = st.columns(2)
+            min_ab = c_f1.number_input("規定打席", value=max(1, def_ab), min_value=1, key=f"ab_{period}_{key_suffix}")
+            min_inn = c_f2.number_input("規定投球回", value=max(1, def_inn), min_value=1, key=f"inn_{period}_{key_suffix}")
+
+            st.divider()
+
+            if not df_b_sub.empty:
+                rank_b = get_ranking_df(df_b_sub, ["選手名"], agg_rules_b)
+                rank_b["Total_PA"] = rank_b["is_ab"] + rank_b["is_bb"] + rank_b["is_sf"] + rank_b["is_sh"]
+                rank_b["AVG"] = rank_b.apply(lambda x: x["is_hit"] / x["is_ab"] if x["is_ab"] > 0 else 0, axis=1)
+                rank_b["OBP"] = (rank_b["is_hit"] + rank_b["is_bb"]) / (rank_b["Total_PA"] + 1e-9)
+                rank_b["SLG"] = rank_b["bases"] / (rank_b["is_ab"] + 1e-9)
+                rank_b["OPS"] = (rank_b["OBP"] + rank_b["SLG"]).fillna(0)
+
+                st.markdown("##### ⚔️ 打撃部門")
+                r1, r2, r3 = st.columns(3)
+                with r1:
+                    show_top10("打率", rank_b[rank_b["Total_PA"] >= min_ab], "AVG", "選手名", "AVG", format_float=True)
+                with r2:
+                    show_top10("本塁打", rank_b, "is_hr", "選手名", "is_hr", suffix="本")
+                with r3:
+                    show_top10("打点", rank_b, "打点", "選手名", "打点", suffix="点")
+
+                st.write("")
+                r4, r5, r6 = st.columns(3)
+                with r4:
+                    show_top10("安打", rank_b, "is_hit", "選手名", "is_hit", suffix="本")
+                with r5:
+                    show_top10("盗塁", rank_b, "盗塁", "選手名", "盗塁", suffix="個")
+                with r6:
+                    show_top10("OPS", rank_b[rank_b["is_ab"] >= min_ab], "OPS", "選手名", "OPS", format_float=True)
+            else:
+                st.info("データなし")
+            st.divider()
+
+            if not df_p_sub.empty:
+                rank_p = get_ranking_df(df_p_sub, ["選手名"], agg_rules_p)
+                rank_p["Innings"] = rank_p["アウト数"] / 3
+                rank_p["ERA"] = rank_p.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+                rank_p["TotalSO"] = rank_p["is_so"] + rank_p["奪三振"]
+                rank_p["WHIP"] = rank_p.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+
+                st.markdown("##### 🛡️ 投手部門")
+                st.caption("※ WHIP: (被安打 + 与四死球) ÷ 投球回。1イニングあたりに出した走者の数。")
+                p1, p2, p3, p4 = st.columns(4)
+                with p1:
+                    show_top10("防御率", rank_p[rank_p["Innings"] >= min_inn], "ERA", "選手名", "ERA", ascending=True, format_float=True)
+                with p2:
+                    show_top10("WHIP", rank_p[rank_p["Innings"] >= min_inn], "WHIP", "選手名", "WHIP", ascending=True, format_float=True)
+                with p3:
+                    show_top10("勝利", rank_p, "is_win", "選手名", "is_win", suffix="勝")
+                with p4:
+                    show_top10("奪三振", rank_p, "TotalSO", "選手名", "TotalSO", suffix="個")
+            else:
+                st.info("データなし")
 
         with sub_tab_rec:
             st.markdown("#### 👑 歴代記録")
@@ -895,119 +1011,3 @@ def show_personal_stats(df_batting, df_pitching):
                     show_top10("奪三振", df_pit_res, "TotalSO", "Display", "TotalSO", suffix=" 個")
             else:
                 st.info("投手データがありません")
-
-        with sub_tab_period:
-            st.markdown("#### 🏆 期間別ランキング")
-            period = st.radio("集計期間", ["年度別", "月間", "直近3試合"], horizontal=True, key="period_mode_radio")
-            df_b_sub = df_b_calc.copy()
-            df_p_sub = df_p_calc.copy()
-
-            if "日付" in df_b_sub.columns and not df_b_sub.empty:
-                df_b_sub["Date"] = pd.to_datetime(df_b_sub["日付"], errors='coerce')
-            else:
-                df_b_sub["Date"] = pd.Series(dtype="datetime64[ns]")
-
-            if "日付" in df_p_sub.columns and not df_p_sub.empty:
-                df_p_sub["Date"] = pd.to_datetime(df_p_sub["日付"], errors='coerce')
-            else:
-                df_p_sub["Date"] = pd.Series(dtype="datetime64[ns]")
-
-            def_ab = 1
-            def_inn = 1
-            key_suffix = ""
-
-            if period == "年度別":
-                ys = sorted([y for y in df_b_sub["Date"].dt.year.dropna().unique()], reverse=True)
-                sy = st.selectbox("年度選択", ys, key="period_year_select") if len(ys) > 0 else datetime.date.today().year
-                key_suffix = str(sy)
-
-                df_b_sub = df_b_sub[df_b_sub["Date"].dt.year == sy] if not df_b_sub.empty else df_b_sub
-                df_p_sub = df_p_sub[df_p_sub["Date"].dt.year == sy] if not df_p_sub.empty else df_p_sub
-                if not df_b_sub.empty:
-                    def_ab = int(df_b_sub["日付"].nunique() * 1.0)
-                    def_inn = int(df_b_sub["日付"].nunique() * 0.8)
-
-            elif period == "月間":
-                if not df_b_sub.empty:
-                    df_b_sub["YM"] = df_b_sub["Date"].dt.strftime('%Y-%m')
-                    ms = sorted([m for m in df_b_sub["YM"].dropna().unique()], reverse=True)
-                else:
-                    ms = []
-
-                sm = st.selectbox("月選択", ms, key="period_month_select") if len(ms) > 0 else None
-
-                if sm:
-                    key_suffix = str(sm)
-                    df_b_sub = df_b_sub[df_b_sub["YM"] == sm]
-                    if not df_p_sub.empty:
-                        df_p_sub["YM"] = df_p_sub["Date"].dt.strftime('%Y-%m')
-                        df_p_sub = df_p_sub[df_p_sub["YM"] == sm]
-                    def_ab = int(df_b_sub["日付"].nunique())
-                    def_inn = def_ab
-                else:
-                    df_b_sub = pd.DataFrame()
-                    df_p_sub = pd.DataFrame()
-
-            else:
-                dates = sorted([d for d in df_b_sub["Date"].dropna().unique()], reverse=True)[:3]
-                df_b_sub = df_b_sub[df_b_sub["Date"].isin(dates)] if not df_b_sub.empty else df_b_sub
-                df_p_sub = df_p_sub[df_p_sub["Date"].isin(dates)] if not df_p_sub.empty else df_p_sub
-                def_ab = 3
-                def_inn = 3
-                key_suffix = "recent"
-
-            c_f1, c_f2 = st.columns(2)
-            min_ab = c_f1.number_input("規定打席", value=max(1, def_ab), min_value=1, key=f"ab_{period}_{key_suffix}")
-            min_inn = c_f2.number_input("規定投球回", value=max(1, def_inn), min_value=1, key=f"inn_{period}_{key_suffix}")
-
-            st.divider()
-
-            if not df_b_sub.empty:
-                rank_b = get_ranking_df(df_b_sub, ["選手名"], agg_rules_b)
-                rank_b["Total_PA"] = rank_b["is_ab"] + rank_b["is_bb"] + rank_b["is_sf"] + rank_b["is_sh"]
-                rank_b["AVG"] = rank_b.apply(lambda x: x["is_hit"] / x["is_ab"] if x["is_ab"] > 0 else 0, axis=1)
-                rank_b["OBP"] = (rank_b["is_hit"] + rank_b["is_bb"]) / (rank_b["Total_PA"] + 1e-9)
-                rank_b["SLG"] = rank_b["bases"] / (rank_b["is_ab"] + 1e-9)
-                rank_b["OPS"] = (rank_b["OBP"] + rank_b["SLG"]).fillna(0)
-
-                st.markdown("##### ⚔️ 打撃部門")
-                r1, r2, r3 = st.columns(3)
-                with r1:
-                    show_top10("打率", rank_b[rank_b["Total_PA"] >= min_ab], "AVG", "選手名", "AVG", format_float=True)
-                with r2:
-                    show_top10("本塁打", rank_b, "is_hr", "選手名", "is_hr", suffix="本")
-                with r3:
-                    show_top10("打点", rank_b, "打点", "選手名", "打点", suffix="点")
-
-                st.write("")
-                r4, r5, r6 = st.columns(3)
-                with r4:
-                    show_top10("安打", rank_b, "is_hit", "選手名", "is_hit", suffix="本")
-                with r5:
-                    show_top10("盗塁", rank_b, "盗塁", "選手名", "盗塁", suffix="個")
-                with r6:
-                    show_top10("OPS", rank_b[rank_b["is_ab"] >= min_ab], "OPS", "選手名", "OPS", format_float=True)
-            else:
-                st.info("データなし")
-            st.divider()
-
-            if not df_p_sub.empty:
-                rank_p = get_ranking_df(df_p_sub, ["選手名"], agg_rules_p)
-                rank_p["Innings"] = rank_p["アウト数"] / 3
-                rank_p["ERA"] = rank_p.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
-                rank_p["TotalSO"] = rank_p["is_so"] + rank_p["奪三振"]
-                rank_p["WHIP"] = rank_p.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
-
-                st.markdown("##### 🛡️ 投手部門")
-                st.caption("※ WHIP: (被安打 + 与四死球) ÷ 投球回。1イニングあたりに出した走者の数。")
-                p1, p2, p3, p4 = st.columns(4)
-                with p1:
-                    show_top10("防御率", rank_p[rank_p["Innings"] >= min_inn], "ERA", "選手名", "ERA", ascending=True, format_float=True)
-                with p2:
-                    show_top10("WHIP", rank_p[rank_p["Innings"] >= min_inn], "WHIP", "選手名", "WHIP", ascending=True, format_float=True)
-                with p3:
-                    show_top10("勝利", rank_p, "is_win", "選手名", "is_win", suffix="勝")
-                with p4:
-                    show_top10("奪三振", rank_p, "TotalSO", "選手名", "TotalSO", suffix="個")
-            else:
-                st.info("データなし")
