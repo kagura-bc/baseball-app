@@ -328,6 +328,7 @@ def render_game_result_popover(
                             "イニング": "試合終了",
                             p_col: p_name,
                             "結果": "ー",
+                            "打点": 0,
                             "失点": 0,
                             "自責点": 0,
                             "勝敗": dec_val,
@@ -597,6 +598,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         current_dirs = st.session_state.get(f"pitching_quick_sd_{curr_counter}", [])
         current_ef = st.session_state.get(f"pitching_quick_ef_{curr_counter}")
 
+        # 🔹 打点の選択状態を取得
+        current_rbi = st.session_state.get(f"pitching_quick_si_{curr_counter}")
+        rbi_val = int(current_rbi) if current_rbi is not None else 0
+
         # 🏃‍♂️ 走者の「得点」判定および本塁打から失点を自動算出
         r1_is_run = (st.session_state.get(f"p_runner_1b_res_{curr_counter}") == "得点")
         r2_is_run = (st.session_state.get(f"p_runner_2b_res_{curr_counter}") == "得点")
@@ -612,9 +617,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         res_label = f" 🟢 {current_res}" if current_res else ""
         dir_label = f" ({''.join(current_dirs)})" if current_dirs else ""
         ef_label = f" [E:{current_ef}]" if current_ef else ""
+        rbi_label = f" [打点{current_rbi}]" if current_rbi is not None else ""
         run_er_label = f" [失点{p_run}/自責{er_val}]" if (p_run > 0 or er_val > 0 or current_res) else ""
 
-        summary_btn_label = f"投球結果{res_label}{dir_label}{ef_label}{run_er_label} 🔽"
+        summary_btn_label = f"投球結果{res_label}{dir_label}{ef_label}{rbi_label}{run_er_label} 🔽"
 
         with st.popover(summary_btn_label, use_container_width=True):
             st.markdown("##### ⚾ 投球結果を選択")
@@ -635,6 +641,12 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             st.markdown("##### ⚠️ エラー野手を選択（エラー発生時）")
             ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
             st.pills("エラー野手", ef_options, key=f"pitching_quick_ef_{curr_counter}", label_visibility="collapsed")
+
+            # 🔹 追加：打点選択ピル
+            st.markdown("---")
+            st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
+            rbi_options = [0, 1, 2, 3, 4]
+            st.pills("打点", rbi_options, key=f"pitching_quick_si_{curr_counter}", label_visibility="collapsed")
 
             st.markdown("---")
             st.markdown("##### ⚾ 自責点を選択 (0〜4)")
@@ -1094,6 +1106,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         target_fielder_pos_list = st.session_state.get(f"pitching_quick_sd_{curr_counter}", [])
         p_ef = st.session_state.get(f"pitching_quick_ef_{curr_counter}", "") or ""
 
+        # 🔹 打点数値を取得
+        current_rbi = st.session_state.get(f"pitching_quick_si_{curr_counter}")
+        p_rbi = int(current_rbi) if current_rbi is not None else 0
+
         # 走者の結果および本塁打から失点を自動算出
         r1_is_run = (st.session_state.get(f"p_runner_1b_res_{curr_counter}") == "得点")
         r2_is_run = (st.session_state.get(f"p_runner_2b_res_{curr_counter}") == "得点")
@@ -1160,6 +1176,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         "処理野手": "",
                         "エラー野手": "",
                         "結果": "スタメン",
+                        "打点": 0,
                         "失点": 0,
                         "自責点": 0,
                         "勝敗": "ー",
@@ -1191,6 +1208,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             "処理野手": "",
                             "エラー野手": "",
                             "結果": "交代",
+                            "打点": 0,
                             "失点": 0,
                             "自責点": 0,
                             "勝敗": "ー",
@@ -1212,6 +1230,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             "処理野手": "",
                             "エラー野手": "",
                             "結果": "守備変更",
+                            "打点": 0,
                             "失点": 0,
                             "自責点": 0,
                             "勝敗": "ー",
@@ -1375,6 +1394,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     "処理野手": fielder_display,
                     "エラー野手": p_ef,
                     "結果": p_res,
+                    "打点": p_rbi,  # 🔹 打点レコードを追加
                     "失点": p_run,
                     "自責点": p_er,
                     "勝敗": "ー",
@@ -1414,6 +1434,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         "処理野手": fielder_disp,
                         "エラー野手": "",
                         "結果": r_res,
+                        "打点": 0,
                         "失点": r_run if not p_res else 0,
                         "自責点": r_run if not p_res else 0,
                         "勝敗": "ー",
@@ -1669,6 +1690,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             res_text = f"{raw_res} [{clean_name}]"
                         else:
                             res_text = raw_res
+
+                        # 🔹 守備履歴表示にも打点を追加
+                        rbi_val = pd.to_numeric(row.get("打点", 0), errors="coerce")
+                        rbi = int(rbi_val) if pd.notna(rbi_val) else 0
+                        if rbi > 0:
+                            res_text = f"{res_text} 打点{rbi}"
+
                         rows_val = pd.to_numeric(row.get("失点", 0), errors="coerce")
                         runs = int(runs_val) if pd.notna(runs_val) else 0
                         if runs > 0:
