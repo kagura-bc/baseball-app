@@ -329,14 +329,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if cache_key in st.session_state:
         df_batting = st.session_state[cache_key]
 
-    # 「攻守」列を除外した期待するカラム一覧
     expected_batting_cols = [
         "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
         "結果", "打球方向", "打点", "得点", "盗塁", "グラウンド", 
         "対戦相手", "試合種別", "スコアラー", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
     ]
     
-    # 旧データ「位置」が存在し「守備位置」がない場合は補正
     if not df_batting.empty and "守備位置" not in df_batting.columns and "位置" in df_batting.columns:
         df_batting["守備位置"] = df_batting["位置"]
 
@@ -628,6 +626,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "グラウンド": final_ground
                 })
         else:
+            # 交代・守備変更の差分検知ロジック
             for i in range(display_count):
                 name_val = st.session_state.get(f"sn{i}")
                 pos_val = st.session_state.get(f"sp{i}")
@@ -639,12 +638,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     prev_name = prev_state.get("name", "")
                     prev_pos = prev_state.get("pos", "")
                     
+                    # 1. 選手が変更された場合（代打・代走含む交代）
                     if prev_name and prev_name != clean_name:
                         rows_to_add.append({
                             "日付": current_date_formatted,
                             "対戦相手": final_opp,
                             "試合種別": final_match_type,
-                            "イニング": inn_val,
+                            "イニング": inn_val,  # ← 選択中のイニング（〇回裏など）で記録
                             "打順": i + 1,
                             "打者名": clean_name,
                             "投手名": opp_pitcher_name,
@@ -656,8 +656,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "スコアラー": scorer,
                             "グラウンド": final_ground
                         })
-                        st.session_state["lineup_states"][i] = {"name": clean_name, "pos": current_pos}
+                        # 「代打」選択時は、次回守備位置として前選手の守備位置を自動保持する
+                        next_state_pos = prev_pos if current_pos in ["打", "走"] and prev_pos else current_pos
+                        st.session_state["lineup_states"][i] = {"name": clean_name, "pos": next_state_pos}
                     
+                    # 2. 選手は同じで守備位置のみ変更された場合（守備変更）
                     elif prev_name == clean_name and prev_pos and prev_pos != current_pos:
                         rows_to_add.append({
                             "日付": current_date_formatted,
@@ -699,6 +702,31 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "グラウンド": final_ground
                     })
                     st.session_state["dh_pitcher_name_state"] = clean_dh_p_name
+
+        is_kagura_top = (kagura_order == "先攻 (表)")
+        is_kagura_attack = ("表" in inn_val) if is_kagura_top else ("裏" in inn_val)
+        sub_validation_error = None
+
+        for row in rows_to_add:
+            res_type = row.get("結果")
+            c_pos = row.get("守備位置")
+
+            if res_type in ["交代", "守備変更"]:
+                if is_kagura_attack:
+                    # 自チーム攻撃回（守備交代・守備位置変更はエラー）
+                    if res_type == "守備変更" or (res_type == "交代" and c_pos not in ["打", "走"]):
+                        sub_validation_error = "⚠️ 自チーム攻撃回のため、自チームに「守備交代・守備位置変更」を登録することはできません（代打・代走のみ設定可能）。"
+                        break
+                else:
+                    # 自チーム守備回（代打・代走はエラー）
+                    if c_pos in ["打", "走"]:
+                        sub_validation_error = "⚠️ 自チーム守備回のため、自チームに「代打・代走」を登録することはできません。"
+                        break
+
+        if sub_validation_error:
+            st.session_state["batting_error_msg"] = sub_validation_error
+            st.rerun()
+            return
 
         selected_bench = st.session_state.get("persistent_bench", [])
         registered_bench_names = set()
@@ -982,7 +1010,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     else:
         df_this_season = pd.DataFrame()
 
-    inn_list = [f"{i}回{b_inning_suffix}" for i in range(1, 10)] + [f"延長{b_inning_suffix}"]
+    # ★ 変更点: イニングリストを「表・裏」両方から自由選択可能に拡張
+    inn_list = []
+    for i in range(1, 10):
+        inn_list.extend([f"{i}回表", f"{i}回裏"])
+    inn_list.extend(["延長表", "延長裏"])
+
     current_inn_val = st.session_state.get("persistent_inn", f"1回{b_inning_suffix}")
     
     if not today_batting_df.empty:
@@ -992,11 +1025,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
         t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
         
+        # 3アウトで自動的に次のイニングへ進める（自チーム攻撃用）
         if (s_outs + d_outs + t_outs) >= 3:
             try:
+                # 表/裏を2つ飛ばしで自チームの次の攻撃回へ進める
                 curr_idx = inn_list.index(current_inn_val)
-                if curr_idx < len(inn_list) - 1:
-                    current_inn_val = inn_list[curr_idx + 1]
+                if curr_idx < len(inn_list) - 2:
+                    current_inn_val = inn_list[curr_idx + 2]
                     st.session_state["persistent_inn"] = current_inn_val
             except ValueError:
                 pass
@@ -1016,6 +1051,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         if st.button("次へ ▶", use_container_width=True):
             st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) + 1
             st.rerun()
+
+    st.divider()
 
     @st.fragment
     def batting_input_fragment():
@@ -1254,6 +1291,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
+        # --- 打順・守備入力リスト ---
         for i in range(display_count):
             pos_key = f"sp{i}"
             name_key = f"sn{i}"
