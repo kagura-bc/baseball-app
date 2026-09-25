@@ -332,7 +332,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     expected_batting_cols = [
         "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
-        "結果", "打球方向", "エラー野手", "打点", "得点", "自責点", "盗塁", "グラウンド", 
+        "結果", "打球方向", "エラー野手", "打点", "得点", "自責点", "グラウンド", 
         "対戦相手", "試合種別", "スコアラー", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
     ]
     
@@ -347,7 +347,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 df_batting[col] = ""
 
     if not df_pitching.empty:
-        expected_pitching_cols = ["日付", "イニング", "投手名", "打順", "打者名", "結果", "失点", "自責点", "被安打", "奪三振", "アウト数", "種別", "対戦相手", "試合種別", "エラー野手"]
+        expected_pitching_cols = ["日付", "イニング", "投手名", "打順", "打者名", "結果", "失点", "自責点", "対戦相手", "試合種別", "エラー野手"]
         for col in expected_pitching_cols:
             if col not in df_pitching.columns:
                 df_pitching[col] = ""
@@ -888,10 +888,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
                 if r_res:
                     is_score = (r_res == "得点")
-                    is_stolen = (r_res == "盗塁")
+                    # 🔹 走塁結果が "得点" の場合は "走塁記録"、それ以外（"盗塁"等）はそのまま r_res ("盗塁") を結果に設定
                     res_val = "走塁記録" if is_score else r_res
                     score_val = 1 if is_score else 0
-                    stolen_val = 1 if is_stolen else 0
                     dir_val = r_fielder if r_fielder and r_res in ["走塁死", "盗塁死", "牽制死"] else "---"
                     
                     rows_to_add.append({
@@ -903,12 +902,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打者名": clean_r_name,
                         "投手名": opp_pitcher_name,
                         "守備位置": "－",
-                        "結果": res_val,
+                        "結果": res_val,       # 🔹 r_res が "盗塁" の場合は "盗塁" と登録されます
                         "打球方向": dir_val,
                         "エラー野手": "",
                         "打点": 0,
-                        "得点": score_val,
-                        "盗塁": stolen_val,
+                        "得点": score_val,    # 🔹 "盗塁" 列のキーと値を削除
                         "スコアラー": scorer,
                         "グラウンド": final_ground
                     })

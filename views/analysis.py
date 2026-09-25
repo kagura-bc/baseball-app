@@ -136,6 +136,12 @@ def show_analysis_page(df_batting, df_pitching):
         for c in ["打点", "盗塁", "得点"]:
             df_b_all[c] = pd.to_numeric(df_b_all[c], errors='coerce').fillna(0)
 
+        # 🔹 「結果」列からの盗塁数自動カウント処理を追加
+        if not df_b_all.empty and "結果" in df_b_all.columns:
+            res_s = df_b_all["結果"].astype(str)
+            sb_mask = (res_s == "盗塁") | (res_s.str.contains("盗塁") & ~res_s.str.contains("盗塁死"))
+            df_b_all["盗塁"] = df_b_all["盗塁"] + sb_mask.astype(int)
+
     if "選手名" in df_b_all.columns:
         df_b_all["選手名"] = df_b_all["選手名"].astype(str).str.replace(" ", "").str.replace(" ", "").str.strip()
 

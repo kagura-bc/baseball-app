@@ -15,17 +15,13 @@ def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
   expected_cols = [
       "日付",
       "打点",
-      "盗塁",
       "得点",
       "位置",
       "グラウンド",
       "対戦相手",
       "試合種別",
       "イニング",
-      "選手名",
       "結果",
-      "種別",
-      "Year",
       "スコアラー",
   ]
 
@@ -37,13 +33,13 @@ def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
     )
 
     if data.empty:
-      return pd.DataFrame(columns=expected_cols)
+      return pd.DataFrame(columns=expected_cols + ["Year"])
 
     for col in expected_cols:
       if col not in data.columns:
-        data[col] = 0 if col in ["打点", "盗塁", "得点"] else ""
+        data[col] = 0 if col in ["打点", "得点"] else ""
 
-    # 日付から "Year" を自動生成する処理を追加（テスト入力時に年が抜けるのを防ぐため）
+    # 日付から "Year" を自動生成する処理を追加
     data["日付"] = pd.to_datetime(data["日付"], errors="coerce")
     data["Year"] = data["日付"].dt.strftime("%Y").fillna("不明")
     data["日付"] = data["日付"].dt.date
@@ -51,7 +47,7 @@ def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
     return data.dropna(how="all")
   except Exception as e:
     st.error(f"打撃データの読み込みに失敗しました ({target_worksheet}): {e}")
-    return pd.DataFrame(columns=expected_cols)
+    return pd.DataFrame(columns=expected_cols + ["Year"])
 
 
 @st.cache_data(ttl=60)
@@ -71,8 +67,6 @@ def load_pitching_data(spreadsheet_url=SPREADSHEET_URL):
       "投手名",
       "結果",
       "勝敗",
-      "選手名",
-      "Year",
       "スコアラー",
   ]
 
@@ -83,7 +77,7 @@ def load_pitching_data(spreadsheet_url=SPREADSHEET_URL):
         spreadsheet=spreadsheet_url, worksheet=target_worksheet, ttl=0
     )
     if data.empty:
-      return pd.DataFrame(columns=expected_cols)
+      return pd.DataFrame(columns=expected_cols + ["Year"])
 
     for col in expected_cols:
       if col not in data.columns:
@@ -93,21 +87,19 @@ def load_pitching_data(spreadsheet_url=SPREADSHEET_URL):
             "試合種別",
             "処理野手",
             "投手名",
-            "選手名",
             "結果",
             "イニング",
             "勝敗",
-            "Year",
             "スコアラー",
         ]:
           data[col] = ""
         else:
           data[col] = 0
 
-    # 投手データに「選手名」が欠けている場合は「投手名」をコピーする
-    data.loc[data["選手名"] == "", "選手名"] = data["投手名"]
+    # 投手名の欠損値を補正
+    data["投手名"] = data["投手名"].fillna("")
 
-    # 日付から "Year" を自動生成する処理を追加
+    # 日付から "Year" を自動生成する処理
     data["日付"] = pd.to_datetime(data["日付"], errors="coerce")
     data["Year"] = data["日付"].dt.strftime("%Y").fillna("不明")
     data["日付"] = data["日付"].dt.date
@@ -115,4 +107,4 @@ def load_pitching_data(spreadsheet_url=SPREADSHEET_URL):
     return data.dropna(how="all")
   except Exception as e:
     st.error(f"投手データの読み込みに失敗しました ({target_worksheet}): {e}")
-    return pd.DataFrame(columns=expected_cols)
+    return pd.DataFrame(columns=expected_cols + ["Year"])

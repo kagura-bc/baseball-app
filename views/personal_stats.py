@@ -74,6 +74,14 @@ def show_personal_stats(df_batting, df_pitching):
             if c not in df_b_calc.columns:
                 df_b_calc[c] = 0
             df_b_calc[c] = pd.to_numeric(df_b_calc[c], errors='coerce').fillna(0)
+        # 🔹 「結果」列が「盗塁」「盗塁死」の場合の自動集計補正を追加
+        res_str = df_b_calc["結果"].astype(str)
+        steal_mask = (res_str == "盗塁") | (res_str.str.contains("盗塁") & ~res_str.str.contains("盗塁死"))
+        df_b_calc["盗塁"] = df_b_calc["盗塁"] + steal_mask.astype(int)
+
+        steal_death_mask = res_str.str.contains("盗塁死", na=False)
+        df_b_calc["盗塁死"] = df_b_calc["盗塁死"] + steal_death_mask.astype(int)
+
     else:
         df_b_calc = pd.DataFrame(columns=["Year", "選手名", "結果", "is_hit", "is_ab", "is_hr", "is_so", "is_1b", "is_2b", "is_3b", "is_bb", "is_sf", "is_sh", "is_dp", "bases", "打点", "盗塁", "盗塁死", "得点"])
 
