@@ -332,7 +332,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     expected_batting_cols = [
         "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
-        "結果", "打球方向", "エラー野手", "打点", "得点", "自責点", "グラウンド", 
+        "結果", "打球方向", "エラー野手", "打点", "自責点", "グラウンド", 
         "対戦相手", "試合種別", "スコアラー", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
     ]
     
@@ -463,12 +463,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 total_runs = 0
                 
                 for _, row in group.iterrows():
-                    res = row['結果']
-                    runs_val = pd.to_numeric(row['得点'], errors='coerce')
-                    rbi_val = pd.to_numeric(row['打点'], errors='coerce')
+                    res = str(row['結果']).strip()
+                    rbi_val = pd.to_numeric(row.get('打点', 0), errors='coerce')
                     
-                    r_val = int(runs_val) if pd.notna(runs_val) else 0
-                    total_runs += r_val
+                    # 結果が「本塁打」または「得点」の場合に個人の得点数としてカウント
+                    if res in ["本塁打", "得点"]:
+                        total_runs += 1
                     
                     if res in ["盗塁", "盗塁成功"]:
                         stolen_base_count += 1
@@ -599,7 +599,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打球方向": "---",
                         "エラー野手": "",
                         "打点": 0,
-                        "得点": 0,
                         "スコアラー": scorer,
                         "グラウンド": final_ground
                     })
@@ -624,7 +623,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打球方向": "---",
                     "エラー野手": "",
                     "打点": 0,
-                    "得点": 0,
                     "スコアラー": scorer,
                     "グラウンド": final_ground
                 })
@@ -656,7 +654,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打球方向": "---",
                             "エラー野手": "",
                             "打点": 0,
-                            "得点": 0,
                             "スコアラー": scorer,
                             "グラウンド": final_ground
                         })
@@ -679,7 +676,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "打球方向": "---",
                             "エラー野手": "",
                             "打点": 0,
-                            "得点": 0,
                             "スコアラー": scorer,
                             "グラウンド": final_ground
                         })
@@ -703,7 +699,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打球方向": "---",
                         "エラー野手": "",
                         "打点": 0,
-                        "得点": 0,
                         "スコアラー": scorer,
                         "グラウンド": final_ground
                     })
@@ -758,7 +753,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打球方向": "---",
                     "エラー野手": "",
                     "打点": 0,
-                    "得点": 0,
                     "スコアラー": scorer,
                     "グラウンド": final_ground
                 })
@@ -769,14 +763,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         quick_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
         quick_ef = st.session_state.get(f"quick_ef_{curr_counter}", "") or ""
         quick_rbi = st.session_state.get(f"quick_si_{curr_counter}")
-        # 🔹 自責点の入力値を取得
         quick_er = st.session_state.get(f"quick_er_{curr_counter}")
         
         target_batter_name = ""
         if quick_res:
             dir_str = "-".join(quick_dirs) if quick_dirs else "---"
             rbi_val = int(quick_rbi) if quick_rbi is not None else 0
-            # 🔹 自責点の数値化（None の場合は 0）
             er_val = int(quick_er) if quick_er is not None else 0
 
             c_1b = st.session_state.get(f"runner_1b_{curr_counter}")
@@ -821,7 +813,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             if target_batter_name:
                 clean_batter_name = target_batter_name.split(" (")[0].strip()
-                auto_run = 1 if quick_res == "本塁打" else 0
 
                 rows_to_add.append({
                     "日付": current_date_formatted,
@@ -836,7 +827,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "打球方向": dir_str,
                     "エラー野手": quick_ef,
                     "打点": rbi_val,
-                    "得点": auto_run,
                     "自責点": er_val,
                     "スコアラー": scorer,
                     "グラウンド": final_ground,
@@ -887,10 +877,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         break
 
                 if r_res:
-                    is_score = (r_res == "得点")
-                    # 🔹 走塁結果が "得点" の場合は "走塁記録"、それ以外（"盗塁"等）はそのまま r_res ("盗塁") を結果に設定
-                    res_val = "走塁記録" if is_score else r_res
-                    score_val = 1 if is_score else 0
+                    is_home_steal = (base == "3b" and r_res == "盗塁")
+                    is_score = (r_res == "得点") or is_home_steal
+
+                    # 得点・ホームスチールの場合は「結果」列に"得点"をセット
+                    res_val = "得点" if is_score else r_res
                     dir_val = r_fielder if r_fielder and r_res in ["走塁死", "盗塁死", "牽制死"] else "---"
                     
                     rows_to_add.append({
@@ -902,11 +893,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打者名": clean_r_name,
                         "投手名": opp_pitcher_name,
                         "守備位置": "－",
-                        "結果": res_val,       # 🔹 r_res が "盗塁" の場合は "盗塁" と登録されます
+                        "結果": res_val,
                         "打球方向": dir_val,
                         "エラー野手": "",
                         "打点": 0,
-                        "得点": score_val,    # 🔹 "盗塁" 列のキーと値を削除
                         "スコアラー": scorer,
                         "グラウンド": final_ground
                     })
@@ -924,7 +914,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打球方向": "---",
                         "エラー野手": "",
                         "打点": 0,
-                        "得点": 0,
                         "スコアラー": scorer,
                         "グラウンド": final_ground
                     })
@@ -1195,19 +1184,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             current_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
             current_ef = st.session_state.get(f"quick_ef_{curr_counter}")
             current_rbi = st.session_state.get(f"quick_si_{curr_counter}")
-            
-            # 🔹 自責点の選択状態を取得
             current_er = st.session_state.get(f"quick_er_{curr_counter}")
             
             res_label = f" 🟢 {current_res}" if current_res else ""
             dir_label = f" ({''.join(current_dirs)})" if current_dirs else ""
             ef_label = f" [E:{current_ef}]" if current_ef else ""
             rbi_label = f" [打点{current_rbi}]" if current_rbi is not None else ""
-            
-            # 🔹 ボタンラベル用のテキストを作成
             er_label = f" [自責{current_er}]" if current_er is not None else ""
             
-            # 🔹 ボタン表示ラベルに er_label を追加
             summary_btn_label = f"打席結果{res_label}{dir_label}{ef_label}{rbi_label}{er_label} 🔽"
             
             with st.popover(summary_btn_label, use_container_width=True):
@@ -1230,7 +1214,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 rbi_options = [0, 1, 2, 3, 4]
                 st.pills("打点", rbi_options, key=f"quick_si_{curr_counter}", label_visibility="collapsed")
 
-                # 🔹 以下を追加：自責点の選択ピル
                 st.markdown("---")
                 st.markdown("##### ⚾ 自責点がある場合は選択 (0〜4)")
                 er_options = [0, 1, 2, 3, 4]

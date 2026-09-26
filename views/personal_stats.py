@@ -70,7 +70,12 @@ def show_personal_stats(df_batting, df_pitching):
             df_b_calc["is_hr"] * 4
         )
 
-        for c in ["打点", "盗塁", "得点", "盗塁死"]:
+        # 「結果」列が「本塁打」または「得点」の行を1として「得点」列を自動生成
+        df_b_calc["得点"] = (
+            df_b_calc["結果"].isin(["得点", "本塁打"])
+        ).astype(int)
+
+        for c in ["打点", "盗塁", "盗塁死"]:
             if c not in df_b_calc.columns:
                 df_b_calc[c] = 0
             df_b_calc[c] = pd.to_numeric(df_b_calc[c], errors='coerce').fillna(0)

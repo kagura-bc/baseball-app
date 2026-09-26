@@ -15,7 +15,6 @@ def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
   expected_cols = [
       "日付",
       "打点",
-      "得点",
       "位置",
       "グラウンド",
       "対戦相手",

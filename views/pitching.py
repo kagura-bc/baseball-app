@@ -371,7 +371,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL)
 
-    # 🔹 フォームクリア用のカウンター初期化
+    # フォームクリア用のカウンター初期化
     if "p_clear_counter" not in st.session_state:
         st.session_state["p_clear_counter"] = 0
 
@@ -598,14 +598,14 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         current_dirs = st.session_state.get(f"pitching_quick_sd_{curr_counter}", [])
         current_ef = st.session_state.get(f"pitching_quick_ef_{curr_counter}")
 
-        # 🔹 打点の選択状態を取得
         current_rbi = st.session_state.get(f"pitching_quick_si_{curr_counter}")
         rbi_val = int(current_rbi) if current_rbi is not None else 0
 
-        # 🏃‍♂️ 走者の「得点」判定および本塁打から失点を自動算出
+        # 🏃‍♂️ 走者の「得点」判定および本塁打から失点を自動算出（3塁走者の「盗塁」もホームスチールで失点1と判定）
+        r3_res_val = st.session_state.get(f"p_runner_3b_res_{curr_counter}")
         r1_is_run = (st.session_state.get(f"p_runner_1b_res_{curr_counter}") == "得点")
         r2_is_run = (st.session_state.get(f"p_runner_2b_res_{curr_counter}") == "得点")
-        r3_is_run = (st.session_state.get(f"p_runner_3b_res_{curr_counter}") == "得点")
+        r3_is_run = (r3_res_val == "得点" or r3_res_val == "盗塁")
         is_hr = (current_res == "本塁打")
 
         # 自動計算された失点数
@@ -642,7 +642,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
             st.pills("エラー野手", ef_options, key=f"pitching_quick_ef_{curr_counter}", label_visibility="collapsed")
 
-            # 🔹 追加：打点選択ピル
             st.markdown("---")
             st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
             rbi_options = [0, 1, 2, 3, 4]
@@ -1106,14 +1105,14 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         target_fielder_pos_list = st.session_state.get(f"pitching_quick_sd_{curr_counter}", [])
         p_ef = st.session_state.get(f"pitching_quick_ef_{curr_counter}", "") or ""
 
-        # 🔹 打点数値を取得
         current_rbi = st.session_state.get(f"pitching_quick_si_{curr_counter}")
         p_rbi = int(current_rbi) if current_rbi is not None else 0
 
-        # 走者の結果および本塁打から失点を自動算出
+        # 走者の結果および本塁打から失点を自動算出（3塁走者の「盗塁」もホームスチールで失点1と判定）
+        r3_res_val = st.session_state.get(f"p_runner_3b_res_{curr_counter}")
         r1_is_run = (st.session_state.get(f"p_runner_1b_res_{curr_counter}") == "得点")
         r2_is_run = (st.session_state.get(f"p_runner_2b_res_{curr_counter}") == "得点")
-        r3_is_run = (st.session_state.get(f"p_runner_3b_res_{curr_counter}") == "得点")
+        r3_is_run = (r3_res_val == "得点" or r3_res_val == "盗塁")
         p_run = (1 if r1_is_run else 0) + (1 if r2_is_run else 0) + (1 if r3_is_run else 0) + (1 if p_res == "本塁打" else 0)
 
         current_er = st.session_state.get(f"pitching_quick_er_{curr_counter}")
@@ -1237,7 +1236,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         })
                         st.session_state["opp_lineup_states"][i] = {"name": clean_n, "pos": c_pos}
 
-        # 🔹 攻撃回/守備回と交代種別のバリデーションチェック
+        # 攻撃回/守備回と交代種別のバリデーションチェック
         is_kagura_attack = ("表" in current_inn) if is_kagura_top else ("裏" in current_inn)
         sub_validation_error = None
 
@@ -1247,29 +1246,22 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
             if res_type in ["交代", "守備変更"]:
                 if is_kagura_attack:
-                    # 自チーム攻撃回（相手チーム守備回）
                     if c_pos in ["打", "走"]:
                         sub_validation_error = "⚠️ 相手守備回（自チーム攻撃回）のため、相手チームに「代打・代走」を登録することはできません。"
                         break
                 else:
-                    # 自チーム守備回（相手チーム攻撃回）
                     if res_type == "守備変更" or (res_type == "交代" and c_pos not in ["打", "走"]):
                         sub_validation_error = "⚠️ 相手攻撃回（自チーム守備回）のため、相手チームに「守備交代・守備位置変更」を登録することはできません（代打・代走のみ設定可能）。"
                         break
 
         # 野球ルールに基づく失点・自責点バリデーション
         if not sub_validation_error and (p_run > 0 or p_er > 0):
-            # 1. 基本チェック: 自責点が失点を上回っていないか
             if p_er > p_run:
                 sub_validation_error = "⚠️ 自責点は失点以下でなければなりません（失点以上の自責点は登録できません）。"
-            
-            # 2. 失策（エラー）関連の自責点チェック
             elif p_er > 0:
-                # 今回のプレイが失策（エラー）の場合
                 if p_res in ["失策(ゴロ)", "失策(フライ)"]:
                     sub_validation_error = "⚠️ エラー（失策）による失点は自責点になりません（自責点は0に設定してください）。"
                 else:
-                    # イニング内の過去プレイから「2アウト後のエラー」が存在するか確認
                     p_inn_df = (
                         today_pitching_df[today_pitching_df["イニング"] == current_inn]
                         if not today_pitching_df.empty and "イニング" in today_pitching_df.columns
@@ -1281,13 +1273,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     if not p_inn_df.empty and "結果" in p_inn_df.columns:
                         for _, r_row in p_inn_df.iterrows():
                             r_res = str(r_row.get("結果", ""))
-                            # アウト数のカウント
                             if r_res == "併殺打": accum_outs += 2
                             elif r_res == "三重殺": accum_outs += 3
                             elif r_res in ["三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"]:
                                 accum_outs += 1
                             
-                            # 2アウトに達した後にエラーが発生していた場合
                             if accum_outs >= 2 and ("失策" in r_res or str(r_row.get("エラー野手", "")).strip() != ""):
                                 is_after_2out_error = True
                                 break
@@ -1394,7 +1384,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     "処理野手": fielder_display,
                     "エラー野手": p_ef,
                     "結果": p_res,
-                    "打点": p_rbi,  # 🔹 打点レコードを追加
+                    "打点": p_rbi,
                     "失点": p_run,
                     "自責点": p_er,
                     "勝敗": "ー",
@@ -1413,7 +1403,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
                 if r_res:
                     r_outs = 1 if r_res in ["走塁死", "盗塁死", "牽制死"] else 0
-                    r_run = 1 if r_res == "得点" else 0
+                    # 🔹 3塁走者が「盗塁」した場合も失点1として設定
+                    r_run = 1 if (r_res == "得点" or (b_key == "3b" and r_res == "盗塁")) else 0
 
                     fielder_disp = ""
                     if r_f:
@@ -1531,7 +1522,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     "3b": next_3b,
                 }
 
-            # 🔹 カウンターをインクリメントして入力フォームをクリア
+            # カウンターをインクリメントして入力フォームをクリア
             next_counter = curr_counter + 1
             st.session_state["p_clear_counter"] = next_counter
 
@@ -1691,7 +1682,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         else:
                             res_text = raw_res
 
-                        # 🔹 守備履歴表示にも打点を追加
                         rbi_val = pd.to_numeric(row.get("打点", 0), errors="coerce")
                         rbi = int(rbi_val) if pd.notna(rbi_val) else 0
                         if rbi > 0:
