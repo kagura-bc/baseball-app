@@ -43,7 +43,6 @@ def show_personal_stats(df_batting, df_pitching):
         is_not_excluded = ~df_b_calc["結果"].str.contains(non_ab_pattern, na=False)
         df_b_calc["is_ab"] = (is_valid & is_not_excluded).astype(int)
 
-        # 本塁打数（HR）
         df_b_calc["is_hr"] = df_b_calc["結果"].str.contains("本塁打", na=False).astype(int)
         df_b_calc["is_so"] = df_b_calc["結果"].str.contains("三振", na=False).astype(int)
 
@@ -65,13 +64,7 @@ def show_personal_stats(df_batting, df_pitching):
             df_b_calc["is_hr"] * 4
         )
 
-        # 得点列の自動計算（2024・2025年はイニング記録のある「得点」のみ、2026年〜は「得点」「本塁打」）
-        valid_inn_mask = ~df_b_calc["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in df_b_calc.columns else pd.Series(True, index=df_b_calc.index)
-        is_2024_2025 = df_b_calc["Year"].astype(str).isin(["2024", "2025"])
-
-        df_b_calc["得点"] = 0
-        df_b_calc.loc[is_2024_2025 & valid_inn_mask & (df_b_calc["結果"] == "得点"), "得点"] = 1
-        df_b_calc.loc[(~is_2024_2025) & df_b_calc["結果"].isin(["得点", "本塁打"]), "得点"] = 1
+        df_b_calc["得点"] = df_b_calc["結果"].isin(["得点", "本塁打"]).astype(int)
 
         for c in ["打点", "盗塁", "盗塁死"]:
             if c not in df_b_calc.columns:
@@ -126,7 +119,6 @@ def show_personal_stats(df_batting, df_pitching):
         else:
             df_p_calc["アウト数"] = pd.to_numeric(df_p_calc["アウト数"], errors='coerce').fillna(0)
 
-        # 被得点（失点）の自動集計
         valid_p_inn = ~df_p_calc["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in df_p_calc.columns else pd.Series(True, index=df_p_calc.index)
         is_p_2024_2025 = df_p_calc["Year"].astype(str).isin(["2024", "2025"])
 
@@ -148,6 +140,10 @@ def show_personal_stats(df_batting, df_pitching):
 
         temp_bb = df_p_calc["結果"].isin(["四球", "死球"]).astype(int)
         df_p_calc["total_bb"] = df_p_calc[["与四球"]].assign(flag=temp_bb).max(axis=1)
+
+        df_p_calc["is_p_walk"] = df_p_calc["結果"].isin(["四球"]).astype(int)
+        df_p_calc["is_p_hbp"] = df_p_calc["結果"].isin(["死球"]).astype(int)
+        df_p_calc["is_p_hr"] = df_p_calc["結果"].isin(["本塁打"]).astype(int)
 
         temp_hit = df_p_calc["結果"].isin(["安打", "単打", "二塁打", "三塁打", "本塁打"]).astype(int)
         df_p_calc["被安打"] = df_p_calc[["被安打"]].assign(flag=temp_hit).max(axis=1)
@@ -187,7 +183,7 @@ def show_personal_stats(df_batting, df_pitching):
             icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"{rank}."
             val = row[value_col]
             if format_float:
-                val_str = f"{val:.3f}" if title in ["打率", "OPS"] else f"{val:.2f}"
+                val_str = f"{val:.3f}" if title in ["打率", "OPS", "出塁率", "長打率"] else f"{val:.2f}"
             else:
                 val_str = f"{int(val)}"
             st.write(f"{icon} **{row[label_col]}** : {val_str}{suffix}")
@@ -200,8 +196,8 @@ def show_personal_stats(df_batting, df_pitching):
     }
     agg_rules_p = {
         "アウト数": "sum", "自責点": "sum", "失点": "sum",
-        "is_win": "sum", "is_lose": "sum", "被安打": "sum",
-        "total_bb": "sum", "is_so": "sum", "奪三振": "sum"
+        "is_win": "sum", "is_lose": "sum", "被安打": "sum", "is_p_hr": "sum",
+        "total_bb": "sum", "is_p_walk": "sum", "is_p_hbp": "sum", "is_so": "sum", "奪三振": "sum"
     }
 
     t_total, t_year, t_rank_rec = st.tabs(["総合成績・ポイント", "個人年度別", "ランキング・歴代記録"])
@@ -460,6 +456,9 @@ def show_personal_stats(df_batting, df_pitching):
                 stats_p["投球回_val"] = stats_p["アウト数"] / 3
                 stats_p["防御率"] = stats_p.apply(lambda x: (x["自責点"] * 7) / x["投球回_val"] if x["投球回_val"] > 0 else 0, axis=1)
                 stats_p["WHIP"] = stats_p.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["投球回_val"] if x["投球回_val"] > 0 else 0, axis=1)
+                stats_p["K/BB"] = stats_p.apply(lambda x: x["TotalSO"] / x["total_bb"] if x["total_bb"] > 0 else x["TotalSO"], axis=1)
+                stats_p["K/7"] = stats_p.apply(lambda x: (x["TotalSO"] * 7) / x["投球回_val"] if x["投球回_val"] > 0 else 0, axis=1)
+                stats_p["BB/7"] = stats_p.apply(lambda x: (x["total_bb"] * 7) / x["投球回_val"] if x["投球回_val"] > 0 else 0, axis=1)
                 stats_p["投球回"] = stats_p["アウト数"].apply(lambda x: f"{int(x // 3)}.{int(x % 3)}")
 
                 def p_score_calc(r):
@@ -471,11 +470,11 @@ def show_personal_stats(df_batting, df_pitching):
 
                 stats_p["Pitching_Score"] = stats_p.apply(p_score_calc, axis=1)
 
-                for c in ["is_win", "is_lose", "TotalSO", "自責点", "total_bb"]:
+                for c in ["is_win", "is_lose", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "失点", "自責点", "被安打", "is_p_hr"]:
                     stats_p[c] = stats_p[c].astype(int)
 
-                disp_p = stats_p[["選手名", "Pitching_Score", "防御率", "WHIP", "is_win", "is_lose", "投球回", "TotalSO", "total_bb", "自責点"]].copy()
-                disp_p.columns = ["選手名", "投手P", "防御率", "WHIP", "勝", "敗", "投球回", "奪三振", "四死球", "自責点"]
+                disp_p = stats_p[["選手名", "Pitching_Score", "防御率", "WHIP", "K/BB", "K/7", "BB/7", "is_win", "is_lose", "投球回", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "失点", "自責点", "被安打", "is_p_hr"]].copy()
+                disp_p.columns = ["選手名", "投手P", "防御率", "WHIP", "K/BB", "K/7", "BB/7", "勝", "敗", "投球回", "奪三振", "四球", "死球", "四死球", "失点", "自責点", "被安打", "被本塁打"]
 
                 disp_p = disp_p.sort_values("投手P", ascending=False).reset_index(drop=True)
 
@@ -483,6 +482,9 @@ def show_personal_stats(df_batting, df_pitching):
                 disp_p["投手P"] = disp_p["投手P"].map(lambda x: f"{x:.1f}")
                 disp_p["防御率"] = disp_p["防御率"].map(lambda x: f"{x:.2f}")
                 disp_p["WHIP"] = disp_p["WHIP"].map(lambda x: f"{x:.2f}")
+                disp_p["K/BB"] = disp_p["K/BB"].map(lambda x: f"{x:.2f}")
+                disp_p["K/7"] = disp_p["K/7"].map(lambda x: f"{x:.2f}")
+                disp_p["BB/7"] = disp_p["BB/7"].map(lambda x: f"{x:.2f}")
                 st.dataframe(disp_p, use_container_width=True, hide_index=True)
             else:
                 st.info("データなし")
@@ -687,35 +689,49 @@ def show_personal_stats(df_batting, df_pitching):
                         lambda x: x["is_win"] / (x["is_win"] + x["is_lose"])
                         if (x["is_win"] + x["is_lose"]) > 0 else 0, axis=1
                     )
-                    combined_p["奪三振率"] = combined_p.apply(
-                        lambda x: (x["TotalSO"] * 7) / x["Innings"]
-                        if x["Innings"] > 0 else 0, axis=1
-                    )
                     combined_p["WHIP"] = combined_p.apply(
                         lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"]
                         if x["Innings"] > 0 else 0, axis=1
                     )
+                    combined_p["K/BB"] = combined_p.apply(
+                        lambda x: x["TotalSO"] / x["total_bb"] if x["total_bb"] > 0 else x["TotalSO"], axis=1
+                    )
+                    combined_p["K/7"] = combined_p.apply(
+                        lambda x: (x["TotalSO"] * 7) / x["Innings"] if x["Innings"] > 0 else 0, axis=1
+                    )
+                    combined_p["BB/7"] = combined_p.apply(
+                        lambda x: (x["total_bb"] * 7) / x["Innings"] if x["Innings"] > 0 else 0, axis=1
+                    )
                     combined_p["回"] = combined_p["アウト数"].apply(lambda x: f"{int(x // 3)}.{int(x % 3)}")
 
-                    for col in ["is_win", "is_lose", "TotalSO", "total_bb"]:
+                    for col in ["is_win", "is_lose", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "失点", "自責点", "被安打", "is_p_hr"]:
                         combined_p[col] = combined_p[col].astype(int)
 
                     disp_p_hist = pd.DataFrame()
                     disp_p_hist["防御率"] = combined_p["防御率"]
                     disp_p_hist["勝率"] = combined_p["勝率"]
                     disp_p_hist["WHIP"] = combined_p["WHIP"]
-                    disp_p_hist["奪三振率"] = combined_p["奪三振率"]
+                    disp_p_hist["K/BB"] = combined_p["K/BB"]
+                    disp_p_hist["K/7"] = combined_p["K/7"]
+                    disp_p_hist["BB/7"] = combined_p["BB/7"]
                     disp_p_hist["投球回"] = combined_p["回"]
                     disp_p_hist["勝"] = combined_p["is_win"]
                     disp_p_hist["敗"] = combined_p["is_lose"]
                     disp_p_hist["奪三振"] = combined_p["TotalSO"]
+                    disp_p_hist["四球"] = combined_p["is_p_walk"]
+                    disp_p_hist["死球"] = combined_p["is_p_hbp"]
                     disp_p_hist["四死球"] = combined_p["total_bb"]
+                    disp_p_hist["失点"] = combined_p["失点"]
+                    disp_p_hist["自責点"] = combined_p["自責点"]
+                    disp_p_hist["被安打"] = combined_p["被安打"]
+                    disp_p_hist["被本塁打"] = combined_p["is_p_hr"]
                     disp_p_hist.index.name = "年度"
 
                     st.markdown("##### 🛡️ 投手成績推移")
                     st.dataframe(
                         disp_p_hist.style.format({
-                            "防御率": "{:.2f}", "勝率": "{:.3f}", "WHIP": "{:.2f}", "奪三振率": "{:.2f}"
+                            "防御率": "{:.2f}", "勝率": "{:.3f}", "WHIP": "{:.2f}",
+                            "K/BB": "{:.2f}", "K/7": "{:.2f}", "BB/7": "{:.2f}"
                         })
                     )
                 else:
@@ -850,31 +866,37 @@ def show_personal_stats(df_batting, df_pitching):
                 rank_b["OPS"] = (rank_b["OBP"] + rank_b["SLG"]).fillna(0)
 
                 st.markdown("##### ⚔️ 打撃部門")
-                r1, r2, r3 = st.columns(3)
+                r1, r2, r3, r4 = st.columns(4)
                 with r1:
                     show_top10("打率", rank_b[rank_b["Total_PA"] >= min_ab], "AVG", "選手名", "AVG", format_float=True)
                 with r2:
                     show_top10("本塁打", rank_b, "is_hr", "選手名", "is_hr", suffix="本")
                 with r3:
                     show_top10("打点", rank_b, "打点", "選手名", "打点", suffix="点")
-
-                st.write("")
-                r4, r5, r6 = st.columns(3)
                 with r4:
                     show_top10("安打", rank_b, "is_hit", "選手名", "is_hit", suffix="本")
-                with r5:
-                    show_top10("盗塁", rank_b, "盗塁", "選手名", "盗塁", suffix="個")
-                with r6:
-                    show_top10("OPS", rank_b[rank_b["is_ab"] >= min_ab], "OPS", "選手名", "OPS", format_float=True)
 
                 st.write("")
-                r7, r8, r9 = st.columns(3)
-                with r7:
+                r5, r6, r7, r8 = st.columns(4)
+                with r5:
                     show_top10("得点", rank_b, "得点", "選手名", "得点", suffix="点")
+                with r6:
+                    show_top10("盗塁", rank_b, "盗塁", "選手名", "盗塁", suffix="個")
+                with r7:
+                    show_top10("四死球", rank_b, "is_bb", "選手名", "is_bb", suffix="個")
                 with r8:
-                    show_top10("四球", rank_b, "is_walk", "選手名", "is_walk", suffix="個")
+                    show_top10("三振", rank_b, "is_so", "選手名", "is_so", suffix="個")
+
+                st.write("")
+                r9, r10, r11, r12 = st.columns(4)
                 with r9:
-                    show_top10("死球", rank_b, "is_hbp", "選手名", "is_hbp", suffix="個")
+                    show_top10("OPS", rank_b[rank_b["is_ab"] >= min_ab], "OPS", "選手名", "OPS", format_float=True)
+                with r10:
+                    show_top10("出塁率", rank_b[rank_b["Total_PA"] >= min_ab], "OBP", "選手名", "OBP", format_float=True)
+                with r11:
+                    show_top10("長打率", rank_b[rank_b["is_ab"] >= min_ab], "SLG", "選手名", "SLG", format_float=True)
+                with r12:
+                    st.empty()
             else:
                 st.info("データなし")
             st.divider()
@@ -885,18 +907,55 @@ def show_personal_stats(df_batting, df_pitching):
                 rank_p["ERA"] = rank_p.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
                 rank_p["TotalSO"] = rank_p["is_so"] + rank_p["奪三振"]
                 rank_p["WHIP"] = rank_p.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+                rank_p["K/BB"] = rank_p.apply(lambda x: x["TotalSO"] / x["total_bb"] if x["total_bb"] > 0 else x["TotalSO"], axis=1)
+                rank_p["K/7"] = rank_p.apply(lambda x: (x["TotalSO"] * 7) / x["Innings"] if x["Innings"] > 0 else 0.0, axis=1)
+                rank_p["BB/7"] = rank_p.apply(lambda x: (x["total_bb"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
 
                 st.markdown("##### 🛡️ 投手部門")
-                st.caption("※ WHIP: (被安打 + 与四死球) ÷ 投球回。1イニングあたりに出した走者の数。")
+                st.caption("※ WHIP: 1イニングあたりの被安打+与四死球 / K/BB: 奪三振÷与四死球 / BB/7: 7イニングあたりの与四死球数")
+                
                 p1, p2, p3, p4 = st.columns(4)
                 with p1:
                     show_top10("防御率", rank_p[rank_p["Innings"] >= min_inn], "ERA", "選手名", "ERA", ascending=True, format_float=True)
                 with p2:
                     show_top10("WHIP", rank_p[rank_p["Innings"] >= min_inn], "WHIP", "選手名", "WHIP", ascending=True, format_float=True)
                 with p3:
-                    show_top10("勝利", rank_p, "is_win", "選手名", "is_win", suffix="勝")
+                    show_top10("K/BB (制球力)", rank_p[rank_p["Innings"] >= min_inn], "K/BB", "選手名", "K/BB", ascending=False, format_float=True)
                 with p4:
+                    show_top10("勝利", rank_p, "is_win", "選手名", "is_win", suffix="勝")
+
+                st.write("")
+                p5, p6, p7, p8 = st.columns(4)
+                with p5:
                     show_top10("奪三振", rank_p, "TotalSO", "選手名", "TotalSO", suffix="個")
+                with p6:
+                    show_top10("K/7 (奪三振率)", rank_p[rank_p["Innings"] >= min_inn], "K/7", "選手名", "K/7", ascending=False, format_float=True)
+                with p7:
+                    show_top10("BB/7 (与四死球率)", rank_p[rank_p["Innings"] >= min_inn], "BB/7", "選手名", "BB/7", ascending=True, format_float=True)
+                with p8:
+                    show_top10("投球回", rank_p, "Innings", "選手名", "Innings", ascending=False, format_float=True)
+
+                st.write("")
+                p9, p10, p11, p12 = st.columns(4)
+                with p9:
+                    show_top10("自責点", rank_p, "自責点", "選手名", "自責点", ascending=False, suffix="点")
+                with p10:
+                    show_top10("与四球", rank_p, "is_p_walk", "選手名", "is_p_walk", ascending=False, suffix="個")
+                with p11:
+                    show_top10("与死球", rank_p, "is_p_hbp", "選手名", "is_p_hbp", ascending=False, suffix="個")
+                with p12:
+                    show_top10("与四死球", rank_p, "total_bb", "選手名", "total_bb", ascending=False, suffix="個")
+
+                st.write("")
+                p13, p14, p15, p16 = st.columns(4)
+                with p13:
+                    show_top10("被安打", rank_p, "被安打", "選手名", "被安打", ascending=False, suffix="本")
+                with p14:
+                    show_top10("被本塁打", rank_p, "is_p_hr", "選手名", "is_p_hr", ascending=False, suffix="本")
+                with p15:
+                    st.empty()
+                with p16:
+                    st.empty()
             else:
                 st.info("データなし")
 
@@ -938,9 +997,13 @@ def show_personal_stats(df_batting, df_pitching):
                     obp = (df_bat_res["is_hit"] + df_bat_res["is_bb"]) / (df_bat_res["is_ab"] + df_bat_res["is_bb"] + df_bat_res["is_sf"] + df_bat_res["is_sh"] + 1e-9)
                     slg = df_bat_res["bases"] / (df_bat_res["is_ab"] + 1e-9)
                     df_bat_res["OPS"] = obp + slg
+                    df_bat_res["OBP"] = obp
+                    df_bat_res["SLG"] = slg
                 else:
                     df_bat_res["AVG"] = 0.0
                     df_bat_res["OPS"] = 0.0
+                    df_bat_res["OBP"] = 0.0
+                    df_bat_res["SLG"] = 0.0
 
                 df_bat_rate_target = df_bat_res[
                     (df_bat_res["is_ab"] >= df_bat_res["Req_Quota"]) &
@@ -956,10 +1019,16 @@ def show_personal_stats(df_batting, df_pitching):
                     df_pit_res["ERA"] = df_pit_res.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
                     df_pit_res["TotalSO"] = df_pit_res["is_so"] + df_pit_res["奪三振"]
                     df_pit_res["WHIP"] = df_pit_res.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+                    df_pit_res["K/BB"] = df_pit_res.apply(lambda x: x["TotalSO"] / x["total_bb"] if x["total_bb"] > 0 else x["TotalSO"], axis=1)
+                    df_pit_res["K/7"] = df_pit_res.apply(lambda x: (x["TotalSO"] * 7) / x["Innings"] if x["Innings"] > 0 else 0.0, axis=1)
+                    df_pit_res["BB/7"] = df_pit_res.apply(lambda x: (x["total_bb"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
                 else:
                     df_pit_res["ERA"] = 99.99
                     df_pit_res["TotalSO"] = 0
                     df_pit_res["WHIP"] = 99.99
+                    df_pit_res["K/BB"] = 0.0
+                    df_pit_res["K/7"] = 0.0
+                    df_pit_res["BB/7"] = 99.99
 
                 df_pit_rate_target = df_pit_res[
                     (df_pit_res["Innings"] >= df_pit_res["Req_Quota"]) &
@@ -977,9 +1046,13 @@ def show_personal_stats(df_batting, df_pitching):
                     obp = (df_bat_res["is_hit"] + df_bat_res["is_bb"]) / (df_bat_res["is_ab"] + df_bat_res["is_bb"] + df_bat_res["is_sf"] + df_bat_res["is_sh"] + 1e-9)
                     slg = df_bat_res["bases"] / (df_bat_res["is_ab"] + 1e-9)
                     df_bat_res["OPS"] = obp + slg
+                    df_bat_res["OBP"] = obp
+                    df_bat_res["SLG"] = slg
                 else:
                     df_bat_res["AVG"] = 0.0
                     df_bat_res["OPS"] = 0.0
+                    df_bat_res["OBP"] = 0.0
+                    df_bat_res["SLG"] = 0.0
 
                 df_bat_rate_target = df_bat_res[df_bat_res["is_ab"] >= MIN_AB_LIFETIME].copy()
 
@@ -991,10 +1064,16 @@ def show_personal_stats(df_batting, df_pitching):
                     df_pit_res["ERA"] = df_pit_res.apply(lambda x: (x["自責点"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
                     df_pit_res["TotalSO"] = df_pit_res["is_so"] + df_pit_res["奪三振"]
                     df_pit_res["WHIP"] = df_pit_res.apply(lambda x: (x["total_bb"] + x["被安打"]) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
+                    df_pit_res["K/BB"] = df_pit_res.apply(lambda x: x["TotalSO"] / x["total_bb"] if x["total_bb"] > 0 else x["TotalSO"], axis=1)
+                    df_pit_res["K/7"] = df_pit_res.apply(lambda x: (x["TotalSO"] * 7) / x["Innings"] if x["Innings"] > 0 else 0.0, axis=1)
+                    df_pit_res["BB/7"] = df_pit_res.apply(lambda x: (x["total_bb"] * 7) / x["Innings"] if x["Innings"] > 0 else 99.99, axis=1)
                 else:
                     df_pit_res["ERA"] = 99.99
                     df_pit_res["TotalSO"] = 0
                     df_pit_res["WHIP"] = 99.99
+                    df_pit_res["K/BB"] = 0.0
+                    df_pit_res["K/7"] = 0.0
+                    df_pit_res["BB/7"] = 99.99
 
                 df_pit_rate_target = df_pit_res[df_pit_res["Innings"] >= MIN_INN_LIFETIME].copy()
 
@@ -1002,31 +1081,37 @@ def show_personal_stats(df_batting, df_pitching):
 
             if not df_bat_res.empty:
                 st.markdown("##### ⚔️ 歴代打撃トップ10")
-                tc1, tc2, tc3 = st.columns(3)
+                tc1, tc2, tc3, tc4 = st.columns(4)
                 with tc1:
                     show_top10("打率", df_bat_rate_target, "AVG", "Display", "AVG", suffix="", format_float=True)
                 with tc2:
                     show_top10("OPS", df_bat_rate_target, "OPS", "Display", "OPS", suffix="", format_float=True)
                 with tc3:
-                    show_top10("安打数", df_bat_res, "is_hit", "Display", "is_hit", suffix=" 本")
+                    show_top10("出塁率", df_bat_rate_target, "OBP", "Display", "OBP", suffix="", format_float=True)
+                with tc4:
+                    show_top10("長打率", df_bat_rate_target, "SLG", "Display", "SLG", suffix="", format_float=True)
 
                 st.write("")
-                tc4, tc5, tc6 = st.columns(3)
-                with tc4:
-                    show_top10("本塁打", df_bat_res, "is_hr", "Display", "is_hr", suffix=" 本")
+                tc5, tc6, tc7, tc8 = st.columns(4)
                 with tc5:
-                    show_top10("打点", df_bat_res, "打点", "Display", "打点", suffix=" 点")
+                    show_top10("安打数", df_bat_res, "is_hit", "Display", "is_hit", suffix=" 本")
                 with tc6:
+                    show_top10("本塁打", df_bat_res, "is_hr", "Display", "is_hr", suffix=" 本")
+                with tc7:
+                    show_top10("打点", df_bat_res, "打点", "Display", "打点", suffix=" 点")
+                with tc8:
                     show_top10("盗塁", df_bat_res, "盗塁", "Display", "盗塁", suffix=" 個")
 
                 st.write("")
-                tc7, tc8, tc9 = st.columns(3)
-                with tc7:
-                    show_top10("得点", df_bat_res, "得点", "Display", "得点", suffix=" 点")
-                with tc8:
-                    show_top10("四球", df_bat_res, "is_walk", "Display", "is_walk", suffix=" 個")
+                tc9, tc10, tc11, tc12 = st.columns(4)
                 with tc9:
-                    show_top10("死球", df_bat_res, "is_hbp", "Display", "is_hbp", suffix=" 個")
+                    show_top10("得点", df_bat_res, "得点", "Display", "得点", suffix=" 点")
+                with tc10:
+                    show_top10("四死球", df_bat_res, "is_bb", "Display", "is_bb", suffix=" 個")
+                with tc11:
+                    show_top10("三振", df_bat_res, "is_so", "Display", "is_so", suffix=" 個")
+                with tc12:
+                    st.empty()
             else:
                 st.info("打撃データがありません")
 
@@ -1045,8 +1130,41 @@ def show_personal_stats(df_batting, df_pitching):
                 with tp2:
                     show_top10("WHIP", df_pit_rate_target, "WHIP", "Display", "WHIP", ascending=True, format_float=True)
                 with tp3:
-                    show_top10("勝利数", df_pit_res, "is_win", "Display", "is_win", suffix=" 勝")
+                    show_top10("K/BB (制球力)", df_pit_rate_target, "K/BB", "Display", "K/BB", ascending=False, format_float=True)
                 with tp4:
+                    show_top10("勝利数", df_pit_res, "is_win", "Display", "is_win", suffix=" 勝")
+
+                st.write("")
+                tp5, tp6, tp7, tp8 = st.columns(4)
+                with tp5:
                     show_top10("奪三振", df_pit_res, "TotalSO", "Display", "TotalSO", suffix=" 個")
+                with tp6:
+                    show_top10("K/7 (奪三振率)", df_pit_rate_target, "K/7", "Display", "K/7", ascending=False, format_float=True)
+                with tp7:
+                    show_top10("BB/7 (与四死球率)", df_pit_rate_target, "BB/7", "Display", "BB/7", ascending=True, format_float=True)
+                with tp8:
+                    show_top10("投球回", df_pit_res, "Innings", "Display", "Innings", ascending=False, format_float=True)
+
+                st.write("")
+                tp9, tp10, tp11, tp12 = st.columns(4)
+                with tp9:
+                    show_top10("自責点", df_pit_res, "自責点", "Display", "自責点", ascending=False, suffix=" 点")
+                with tp10:
+                    show_top10("与四球", df_pit_res, "is_p_walk", "Display", "is_p_walk", ascending=False, suffix=" 個")
+                with tp11:
+                    show_top10("与死球", df_pit_res, "is_p_hbp", "Display", "is_p_hbp", ascending=False, suffix=" 個")
+                with tp12:
+                    show_top10("四死球", df_pit_res, "total_bb", "Display", "total_bb", ascending=False, suffix=" 個")
+
+                st.write("")
+                tp13, tp14, tp15, tp16 = st.columns(4)
+                with tp13:
+                    show_top10("被安打", df_pit_res, "被安打", "Display", "被安打", ascending=False, suffix=" 本")
+                with tp14:
+                    show_top10("被本塁打", df_pit_res, "is_p_hr", "Display", "is_p_hr", ascending=False, suffix=" 本")
+                with tp15:
+                    st.empty()
+                with tp16:
+                    st.empty()
             else:
                 st.info("投手データがありません")
