@@ -232,7 +232,7 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
             for h in sel_opp_holds_val: dec_map[h.strip()] = "ホールド"
 
             updated_df = df_pitching.copy() if not df_pitching.empty else pd.DataFrame(columns=[
-                "日付", "グラウンド", "対戦相手", "試合種別", "イニング", p_col, "結果", "失点", "自責点", "勝敗", "種別"
+                "ID", "日付", "グラウンド", "対戦相手", "試合種別", "イニング", p_col, "結果", "失点", "自責点", "勝敗", "種別"
             ])
 
             if "日付" in updated_df.columns and "対戦相手" in updated_df.columns:
@@ -242,12 +242,16 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
                 )
                 updated_df.loc[today_mask, "勝敗"] = "ー"
 
+                current_max_id = int(pd.to_numeric(updated_df["ID"], errors="coerce").fillna(0).max()) if not updated_df.empty and "ID" in updated_df.columns else 0
+
                 for p_name, dec_val in dec_map.items():
                     p_mask = today_mask & (updated_df[p_col].astype(str).str.strip() == p_name)
                     if p_mask.any():
                         updated_df.loc[p_mask, "勝敗"] = dec_val
                     else:
+                        current_max_id += 1
                         new_row = {
+                            "ID": current_max_id,
                             "日付": selected_date_str,
                             "グラウンド": ground_name,
                             "対戦相手": opp_team,
@@ -331,7 +335,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         df_batting = st.session_state[cache_key]
 
     expected_batting_cols = [
-        "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
+        "ID", "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
         "結果", "打球方向", "エラー野手", "打点", "自責点", "グラウンド", 
         "対戦相手", "試合種別", "スコアラー", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
     ]
@@ -347,7 +351,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 df_batting[col] = ""
 
     if not df_pitching.empty:
-        expected_pitching_cols = ["日付", "イニング", "投手名", "打順", "打者名", "結果", "失点", "自責点", "対戦相手", "試合種別", "エラー野手"]
+        expected_pitching_cols = ["ID", "日付", "イニング", "投手名", "打順", "打者名", "結果", "失点", "自責点", "対戦相手", "試合種別", "エラー野手"]
         for col in expected_pitching_cols:
             if col not in df_pitching.columns:
                 df_pitching[col] = ""
@@ -979,6 +983,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["persistent_runners"] = next_runners
 
         if rows_to_add:
+            current_max_id = int(pd.to_numeric(df_batting["ID"], errors="coerce").fillna(0).max()) if not df_batting.empty and "ID" in df_batting.columns else 0
+            for r in rows_to_add:
+                current_max_id += 1
+                r["ID"] = current_max_id
+
             new_df_to_append = pd.DataFrame(rows_to_add)
             updated_full_df = pd.concat([df_batting, new_df_to_append], ignore_index=True)
             

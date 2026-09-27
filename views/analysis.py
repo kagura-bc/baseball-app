@@ -219,26 +219,26 @@ def show_analysis_page(df_batting, df_pitching):
 
             # --- 2. 自チーム得点・相手チーム失点（スコア）の集計 ---
             is_team_rec = g_b["選手名"].astype(str).str.contains("チーム記録", na=False)
-            team_rows = g_b[is_team_rec]
             indiv_rows = g_b[~is_team_rec]
 
-            if not team_rows.empty and "得点" in team_rows.columns:
-                my_score = pd.to_numeric(team_rows["得点"], errors='coerce').fillna(0).sum()
-            elif "得点" in indiv_rows.columns:
-                my_score = pd.to_numeric(indiv_rows["得点"], errors='coerce').fillna(0).sum()
+            # 🌟 得点数の集計（2024・2025年はイニング記録のある「得点」のみ、2026年〜は「得点」「本塁打」）
+            match_date = pd.to_datetime(d, errors='coerce')
+            match_year = match_date.year if pd.notna(match_date) else 2026
+
+            valid_b_inn = ~indiv_rows["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in indiv_rows.columns else pd.Series(True, index=indiv_rows.index)
+
+            if match_year in [2024, 2025]:
+                my_score = int((indiv_rows[valid_b_inn]["結果"] == "得点").sum()) if "結果" in indiv_rows.columns else 0
             else:
-                my_score = 0
+                my_score = int(indiv_rows["結果"].isin(["得点", "本塁打"]).sum()) if "結果" in indiv_rows.columns else 0
 
             opp_score = 0
             if not g_p.empty:
-                is_p_team_rec = g_p["選手名"].astype(str).str.contains("チーム記録", na=False)
-                p_team_rows = g_p[is_p_team_rec]
-                p_indiv_rows = g_p[~is_p_team_rec]
-
-                if not p_team_rows.empty and "失点" in p_team_rows.columns:
-                    opp_score = pd.to_numeric(p_team_rows["失点"], errors='coerce').fillna(0).sum()
-                elif "失点" in p_indiv_rows.columns:
-                    opp_score = pd.to_numeric(p_indiv_rows["失点"], errors='coerce').fillna(0).sum()
+                valid_p_inn = ~g_p["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in g_p.columns else pd.Series(True, index=g_p.index)
+                if match_year in [2024, 2025]:
+                    opp_score = int((g_p[valid_p_inn]["結果"] == "得点").sum()) if "結果" in g_p.columns else 0
+                else:
+                    opp_score = int(g_p["結果"].isin(["得点", "本塁打"]).sum()) if "結果" in g_p.columns else 0
 
             # --- 3. 勝敗判定（① 投手成績の勝敗列を優先 → ② 得失点差で判定） ---
             res = None

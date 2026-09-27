@@ -305,7 +305,7 @@ def render_game_result_popover(
                 dec_map[h.strip()] = "ホールド"
 
             updated_df = df_pitching.copy() if not df_pitching.empty else pd.DataFrame(columns=[
-                "日付", "グラウンド", "対戦相手", "試合種別", "イニング", p_col, "結果", "失点", "自責点", "勝敗"
+                "ID", "日付", "グラウンド", "対戦相手", "試合種別", "イニング", p_col, "結果", "失点", "自責点", "勝敗"
             ])
 
             if "日付" in updated_df.columns and "対戦相手" in updated_df.columns:
@@ -315,12 +315,16 @@ def render_game_result_popover(
                 )
                 updated_df.loc[today_mask, "勝敗"] = "ー"
 
+                current_max_id = int(pd.to_numeric(updated_df["ID"], errors="coerce").fillna(0).max()) if not updated_df.empty and "ID" in updated_df.columns else 0
+
                 for p_name, dec_val in dec_map.items():
                     p_mask = today_mask & (updated_df[p_col].astype(str).str.strip() == p_name)
                     if p_mask.any():
                         updated_df.loc[p_mask, "勝敗"] = dec_val
                     else:
+                        current_max_id += 1
                         new_row = {
+                            "ID": current_max_id,
                             "日付": selected_date_str,
                             "グラウンド": ground_name,
                             "対戦相手": opp_team,
@@ -601,14 +605,14 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         current_rbi = st.session_state.get(f"pitching_quick_si_{curr_counter}")
         rbi_val = int(current_rbi) if current_rbi is not None else 0
 
-        # 🏃‍♂️ 走者の「得点」判定および本塁打から失点を自動算出（3塁走者の「盗塁」もホームスチールで失点1と判定）
+        # 🏃‍♂️ 走者の「得点」判定および本塁打から失点（得点）を算出
         r3_res_val = st.session_state.get(f"p_runner_3b_res_{curr_counter}")
         r1_is_run = (st.session_state.get(f"p_runner_1b_res_{curr_counter}") == "得点")
         r2_is_run = (st.session_state.get(f"p_runner_2b_res_{curr_counter}") == "得点")
         r3_is_run = (r3_res_val == "得点" or r3_res_val == "盗塁")
         is_hr = (current_res == "本塁打")
 
-        # 自動計算された失点数
+        # 自動計算された得点（失点）数
         p_run = (1 if r1_is_run else 0) + (1 if r2_is_run else 0) + (1 if r3_is_run else 0) + (1 if is_hr else 0)
 
         current_er = st.session_state.get(f"pitching_quick_er_{curr_counter}")
@@ -1331,7 +1335,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 runner_status = "ランナーなし"
 
             records_to_save = list(opp_rows_to_add)
-            add_outs_total = 0
+            add_outs_total += 0
 
             if p_res:
                 target_fielder_pos_str = "-".join(target_fielder_pos_list)
@@ -1398,6 +1402,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 add_outs_total += add_outs
 
             for b_key in ["1b", "2b", "3b"]:
+                r_name_raw = st.session_state.get(f"p_runner_{b_key}_{curr_counter}")
                 r_res = st.session_state.get(f"p_runner_{b_key}_res_{curr_counter}")
                 r_f = st.session_state.get(f"p_runner_{b_key}_fielder_{curr_counter}", "")
 
@@ -1411,6 +1416,17 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         found_f_name = get_player_by_position(r_f)
                         fielder_disp = found_f_name if found_f_name else f"({r_f})"
 
+                    # 走者の名前と打順を特定（得点・走塁記録用）
+                    r_runner_name = clean_player_name(r_name_raw) if (r_name_raw and r_name_raw not in ["なし", "None", "nan", ""]) else current_batter_name
+                    r_order_num = batter_idx_int
+                    if r_name_raw and r_name_raw not in ["なし", "None", "nan", ""]:
+                        clean_r = clean_player_name(r_name_raw)
+                        for i in range(opp_count):
+                            sn_val = st.session_state.get(f"opp_sn_{i}")
+                            if sn_val and clean_player_name(sn_val) == clean_r:
+                                r_order_num = i + 1
+                                break
+
                     runner_rec = {
                         "日付": selected_date_str,
                         "グラウンド": final_ground,
@@ -1418,8 +1434,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         "試合種別": final_match_type,
                         "イニング": current_inn,
                         "投手名": target_pitcher_name,
-                        "打順": batter_idx_int,
-                        "打者名": current_batter_name,
+                        "打順": r_order_num,
+                        "打者名": r_runner_name,
                         "守備位置": r_f if r_f else "ー",
                         "打球方向": r_f if r_f else "ー",
                         "処理野手": fielder_disp,
@@ -1436,6 +1452,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     add_outs_total += r_outs
 
             if records_to_save:
+                current_max_id = int(pd.to_numeric(df_pitching["ID"], errors="coerce").fillna(0).max()) if not df_pitching.empty and "ID" in df_pitching.columns else 0
+                for rec in records_to_save:
+                    current_max_id += 1
+                    rec["ID"] = current_max_id
+
                 updated_p_df = pd.concat([df_pitching, pd.DataFrame(records_to_save)], ignore_index=True)
                 save_cols = [c for c in updated_p_df.columns if c not in ["_date_str", "Year", "スコアラー"]]
                 conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=updated_p_df[save_cols])

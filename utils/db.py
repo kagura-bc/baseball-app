@@ -13,6 +13,7 @@ def get_connection():
 def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
   conn = get_connection()
   expected_cols = [
+      "ID",
       "日付",
       "打点",
       "位置",
@@ -36,7 +37,7 @@ def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
 
     for col in expected_cols:
       if col not in data.columns:
-        data[col] = 0 if col in ["打点", "得点"] else ""
+        data[col] = 0 if col in ["ID", "打点", "得点"] else ""
 
     # 日付から "Year" を自動生成する処理を追加
     data["日付"] = pd.to_datetime(data["日付"], errors="coerce")
@@ -53,6 +54,7 @@ def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
 def load_pitching_data(spreadsheet_url=SPREADSHEET_URL):
   conn = get_connection()
   expected_cols = [
+      "ID",
       "日付",
       "アウト数",
       "球数",

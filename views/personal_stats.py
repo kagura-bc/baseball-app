@@ -11,16 +11,13 @@ from utils.ui import fmt_player_name
 def show_personal_stats(df_batting, df_pitching):
     st.title(" 📊 個人成績")
 
-    # ▼▼▼ スプレッドシートから成績表示用の選手リストを取得 ▼▼▼
     STATS_PLAYERS, STATS_NUMBERS = get_stats_active_players()
 
     def local_fmt(name):
         return fmt_player_name(name, STATS_NUMBERS)
 
-    # チーム記録は残しつつ、非表示対象の選手を除外する
     allowed_names = STATS_PLAYERS + ["チーム記録"]
 
-    # 必須カラムの安全補完（打者名・投手名・選手名の互換吸収）
     if not df_batting.empty:
         b_p_col = "打者名" if "打者名" in df_batting.columns else "選手名"
         df_batting["選手名_表示"] = df_batting[b_p_col]
@@ -31,14 +28,9 @@ def show_personal_stats(df_batting, df_pitching):
         df_pitching["選手名_表示"] = df_pitching[p_p_col]
         df_pitching = df_pitching[df_pitching["選手名_表示"].isin(allowed_names)].copy()
 
-    # =========================================================
-    # 1. データ前処理
-    # =========================================================
-
     # --- 打撃データ ---
     if not df_batting.empty:
-        df_batting["Year"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y')
-        df_batting["Year"] = df_batting["Year"].fillna("不明")
+        df_batting["Year"] = pd.to_datetime(df_batting["日付"], errors='coerce').dt.strftime('%Y').fillna("不明")
 
         df_b_calc = df_batting[df_batting["選手名_表示"] != "チーム記録"].copy()
         df_b_calc["選手名"] = df_b_calc["選手名_表示"]
@@ -51,6 +43,7 @@ def show_personal_stats(df_batting, df_pitching):
         is_not_excluded = ~df_b_calc["結果"].str.contains(non_ab_pattern, na=False)
         df_b_calc["is_ab"] = (is_valid & is_not_excluded).astype(int)
 
+        # 🌟 本塁打数（HR）は全年度において結果列の「本塁打」から正しくカウント
         df_b_calc["is_hr"] = df_b_calc["結果"].str.contains("本塁打", na=False).astype(int)
         df_b_calc["is_so"] = df_b_calc["結果"].str.contains("三振", na=False).astype(int)
 
@@ -70,16 +63,19 @@ def show_personal_stats(df_batting, df_pitching):
             df_b_calc["is_hr"] * 4
         )
 
-        # 「結果」列が「本塁打」または「得点」の行を1として「得点」列を自動生成
-        df_b_calc["得点"] = (
-            df_b_calc["結果"].isin(["得点", "本塁打"])
-        ).astype(int)
+        # 🌟 得点列の自動計算（2024・2025年はイニング記録のある「得点」のみ、2026年〜は「得点」「本塁打」）
+        valid_inn_mask = ~df_b_calc["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in df_b_calc.columns else pd.Series(True, index=df_b_calc.index)
+        is_2024_2025 = df_b_calc["Year"].astype(str).isin(["2024", "2025"])
+
+        df_b_calc["得点"] = 0
+        df_b_calc.loc[is_2024_2025 & valid_inn_mask & (df_b_calc["結果"] == "得点"), "得点"] = 1
+        df_b_calc.loc[(~is_2024_2025) & df_b_calc["結果"].isin(["得点", "本塁打"]), "得点"] = 1
 
         for c in ["打点", "盗塁", "盗塁死"]:
             if c not in df_b_calc.columns:
                 df_b_calc[c] = 0
             df_b_calc[c] = pd.to_numeric(df_b_calc[c], errors='coerce').fillna(0)
-        # 🔹 「結果」列が「盗塁」「盗塁死」の場合の自動集計補正を追加
+
         res_str = df_b_calc["結果"].astype(str)
         steal_mask = (res_str == "盗塁") | (res_str.str.contains("盗塁") & ~res_str.str.contains("盗塁死"))
         df_b_calc["盗塁"] = df_b_calc["盗塁"] + steal_mask.astype(int)
@@ -92,8 +88,7 @@ def show_personal_stats(df_batting, df_pitching):
 
     # --- 投手データ ---
     if not df_pitching.empty:
-        df_pitching["Year"] = pd.to_datetime(df_pitching["日付"], errors='coerce').dt.strftime('%Y')
-        df_pitching["Year"] = df_pitching["Year"].fillna("不明")
+        df_pitching["Year"] = pd.to_datetime(df_pitching["日付"], errors='coerce').dt.strftime('%Y').fillna("不明")
 
         df_p_calc = df_pitching[df_pitching["選手名_表示"] != "チーム記録"].copy()
         df_p_calc["選手名"] = df_p_calc["選手名_表示"]
@@ -110,16 +105,13 @@ def show_personal_stats(df_batting, df_pitching):
                 elif "負" in r_str or "敗" in r_str or "●" in r_str:
                     df_p_calc.loc[group.index[0], "is_lose"] = 1
 
-        # 🌟 項目補完と『結果』列からのアウト数自動計算ロジック 🌟
         if "アウト数" not in df_p_calc.columns or df_p_calc["アウト数"].sum() == 0:
             res_str = df_p_calc["結果"].astype(str) if "結果" in df_p_calc.columns else pd.Series([""] * len(df_p_calc))
             outs = pd.Series(0, index=df_p_calc.index)
             
-            # 併殺打 = 2アウト
             dp_mask = res_str.str.contains("併殺", na=False)
             outs[dp_mask] = 2
             
-            # 通常のアウト判定（凡退、三振、犠打、犠飛、走塁死、盗塁死など）かつ失策や得点、進塁、安打、四死球等を除外
             normal_out_mask = (
                 res_str.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) &
                 ~res_str.str.contains("失策|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)
@@ -129,7 +121,15 @@ def show_personal_stats(df_batting, df_pitching):
         else:
             df_p_calc["アウト数"] = pd.to_numeric(df_p_calc["アウト数"], errors='coerce').fillna(0)
 
-        for c in ["自責点", "失点", "被安打", "与四球", "奪三振"]:
+        # 🌟 被得点（失点）の自動集計（失点列を使わず「結果」列より判定）
+        valid_p_inn = ~df_p_calc["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in df_p_calc.columns else pd.Series(True, index=df_p_calc.index)
+        is_p_2024_2025 = df_p_calc["Year"].astype(str).isin(["2024", "2025"])
+
+        df_p_calc["失点"] = 0
+        df_p_calc.loc[is_p_2024_2025 & valid_p_inn & (df_p_calc["結果"] == "得点"), "失点"] = 1
+        df_p_calc.loc[(~is_p_2024_2025) & df_p_calc["結果"].isin(["得点", "本塁打"]), "失点"] = 1
+
+        for c in ["自責点", "被安打", "与四球", "奪三振"]:
             if c not in df_p_calc.columns:
                 df_p_calc[c] = 0
             df_p_calc[c] = pd.to_numeric(df_p_calc[c], errors='coerce').fillna(0)

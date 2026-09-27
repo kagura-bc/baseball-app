@@ -83,7 +83,7 @@ def show_team_stats(df_batting, df_pitching):
 
     expected_pit_cols = [
         "日付", "イニング", "投手名", "打順", "打者名", "選手名", "結果",
-        "失点", "自責点", "被安打", "奪三振", "アウト数", "種別", "対戦相手", "試合種別", "グラウンド"
+        "自責点", "被安打", "奪三振", "アウト数", "種別", "対戦相手", "試合種別", "グラウンド"
     ]
     for col in expected_pit_cols:
         if col not in df_pitching.columns:
@@ -105,23 +105,23 @@ def show_team_stats(df_batting, df_pitching):
         if not d_str or pd.isna(d_str):
             continue
 
-        team_rec_rows = group[(group[b_p_col] == "チーム記録") | (group.get("選手名", "") == "チーム記録")]
-        is_team_record = False
-        runs = 0
-        team_rec_hits = 0
-        team_rec_ab = 0
-        team_rec_hr = 0
+        match_date = pd.to_datetime(d_str, errors='coerce')
+        match_year = match_date.year if pd.notna(match_date) else 2026
 
-        if not team_rec_rows.empty:
-            is_team_record = True
-            runs = team_rec_rows["結果"].isin(["得点", "本塁打"]).sum()
-            ...
+        valid_batting = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
+        valid_inn_mask_b = ~valid_batting["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in valid_batting.columns else pd.Series(True, index=valid_batting.index)
+
+        # 🌟 得点数の集計ロジック（2024・2025年はイニング記録のある「得点」のみ）
+        if match_year in [2024, 2025]:
+            runs = int((valid_batting[valid_inn_mask_b]["结果"] == "得点").sum()) if "結果" in valid_batting.columns else 0
         else:
-            valid_batting = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
-            runs = valid_batting["結果"].isin(["得点", "本塁打"]).sum()
+            runs = int(valid_batting["結果"].isin(["得点", "本塁打"]).sum()) if "結果" in valid_batting.columns else 0
+
+        team_rec_rows = group[(group[b_p_col] == "チーム記録") | (group.get("選手名", "") == "チーム記録")]
+        is_team_record = not team_rec_rows.empty
 
         individuals = group[(group[b_p_col] != "チーム記録") & (group.get("選手名", "") != "チーム記録")]
-        total_hits = team_rec_hits; total_ab = team_rec_ab; total_hr = team_rec_hr; total_sb = 0
+        total_hits = 0; total_ab = 0; total_hr = 0; total_sb = 0
 
         if not individuals.empty:
             ab_results = [
@@ -141,7 +141,6 @@ def show_team_stats(df_batting, df_pitching):
                 hits = int(hits_val) if pd.notna(hits_val) else 0
                 hr = int(hr_val) if pd.notna(hr_val) else 0
 
-                # 🌟 盗塁数の判定ロジック強化（「盗塁」列の数値 または 「結果」列が"盗塁"）
                 sb_val = pd.to_numeric(row.get("盗塁", 0), errors='coerce')
                 if pd.notna(sb_val) and sb_val > 0:
                     sb = int(sb_val)
@@ -202,13 +201,12 @@ def show_team_stats(df_batting, df_pitching):
         if is_team_record:
             games_map[key]["has_team_record"] = True
 
-    # --- B. 投手データから集計 (【修正箇所】投球回／アウト数の自動判定を強化) ---
+    # --- B. 投手データから相手得点（失点）を集計 ---
     df_p_work = df_pitching.copy()
     df_p_work["DateStr"] = pd.to_datetime(df_p_work["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
 
     p_p_col = "投手名" if "投手名" in df_p_work.columns else "選手名"
 
-    # アウト数カウント用の判定用リスト
     out_1 = ["凡退", "凡退(ゴロ)", "凡退(フライ)", "三振", "振り逃げ三振", "犠打", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "牽制死"]
     out_2 = ["併殺打", "併殺"]
 
@@ -216,13 +214,18 @@ def show_team_stats(df_batting, df_pitching):
         if not d_str or pd.isna(d_str):
             continue
 
-        # 🌟 仕様変更：「失点」列の数値を直接合計してチーム総失点とする
-        if "失点" in group.columns:
-            runs_allowed = int(pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum())
-        else:
-            runs_allowed = 0
+        match_date = pd.to_datetime(d_str, errors='coerce')
+        match_year = match_date.year if pd.notna(match_date) else 2026
 
-        # 失策（エラー）の集計
+        valid_pitching = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
+        valid_inn_mask_p = ~valid_pitching["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in valid_pitching.columns else pd.Series(True, index=valid_pitching.index)
+
+        # 🌟 失点（相手得点）の集計ロジック（失点列を使わず、結果列の「得点」「本塁打」から自動集計）
+        if match_year in [2024, 2025]:
+            runs_allowed = int((valid_pitching[valid_inn_mask_p]["結果"] == "得点").sum()) if "結果" in valid_pitching.columns else 0
+        else:
+            runs_allowed = int(valid_pitching["結果"].isin(["得点", "本塁打"]).sum()) if "結果" in valid_pitching.columns else 0
+
         col_errors = pd.to_numeric(group["失策"], errors='coerce').fillna(0).sum() if "失策" in group.columns else 0
         res_errors = group["結果"].astype(str).str.contains("失策").sum() if "結果" in group.columns else 0
         errors = col_errors + res_errors
@@ -240,16 +243,13 @@ def show_team_stats(df_batting, df_pitching):
                 r_type = str(r.get("種別", "")).strip()
                 raw_outs = pd.to_numeric(r.get("アウト数", 0), errors='coerce')
 
-                # A. まとめ入力行
                 if res == "まとめ" or r_type == "まとめ":
                     if pd.notna(raw_outs) and raw_outs > 0:
                         total_outs += int(raw_outs)
                     elif "投球回" in r and pd.notna(pd.to_numeric(r.get("投球回"), errors='coerce')):
                         total_outs += int(pd.to_numeric(r.get("投球回"), errors='coerce') * 3)
-                # B. スタメン・交代等
                 elif "ダミー" in r_type or "スタメン" in res or "交代" in res or "ベンチ" in res:
                     continue
-                # C. 通常のプレイ行（アウト数判定）
                 else:
                     if pd.notna(raw_outs) and raw_outs > 0:
                         total_outs += int(raw_outs)
@@ -293,16 +293,13 @@ def show_team_stats(df_batting, df_pitching):
         df_team_stats["日付"] = pd.to_datetime(df_team_stats["日付"], errors='coerce')
         df_team_stats = df_team_stats.sort_values("日付", ascending=False)
 
-    # 2. フィルタリング
-        if not df_team_stats.empty:
-            df_team_stats["Year"] = df_team_stats["日付"].dt.year.astype(str)
-            all_years = sorted([y for y in df_team_stats["Year"].unique() if y and y != "nan"], reverse=True)
+        df_team_stats["Year"] = df_team_stats["日付"].dt.year.astype(str)
+        all_years = sorted([y for y in df_team_stats["Year"].unique() if y and y != "nan"], reverse=True)
 
-            c_filter1, c_filter2 = st.columns(2)
-            with c_filter1:
-                # 🌟 データが存在する場合は最新年（インデックス 1）をデフォルトに設定
-                default_idx = 1 if len(all_years) > 0 else 0
-                target_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx, key="team_stats_year")
+        c_filter1, c_filter2 = st.columns(2)
+        with c_filter1:
+            default_idx = 1 if len(all_years) > 1 else 0
+            target_year = st.selectbox("年度", ["通算"] + all_years, index=default_idx, key="team_stats_year")
 
         with c_filter2:
             types_list = [x for x in df_team_stats["試合種別"].unique() if str(x) != 'nan']
@@ -337,7 +334,6 @@ def show_team_stats(df_batting, df_pitching):
 
     st.divider()
 
-    # 3. 集計 & メトリクス
     curr = calc_metrics(df_display)
     prev = calc_metrics(prev_display)
 
@@ -380,7 +376,6 @@ def show_team_stats(df_batting, df_pitching):
     d3.metric("得失点差", f"{int(curr['diff']):+d}", delta=int(curr['diff'] - prev['diff']) if has_prev else None)
     d4.metric("総失策数", f"{int(curr['err'])} 個", delta=int(curr['err'] - prev['err']) if has_prev else None, delta_color="inverse")
 
-    # 4. 試合履歴
     st.subheader(" 📋  試合履歴")
     if not df_display.empty:
         df_disp_show = df_display.copy()
