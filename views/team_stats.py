@@ -113,7 +113,7 @@ def show_team_stats(df_batting, df_pitching):
 
         # 🌟 得点数の集計ロジック（2024・2025年はイニング記録のある「得点」のみ）
         if match_year in [2024, 2025]:
-            runs = int((valid_batting[valid_inn_mask_b]["结果"] == "得点").sum()) if "結果" in valid_batting.columns else 0
+            runs = int((valid_batting[valid_inn_mask_b]["結果"] == "得点").sum()) if "結果" in valid_batting.columns else 0
         else:
             runs = int(valid_batting["結果"].isin(["得点", "本塁打"]).sum()) if "結果" in valid_batting.columns else 0
 
