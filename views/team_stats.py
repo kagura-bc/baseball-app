@@ -822,7 +822,23 @@ def show_team_stats(df_batting, df_pitching):
                         strike_rate_str = f"{strike_rate:.1f}%"
 
                         # 3. 失点と自責点
-                        runs = int(pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()) if "失点" in group.columns else 0
+                        match_date = pd.to_datetime(target_date_str, errors='coerce')
+                        match_year = match_date.year if pd.notna(match_date) else 2026
+
+                        valid_p_group = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
+                        valid_inn_mask_p = ~valid_p_group["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in valid_p_group.columns else pd.Series(True, index=valid_p_group.index)
+
+                        # 得点・本塁打から失点を自動集計
+                        if match_year in [2024, 2025]:
+                            runs = int((valid_p_group[valid_inn_mask_p]["結果"] == "得点").sum()) if "結果" in valid_p_group.columns else 0
+                        else:
+                            runs = int(valid_p_group["結果"].isin(["得点", "本塁打"]).sum()) if "結果" in valid_p_group.columns else 0
+
+                        # 「失点」列に直接数値（まとめ入力等）が入っている場合のフォールバック
+                        if runs == 0 and "失点" in group.columns:
+                            raw_runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
+                            if raw_runs > 0:
+                                runs = int(raw_runs)
 
                         er_col = "自責点" if "自責点" in group.columns else ("自責" if "自責" in group.columns else None)
                         er = int(pd.to_numeric(group[er_col], errors='coerce').fillna(0).sum()) if er_col else 0
