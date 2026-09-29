@@ -342,7 +342,11 @@ def render_game_result_popover(
 
             save_cols = [c for c in updated_df.columns if c not in ["_date_str", "Year", "スコアラー"]]
             try:
-                conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=updated_df[save_cols])
+                # ログイン中チームのURLを取得
+                target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
+
+                # 保存先URLに target_url を指定（worksheet と data は元の変数のまま）
+                conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=updated_df[save_cols])
                 st.cache_data.clear()
                 st.success("✅ 責任投手情報を保存しました！")
                 time.sleep(0.5)
@@ -1459,7 +1463,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
                 updated_p_df = pd.concat([df_pitching, pd.DataFrame(records_to_save)], ignore_index=True)
                 save_cols = [c for c in updated_p_df.columns if c not in ["_date_str", "Year", "スコアラー"]]
-                conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=updated_p_df[save_cols])
+                target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
+                conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=updated_p_df[save_cols])
                 st.cache_data.clear()
 
             non_batter_events = ["盗塁", "盗塁死", "牽制死", "暴投", "捕逸", "ボーク", "走塁死"]

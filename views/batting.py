@@ -269,7 +269,11 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
 
             save_cols = [c for c in updated_df.columns if c not in ["_date_str", "Year", "スコアラー"]]
             try:
-                conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_pitching, data=updated_df[save_cols])
+                # ログイン中チームのURLを取得
+                target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
+
+                # 保存先URLに target_url を指定
+                conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=updated_df[save_cols])
                 st.cache_data.clear()
                 st.success("✅ 責任投手情報を保存しました！")
                 time.sleep(0.5)
@@ -995,7 +999,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             df_to_save = updated_full_df[save_cols].copy()
 
             try:
-                conn.update(spreadsheet=SPREADSHEET_URL, worksheet=ws_batting, data=df_to_save)
+                # ログイン中チームのURLを取得
+                target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
+
+                # 保存先URLに target_url を指定
+                conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
                 st.session_state[cache_key] = updated_full_df
                 
                 next_counter = curr_counter + 1
