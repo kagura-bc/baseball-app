@@ -1016,7 +1016,7 @@ def show_team_stats(df_batting, df_pitching):
                     )
 
                     exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "残塁"]
-                    exclude_pattern = r"進塁|得点|残塁"
+                    exclude_pattern = r"進塁|残塁"
 
                     if not match_bat.empty:
                         res_s = match_bat["結果"].astype(str).str.strip() if "結果" in match_bat.columns else pd.Series("", index=match_bat.index)
@@ -1032,6 +1032,17 @@ def show_team_stats(df_batting, df_pitching):
                         valid_batting_df = match_bat[~is_bat_excluded].copy()
                     else:
                         valid_batting_df = pd.DataFrame()
+
+                    if not match_pit.empty:
+                        mask_pit = (
+                            ~match_pit["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"]) &
+                            match_pit["打順"].notna()
+                        )
+                        if "結果" in match_pit.columns:
+                            mask_pit = mask_pit & ~match_pit["結果"].astype(str).str.contains(exclude_pattern, na=False)
+                        valid_pitching_df = match_pit[mask_pit].copy()
+                    else:
+                        valid_pitching_df = pd.DataFrame()
 
                     # 修正後の該当ブロック例
                     if not match_pit.empty:
@@ -1087,7 +1098,7 @@ def show_team_stats(df_batting, df_pitching):
                             if not inn_bat_df.empty:
                                 st.markdown("---")
                                 
-                                # ★ イニング内での得点数を自動集計
+                                # イニング内での得点数集計
                                 m_inn_bat = match_bat[match_bat["イニング"] == inn] if not match_bat.empty and "イニング" in match_bat.columns else pd.DataFrame()
                                 if not m_inn_bat.empty and "結果" in m_inn_bat.columns:
                                     inn_runs = int(m_inn_bat["結果"].isin(["得点", "本塁打"]).sum())
@@ -1096,11 +1107,7 @@ def show_team_stats(df_batting, df_pitching):
                                 else:
                                     inn_runs = 0
 
-                                # 🟢 得点数バッジの作成
-                                if inn_runs > 0:
-                                    run_badge = f"<span style='background-color: #dcfce7; color: #15803d; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>🟢 {inn_runs} 得点</span>"
-                                else:
-                                    run_badge = f"<span style='background-color: #f3f4f6; color: #6b7280; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>0 得点</span>"
+                                run_badge = f"<span style='background-color: #dcfce7; color: #15803d; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>🟢 {inn_runs} 得点</span>" if inn_runs > 0 else f"<span style='background-color: #f3f4f6; color: #6b7280; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>0 得点</span>"
 
                                 st.markdown(f"### 📍 **{inn}（攻撃）** {run_badge}", unsafe_allow_html=True)
 
@@ -1108,46 +1115,40 @@ def show_team_stats(df_batting, df_pitching):
                                 for _, row in inn_bat_df.iterrows():
                                     b_order = row.get("打順", "")
                                     try:
-                                        b_order_str = f"{int(float(b_order))}番" if pd.notna(b_order) and str(b_order).strip() != "" else ""
+                                        b_order_str = f"{int(float(b_order))}番" if pd.notna(b_order) and str(b_order).strip() not in ["", "nan", "None"] else ""
                                     except (ValueError, TypeError):
                                         b_order_str = f"{b_order}番" if b_order else ""
 
                                     p_name = row.get("打者名", row.get("選手名", ""))
-                                    res = row.get("結果", "")
-                                    direction = row.get("打球方向", "")
+                                    res = str(row.get("結果", "")).strip()
+                                    direction = str(row.get("打球方向", "")).strip()
                                     rbi = pd.to_numeric(row.get("打点", 0), errors='coerce')
                                     run = pd.to_numeric(row.get("得点", 0), errors='coerce')
                                     sb = pd.to_numeric(row.get("盗塁", 0), errors='coerce')
 
-                                    res_str = str(res)
-                                    is_hit = res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
                                     rbi_val = int(rbi) if pd.notna(rbi) else 0
                                     run_val = int(run) if pd.notna(run) else 0
-                                    sb_val = int(sb) if pd.notna(sb) else (1 if "盗塁" in res_str and "盗塁死" not in res_str else 0)
+                                    sb_val = int(sb) if pd.notna(sb) else (1 if "盗塁" in res and "盗塁死" not in res else 0)
 
-                                    core_text = ""
-                                    if direction and str(direction) not in ["---", "nan", "None", ""]:
-                                        core_text += f"{direction}"
-                                    core_text += f"{res_str}"
-
-                                    if is_hit:
-                                        if rbi_val > 0:
-                                            formatted_res = f"<span style='color: #dc2626; font-weight: bold;'>{core_text}（打点{rbi_val}）</span>"
-                                        else:
-                                            formatted_res = f"<span style='color: #2563eb; font-weight: bold;'>{core_text}</span>"
+                                    # 🌟 「得点」行自体のハイライト表示
+                                    if res == "得点":
+                                        formatted_res = "<span style='color: #16a34a; font-weight: bold; background-color: #dcfce7; padding: 2px 8px; border-radius: 4px;'>🟢 得点（ホームイン）</span>"
                                     else:
-                                        formatted_res = core_text
-                                        if rbi_val > 0:
-                                            formatted_res += f" ・ <span style='color: #dc2626; font-weight: bold;'>打点{rbi_val}</span>"
+                                        core_text = f"{direction}{res}" if direction and direction not in ["---", "nan", "None"] else res
+                                        is_hit = res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
 
-                                    extras = []
-                                    if sb_val > 0:
-                                        extras.append(f"<span style='color: #9333ea; font-weight: bold;'>盗{sb_val}</span>")
-                                    if run_val > 0:
-                                        extras.append(f"<span style='color: #16a34a; font-weight: bold;'>得{run_val}</span>")
+                                        if is_hit:
+                                            formatted_res = f"<span style='color: #dc2626; font-weight: bold;'>{core_text}（打点{rbi_val}）</span>" if rbi_val > 0 else f"<span style='color: #2563eb; font-weight: bold;'>{core_text}</span>"
+                                        else:
+                                            formatted_res = f"{core_text} ・ <span style='color: #dc2626; font-weight: bold;'>打点{rbi_val}</span>" if rbi_val > 0 else core_text
 
-                                    if extras:
-                                        formatted_res += f" [{', '.join(extras)}]"
+                                        extras = []
+                                        if sb_val > 0:
+                                            extras.append(f"<span style='color: #9333ea; font-weight: bold;'>盗{sb_val}</span>")
+                                        if run_val > 0:
+                                            extras.append(f"<span style='color: #16a34a; font-weight: bold;'>得{run_val}</span>")
+                                        if extras:
+                                            formatted_res += f" [{', '.join(extras)}]"
 
                                     bat_items.append({
                                         "打順": b_order_str,
@@ -1159,11 +1160,7 @@ def show_team_stats(df_batting, df_pitching):
                                 table_html = (
                                     "<div style='overflow-x: auto;'>"
                                     "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white; table-layout: fixed;'>"
-                                    "<colgroup>"
-                                    "<col style='width: 20%;'>"
-                                    "<col style='width: 30%;'>"
-                                    "<col style='width: 50%;'>"
-                                    "</colgroup>"
+                                    "<colgroup><col style='width: 20%;'><col style='width: 30%;'><col style='width: 50%;'></colgroup>"
                                     "<thead><tr style='background-color: #f0f0f0;'>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>打順</th>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>選手名</th>"
@@ -1171,13 +1168,7 @@ def show_team_stats(df_batting, df_pitching):
                                     "</tr></thead><tbody>"
                                 )
                                 for _, row in df_bat_disp.iterrows():
-                                    table_html += (
-                                        "<tr>"
-                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['打順']}</td>"
-                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['選手名']}</td>"
-                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: left; color: #000000;'>{row['結果']}</td>"
-                                        "</tr>"
-                                    )
+                                    table_html += f"<tr><td style='border: 1px solid #444444; padding: 8px; text-align: center;'>{row['打順']}</td><td style='border: 1px solid #444444; padding: 8px; text-align: center;'>{row['選手名']}</td><td style='border: 1px solid #444444; padding: 8px; text-align: left;'>{row['結果']}</td></tr>"
                                 table_html += "</tbody></table></div>"
                                 st.markdown(table_html, unsafe_allow_html=True)
 
@@ -1188,7 +1179,6 @@ def show_team_stats(df_batting, df_pitching):
                             if not inn_pit_df.empty:
                                 st.markdown("---")
 
-                                # ★ イニング内での失点数を自動集計
                                 m_inn_pit = match_pit[match_pit["イニング"] == inn] if not match_pit.empty and "イニング" in match_pit.columns else pd.DataFrame()
                                 if not m_inn_pit.empty and "結果" in m_inn_pit.columns:
                                     inn_lost = int(m_inn_pit["結果"].isin(["得点", "本塁打"]).sum())
@@ -1197,11 +1187,7 @@ def show_team_stats(df_batting, df_pitching):
                                 else:
                                     inn_lost = 0
 
-                                # 🔴 失点数バッジの作成
-                                if inn_lost > 0:
-                                    lost_badge = f"<span style='background-color: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>🔴 {inn_lost} 失点</span>"
-                                else:
-                                    lost_badge = f"<span style='background-color: #f3f4f6; color: #6b7280; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>0 失点</span>"
+                                lost_badge = f"<span style='background-color: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>🔴 {inn_lost} 失点</span>" if inn_lost > 0 else f"<span style='background-color: #f3f4f6; color: #6b7280; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>0 失点</span>"
 
                                 st.markdown(f"### 📍 **{inn}（守備）** {lost_badge}", unsafe_allow_html=True)
 
@@ -1223,28 +1209,24 @@ def show_team_stats(df_batting, df_pitching):
                                     raw_res = str(row.get('結果', '')).strip()
                                     pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
 
-                                    is_hit_pit = raw_res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
-                                    runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
-                                    runs_val = int(runs) if pd.notna(runs) and runs > 0 else (1 if raw_res in ["得点", "本塁打"] else 0)
-
-                                    core_pit = ""
-                                    if pos_str and pos_str not in ["nan", "None", ""]:
-                                        core_pit = f"{pos_str}"
-                                    core_pit += f"{raw_res}"
-
-                                    if is_hit_pit:
-                                        if runs_val > 0:
-                                            formatted_pit = f"<span style='color: #dc2626; font-weight: bold;'>{core_pit} (失点{runs_val})</span>"
-                                        else:
-                                            formatted_pit = f"<span style='color: #2563eb; font-weight: bold;'>{core_pit}</span>"
+                                    # 🌟 「得点」（守備視点では相手の得点＝失点）行のハイライト表示
+                                    if raw_res in ["得点", "本塁打"]:
+                                        formatted_pit = "<span style='color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 8px; border-radius: 4px;'>💥 失点（相手ホームイン）</span>"
                                     else:
-                                        formatted_pit = core_pit
-                                        if runs_val > 0:
-                                            formatted_pit += f" <span style='color: #dc2626; font-weight: bold;'>💥失点{runs_val}</span>"
+                                        runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
+                                        runs_val = int(runs) if pd.notna(runs) and runs > 0 else 0
 
-                                    fielder_str = str(row.get('処理野手', ''))
-                                    if fielder_str and fielder_str not in ["nan", "None", ""]:
-                                        formatted_pit += f" [{fielder_str}]"
+                                        core_pit = f"{pos_str}{raw_res}" if pos_str and pos_str not in ["nan", "None"] else raw_res
+                                        is_hit_pit = raw_res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
+
+                                        if is_hit_pit:
+                                            formatted_pit = f"<span style='color: #dc2626; font-weight: bold;'>{core_pit} (失点{runs_val})</span>" if runs_val > 0 else f"<span style='color: #2563eb; font-weight: bold;'>{core_pit}</span>"
+                                        else:
+                                            formatted_pit = f"{core_pit} <span style='color: #dc2626; font-weight: bold;'>💥失点{runs_val}</span>" if runs_val > 0 else core_pit
+
+                                        fielder_str = str(row.get('処理野手', ''))
+                                        if fielder_str and fielder_str not in ["nan", "None", ""]:
+                                            formatted_pit += f" [{fielder_str}]"
 
                                     pitcher_disp_name = row.get("投手名", row.get("選手名", ""))
 
@@ -1258,11 +1240,7 @@ def show_team_stats(df_batting, df_pitching):
                                 pit_table_html = (
                                     "<div style='overflow-x: auto;'>"
                                     "<table style='border-collapse: collapse; border: 1px solid #444444; width: 100%; margin-bottom: 10px; font-family: sans-serif; background-color: white; table-layout: fixed;'>"
-                                    "<colgroup>"
-                                    "<col style='width: 20%;'>"
-                                    "<col style='width: 30%;'>"
-                                    "<col style='width: 50%;'>"
-                                    "</colgroup>"
+                                    "<colgroup><col style='width: 20%;'><col style='width: 30%;'><col style='width: 50%;'></colgroup>"
                                     "<thead><tr style='background-color: #f0f0f0;'>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>打順</th>"
                                     "<th style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000; font-weight: bold;'>投手</th>"
@@ -1270,13 +1248,7 @@ def show_team_stats(df_batting, df_pitching):
                                     "</tr></thead><tbody>"
                                 )
                                 for _, row in df_pit_disp.iterrows():
-                                    pit_table_html += (
-                                        "<tr>"
-                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['打順']}</td>"
-                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: center; color: #000000;'>{row['投手']}</td>"
-                                        f"<td style='border: 1px solid #444444; padding: 8px; text-align: left; color: #000000;'>{row['結果']}</td>"
-                                        "</tr>"
-                                    )
+                                    pit_table_html += f"<tr><td style='border: 1px solid #444444; padding: 8px; text-align: center;'>{row['打順']}</td><td style='border: 1px solid #444444; padding: 8px; text-align: center;'>{row['投手']}</td><td style='border: 1px solid #444444; padding: 8px; text-align: left;'>{row['結果']}</td></tr>"
                                 pit_table_html += "</tbody></table></div>"
                                 st.markdown(pit_table_html, unsafe_allow_html=True)
                     else:
