@@ -1339,7 +1339,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 runner_status = "ランナーなし"
 
             records_to_save = list(opp_rows_to_add)
-            add_outs_total += 0
+            add_outs_total = 0
 
             if p_res:
                 target_fielder_pos_str = "-".join(target_fielder_pos_list)
