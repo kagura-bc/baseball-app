@@ -1080,10 +1080,30 @@ def show_team_stats(df_batting, df_pitching):
                             inn_id = inn.replace("回", "").replace("表", "").replace("裏", "")
                             st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
 
+                            # --------------------------------------------------
+                            # 📍 攻撃イニングの表示
+                            # --------------------------------------------------
                             inn_bat_df = valid_batting_df[valid_batting_df["イニング"] == inn] if not valid_batting_df.empty and "イニング" in valid_batting_df.columns else pd.DataFrame()
                             if not inn_bat_df.empty:
                                 st.markdown("---")
-                                st.markdown(f"### 📍 **{inn}（攻撃）**")
+                                
+                                # ★ イニング内での得点数を自動集計
+                                m_inn_bat = match_bat[match_bat["イニング"] == inn] if not match_bat.empty and "イニング" in match_bat.columns else pd.DataFrame()
+                                if not m_inn_bat.empty and "結果" in m_inn_bat.columns:
+                                    inn_runs = int(m_inn_bat["結果"].isin(["得点", "本塁打"]).sum())
+                                    if inn_runs == 0 and "得点" in m_inn_bat.columns:
+                                        inn_runs = int(pd.to_numeric(m_inn_bat["得点"], errors='coerce').fillna(0).sum())
+                                else:
+                                    inn_runs = 0
+
+                                # 🟢 得点数バッジの作成
+                                if inn_runs > 0:
+                                    run_badge = f"<span style='background-color: #dcfce7; color: #15803d; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>🟢 {inn_runs} 得点</span>"
+                                else:
+                                    run_badge = f"<span style='background-color: #f3f4f6; color: #6b7280; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>0 得点</span>"
+
+                                st.markdown(f"### 📍 **{inn}（攻撃）** {run_badge}", unsafe_allow_html=True)
+
                                 bat_items = []
                                 for _, row in inn_bat_df.iterrows():
                                     b_order = row.get("打順", "")
@@ -1161,10 +1181,30 @@ def show_team_stats(df_batting, df_pitching):
                                 table_html += "</tbody></table></div>"
                                 st.markdown(table_html, unsafe_allow_html=True)
 
+                            # --------------------------------------------------
+                            # 📍 守備イニングの表示
+                            # --------------------------------------------------
                             inn_pit_df = valid_pitching_df[valid_pitching_df["イニング"] == inn] if not valid_pitching_df.empty and "イニング" in valid_pitching_df.columns else pd.DataFrame()
                             if not inn_pit_df.empty:
                                 st.markdown("---")
-                                st.markdown(f"### 📍 **{inn}（守備）**")
+
+                                # ★ イニング内での失点数を自動集計
+                                m_inn_pit = match_pit[match_pit["イニング"] == inn] if not match_pit.empty and "イニング" in match_pit.columns else pd.DataFrame()
+                                if not m_inn_pit.empty and "結果" in m_inn_pit.columns:
+                                    inn_lost = int(m_inn_pit["結果"].isin(["得点", "本塁打"]).sum())
+                                    if inn_lost == 0 and "失点" in m_inn_pit.columns:
+                                        inn_lost = int(pd.to_numeric(m_inn_pit["失点"], errors='coerce').fillna(0).sum())
+                                else:
+                                    inn_lost = 0
+
+                                # 🔴 失点数バッジの作成
+                                if inn_lost > 0:
+                                    lost_badge = f"<span style='background-color: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>🔴 {inn_lost} 失点</span>"
+                                else:
+                                    lost_badge = f"<span style='background-color: #f3f4f6; color: #6b7280; padding: 4px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-left: 10px;'>0 失点</span>"
+
+                                st.markdown(f"### 📍 **{inn}（守備）** {lost_badge}", unsafe_allow_html=True)
+
                                 pit_items = []
                                 for _, row in inn_pit_df.iterrows():
                                     b_ord_val = row.get("打順")
@@ -1180,12 +1220,12 @@ def show_team_stats(df_batting, df_pitching):
                                         except (ValueError, TypeError):
                                             b_idx = f"{raw_b_idx}番" if raw_b_idx != "?" else "?"
 
-                                    raw_res = str(row.get('結果', ''))
+                                    raw_res = str(row.get('結果', '')).strip()
                                     pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
 
                                     is_hit_pit = raw_res in ["単打", "二塁打", "三塁打", "本塁打", "安打"]
                                     runs = pd.to_numeric(row.get('失点', 0), errors='coerce')
-                                    runs_val = int(runs) if pd.notna(runs) else 0
+                                    runs_val = int(runs) if pd.notna(runs) and runs > 0 else (1 if raw_res in ["得点", "本塁打"] else 0)
 
                                     core_pit = ""
                                     if pos_str and pos_str not in ["nan", "None", ""]:
