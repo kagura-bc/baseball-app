@@ -70,9 +70,20 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
         inn_bat_data = b_df[b_df["イニング"].isin(target_innings)] if not b_df.empty else pd.DataFrame()
         inn_pit_data = p_df[p_df["イニング"].isin(target_innings)] if not p_df.empty else pd.DataFrame()
 
-        # 得点・失点の集計（各列の数値を数値化して合計）
-        k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').fillna(0).sum()) if not inn_bat_data.empty and "得点" in inn_bat_data.columns else 0
-        opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum()) if not inn_pit_data.empty and "失点" in inn_pit_data.columns else 0
+        # 得点・失点の集計（結果列からの自動集計＋数値列からのフォールバック）
+        if not inn_bat_data.empty and "結果" in inn_bat_data.columns:
+            k_runs = int(inn_bat_data["結果"].isin(["得点", "本塁打"]).sum())
+        else:
+            k_runs = 0
+        if k_runs == 0 and not inn_bat_data.empty and "得点" in inn_bat_data.columns:
+            k_runs = int(pd.to_numeric(inn_bat_data["得点"], errors='coerce').fillna(0).sum())
+
+        if not inn_pit_data.empty and "結果" in inn_pit_data.columns:
+            opp_runs = int(inn_pit_data["結果"].isin(["得点", "本塁打"]).sum())
+        else:
+            opp_runs = 0
+        if opp_runs == 0 and not inn_pit_data.empty and "失点" in inn_pit_data.columns:
+            opp_runs = int(pd.to_numeric(inn_pit_data["失点"], errors='coerce').fillna(0).sum())
 
         # アウト数の集計（イニングチェンジ判定）
         k_outs = 0
