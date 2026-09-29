@@ -1015,8 +1015,11 @@ def show_team_stats(df_batting, df_pitching):
                         unsafe_allow_html=True
                     )
 
+                    # --------------------------------------------------
+                    # 修正後：攻撃・守備データの抽出フィルター
+                    # --------------------------------------------------
                     exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "残塁"]
-                    exclude_pattern = r"進塁|残塁"
+                    exclude_pattern = r"進塁|残塁"  # ★ 「得点」を除外対象から削除
 
                     if not match_bat.empty:
                         res_s = match_bat["結果"].astype(str).str.strip() if "結果" in match_bat.columns else pd.Series("", index=match_bat.index)
@@ -1034,24 +1037,14 @@ def show_team_stats(df_batting, df_pitching):
                         valid_batting_df = pd.DataFrame()
 
                     if not match_pit.empty:
-                        mask_pit = (
-                            ~match_pit["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"]) &
-                            match_pit["打順"].notna()
-                        )
-                        if "結果" in match_pit.columns:
-                            mask_pit = mask_pit & ~match_pit["結果"].astype(str).str.contains(exclude_pattern, na=False)
-                        valid_pitching_df = match_pit[mask_pit].copy()
-                    else:
-                        valid_pitching_df = pd.DataFrame()
+                        res_p_s = match_pit["結果"].astype(str).str.strip() if "結果" in match_pit.columns else pd.Series("", index=match_pit.index)
+                        inn_p_s = match_pit["イニング"].astype(str).str.strip() if "イニング" in match_pit.columns else pd.Series("", index=match_pit.index)
 
-                    # 修正後の該当ブロック例
-                    if not match_pit.empty:
+                        # イニングが正常で、「進塁」「残塁」以外の行を取得
                         mask_pit = (
-                            ~match_pit["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"]) &
-                            match_pit["打順"].notna()
+                            ~inn_p_s.isin(["試合終了", "まとめ入力", "ベンチ", "試合前", "", "nan", "None"]) &
+                            ~res_p_s.str.contains(exclude_pattern, na=False)
                         )
-                        if "結果" in match_pit.columns:
-                            mask_pit = mask_pit & ~match_pit["結果"].astype(str).str.contains(r"進塁|得点|残塁", na=False)
                         valid_pitching_df = match_pit[mask_pit].copy()
                     else:
                         valid_pitching_df = pd.DataFrame()
