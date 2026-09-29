@@ -1,111 +1,63 @@
 import pandas as pd
-from config.settings import SPREADSHEET_URL
+from config.settings import SPREADSHEET_URL, TARGET_COLUMNS
 from streamlit_gsheets import GSheetsConnection
 import streamlit as st
 
-
-# 接続オブジェクトの作成
 def get_connection():
-  return st.connection("gsheets", type=GSheetsConnection)
-
+    return st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=60)
 def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
-  conn = get_connection()
-  expected_cols = [
-      "ID",
-      "日付",
-      "打点",
-      "位置",
-      "グラウンド",
-      "対戦相手",
-      "試合種別",
-      "イニング",
-      "結果",
-      "スコアラー",
-  ]
+    conn = get_connection()
+    target_worksheet = "打撃成績"
 
-  target_worksheet = "打撃成績"
+    try:
+        data = conn.read(spreadsheet=spreadsheet_url, worksheet=target_worksheet, ttl=0)
+        if data.empty:
+            return pd.DataFrame(columns=TARGET_COLUMNS + ["Year"])
 
-  try:
-    data = conn.read(
-        spreadsheet=spreadsheet_url, worksheet=target_worksheet, ttl=0
-    )
+        # 23列の不足分を補完
+        for col in TARGET_COLUMNS:
+            if col not in data.columns:
+                data[col] = 0 if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"] else ""
 
-    if data.empty:
-      return pd.DataFrame(columns=expected_cols + ["Year"])
+        data["日付"] = pd.to_datetime(data["日付"], errors="coerce")
+        data["Year"] = data["日付"].dt.strftime("%Y").fillna("不明")
+        data["日付"] = data["日付"].dt.date
 
-    for col in expected_cols:
-      if col not in data.columns:
-        data[col] = 0 if col in ["ID", "打点", "得点"] else ""
-
-    # 日付から "Year" を自動生成する処理を追加
-    data["日付"] = pd.to_datetime(data["日付"], errors="coerce")
-    data["Year"] = data["日付"].dt.strftime("%Y").fillna("不明")
-    data["日付"] = data["日付"].dt.date
-
-    return data.dropna(how="all")
-  except Exception as e:
-    st.error(f"打撃データの読み込みに失敗しました ({target_worksheet}): {e}")
-    return pd.DataFrame(columns=expected_cols + ["Year"])
-
+        # カラム順をTARGET_COLUMNS + ["Year"]に統一
+        data = data[TARGET_COLUMNS + ["Year"]]
+        return data.dropna(how="all")
+    except Exception as e:
+        st.error(f"打撃データの読み込みに失敗しました ({target_worksheet}): {e}")
+        return pd.DataFrame(columns=TARGET_COLUMNS + ["Year"])
 
 @st.cache_data(ttl=60)
 def load_pitching_data(spreadsheet_url=SPREADSHEET_URL):
-  conn = get_connection()
-  expected_cols = [
-      "ID",
-      "日付",
-      "アウト数",
-      "球数",
-      "失点",
-      "自責点",
-      "グラウンド",
-      "対戦相手",
-      "試合種別",
-      "処理野手",
-      "イニング",
-      "投手名",
-      "結果",
-      "勝敗",
-      "スコアラー",
-  ]
+    conn = get_connection()
+    target_worksheet = "投手成績"
 
-  target_worksheet = "投手成績"
+    try:
+        data = conn.read(spreadsheet=spreadsheet_url, worksheet=target_worksheet, ttl=0)
+        if data.empty:
+            return pd.DataFrame(columns=TARGET_COLUMNS + ["Year"])
 
-  try:
-    data = conn.read(
-        spreadsheet=spreadsheet_url, worksheet=target_worksheet, ttl=0
-    )
-    if data.empty:
-      return pd.DataFrame(columns=expected_cols + ["Year"])
+        # 23列の不足分を補完
+        for col in TARGET_COLUMNS:
+            if col not in data.columns:
+                if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"]:
+                    data[col] = 0
+                else:
+                    data[col] = ""
 
-    for col in expected_cols:
-      if col not in data.columns:
-        if col in [
-            "グラウンド",
-            "対戦相手",
-            "試合種別",
-            "処理野手",
-            "投手名",
-            "結果",
-            "イニング",
-            "勝敗",
-            "スコアラー",
-        ]:
-          data[col] = ""
-        else:
-          data[col] = 0
+        data["投手名"] = data["投手名"].fillna("")
+        data["日付"] = pd.to_datetime(data["日付"], errors="coerce")
+        data["Year"] = data["日付"].dt.strftime("%Y").fillna("不明")
+        data["日付"] = data["日付"].dt.date
 
-    # 投手名の欠損値を補正
-    data["投手名"] = data["投手名"].fillna("")
-
-    # 日付から "Year" を自動生成する処理
-    data["日付"] = pd.to_datetime(data["日付"], errors="coerce")
-    data["Year"] = data["日付"].dt.strftime("%Y").fillna("不明")
-    data["日付"] = data["日付"].dt.date
-
-    return data.dropna(how="all")
-  except Exception as e:
-    st.error(f"投手データの読み込みに失敗しました ({target_worksheet}): {e}")
-    return pd.DataFrame(columns=expected_cols + ["Year"])
+        # カラム順をTARGET_COLUMNS + ["Year"]に統一
+        data = data[TARGET_COLUMNS + ["Year"]]
+        return data.dropna(how="all")
+    except Exception as e:
+        st.error(f"投手データの読み込みに失敗しました ({target_worksheet}): {e}")
+        return pd.DataFrame(columns=TARGET_COLUMNS + ["Year"])

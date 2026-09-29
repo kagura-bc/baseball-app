@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 
-from config.settings import ALL_POSITIONS, SPREADSHEET_URL
+from config.settings import ALL_POSITIONS, SPREADSHEET_URL, TARGET_COLUMNS
 from utils.players import get_active_players
 from utils.ui import fmt_player_name, render_out_indicator_3, render_scoreboard, show_homerun_effect
 
@@ -232,7 +232,7 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
             for h in sel_opp_holds_val: dec_map[h.strip()] = "ホールド"
 
             updated_df = df_pitching.copy() if not df_pitching.empty else pd.DataFrame(columns=[
-                "ID", "日付", "グラウンド", "対戦相手", "試合種別", "イニング", p_col, "結果", "失点", "自責点", "勝敗", "種別"
+                "ID", "日付", "グラウンド", "対戦相手", "試合種別", "イニング", p_col, "結果", "自責点", "勝敗", "種別"
             ])
 
             if "日付" in updated_df.columns and "対戦相手" in updated_df.columns:
@@ -259,7 +259,6 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
                             "イニング": "試合終了",
                             p_col: p_name,
                             "結果": "ー",
-                            "失点": 0,
                             "自責点": 0,
                             "勝敗": dec_val,
                             "エラー野手": "",
@@ -267,13 +266,20 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
                         }
                         updated_df = pd.concat([updated_df, pd.DataFrame([new_row])], ignore_index=True)
 
-            save_cols = [c for c in updated_df.columns if c not in ["_date_str", "Year", "スコアラー"]]
+            # 23列の不足分を補完
+            for col in TARGET_COLUMNS:
+                if col not in updated_df.columns:
+                    updated_df[col] = 0 if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"] else ""
+
+            # 23列に固定してデータを抽出
+            save_df = updated_df[TARGET_COLUMNS].copy()
+
             try:
                 # ログイン中チームのURLを取得
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
 
                 # 保存先URLに target_url を指定
-                conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=updated_df[save_cols])
+                conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
                 st.cache_data.clear()
                 st.success("✅ 責任投手情報を保存しました！")
                 time.sleep(0.5)
@@ -338,11 +344,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if cache_key in st.session_state:
         df_batting = st.session_state[cache_key]
 
-    expected_batting_cols = [
-        "ID", "日付", "イニング", "打順", "打者名", "投手名", "守備位置", 
-        "結果", "打球方向", "エラー野手", "打点", "自責点", "グラウンド", 
-        "対戦相手", "試合種別", "スコアラー", "球数", "ストライク", "ファールボール", "ボール", "ランナー状況"
-    ]
+    expected_batting_cols = TARGET_COLUMNS
     
     if not df_batting.empty and "守備位置" not in df_batting.columns and "位置" in df_batting.columns:
         df_batting["守備位置"] = df_batting["位置"]
@@ -355,7 +357,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 df_batting[col] = ""
 
     if not df_pitching.empty:
-        expected_pitching_cols = ["ID", "日付", "イニング", "投手名", "打順", "打者名", "結果", "失点", "自責点", "対戦相手", "試合種別", "エラー野手"]
+        expected_pitching_cols = ["ID", "日付", "イニング", "投手名", "打順", "打者名", "結果", "自責点", "対戦相手", "試合種別", "エラー野手"]
         for col in expected_pitching_cols:
             if col not in df_pitching.columns:
                 df_pitching[col] = ""
@@ -474,7 +476,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     res = str(row['結果']).strip()
                     rbi_val = pd.to_numeric(row.get('打点', 0), errors='coerce')
                     
-                    # 結果が「本塁打」または「得点」の場合に個人の得点数としてカウント
                     if res in ["本塁打", "得点"]:
                         total_runs += 1
                     
@@ -635,7 +636,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     "グラウンド": final_ground
                 })
         else:
-            # 交代・守備変更の差分検知ロジック
             for i in range(display_count):
                 name_val = st.session_state.get(f"sn{i}")
                 pos_val = st.session_state.get(f"sp{i}")
@@ -647,13 +647,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     prev_name = prev_state.get("name", "")
                     prev_pos = prev_state.get("pos", "")
                     
-                    # 1. 選手が変更された場合（代打・代走含む交代）
                     if prev_name and prev_name != clean_name:
                         rows_to_add.append({
                             "日付": current_date_formatted,
                             "対戦相手": final_opp,
                             "試合種別": final_match_type,
-                            "イニング": inn_val,  # ← 選択中のイニング（〇回裏など）で記録
+                            "イニング": inn_val,
                             "打順": i + 1,
                             "打者名": clean_name,
                             "投手名": opp_pitcher_name,
@@ -665,11 +664,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                             "スコアラー": scorer,
                             "グラウンド": final_ground
                         })
-                        # 「代打」選択時は、次回守備位置として前選手の守備位置を自動保持する
                         next_state_pos = prev_pos if current_pos in ["打", "走"] and prev_pos else current_pos
                         st.session_state["lineup_states"][i] = {"name": clean_name, "pos": next_state_pos}
                     
-                    # 2. 選手は同じで守備位置のみ変更された場合（守備変更）
                     elif prev_name == clean_name and prev_pos and prev_pos != current_pos:
                         rows_to_add.append({
                             "日付": current_date_formatted,
@@ -722,12 +719,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             if res_type in ["交代", "守備変更"]:
                 if is_kagura_attack:
-                    # 自チーム攻撃回（守備交代・守備位置変更はエラー）
                     if res_type == "守備変更" or (res_type == "交代" and c_pos not in ["打", "走"]):
                         sub_validation_error = "⚠️ 自チーム攻撃回のため、自チームに「守備交代・守備位置変更」を登録することはできません（代打・代走のみ設定可能）。"
                         break
                 else:
-                    # 自チーム守備回（代打・代走はエラー）
                     if c_pos in ["打", "走"]:
                         sub_validation_error = "⚠️ 自チーム守備回のため、自チームに「代打・代走」を登録することはできません。"
                         break
@@ -888,7 +883,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     is_home_steal = (base == "3b" and r_res == "盗塁")
                     is_score = (r_res == "得点") or is_home_steal
 
-                    # 得点・ホームスチールの場合は「結果」列に"得点"をセット
                     res_val = "得点" if is_score else r_res
                     dir_val = r_fielder if r_fielder and r_res in ["走塁死", "盗塁死", "牽制死"] else "---"
                     
@@ -995,14 +989,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             new_df_to_append = pd.DataFrame(rows_to_add)
             updated_full_df = pd.concat([df_batting, new_df_to_append], ignore_index=True)
             
-            save_cols = [c for c in expected_batting_cols if c not in ["日付_dt", "Year", "_date_str"] and c in updated_full_df.columns]
-            df_to_save = updated_full_df[save_cols].copy()
+            for col in TARGET_COLUMNS:
+                if col not in updated_full_df.columns:
+                    updated_full_df[col] = 0 if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"] else ""
+
+            df_to_save = updated_full_df[TARGET_COLUMNS].copy()
 
             try:
-                # ログイン中チームのURLを取得
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
-
-                # 保存先URLに target_url を指定
                 conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
                 st.session_state[cache_key] = updated_full_df
                 
@@ -1044,10 +1038,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
         t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
         
-        # 3アウトで自動的に次のイニングへ進める（自チーム攻撃用）
         if (s_outs + d_outs + t_outs) >= 3:
             try:
-                # 表/裏を2つ飛ばしで自チームの次の攻撃回へ進める
                 curr_idx = inn_list.index(current_inn_val)
                 if curr_idx < len(inn_list) - 2:
                     current_inn_val = inn_list[curr_idx + 2]
