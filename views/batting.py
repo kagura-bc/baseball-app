@@ -809,7 +809,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             active_orders = 9
             for idx_check in range(display_count - 1, -1, -1):
-                if st.session_state.get(f"sn{idx}"):
+                if st.session_state.get(f"sn{idx_check}"):
                     active_orders = idx_check + 1
                     break
             
