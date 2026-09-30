@@ -1336,34 +1336,40 @@ def show_analysis_page(df_batting, df_pitching):
                             
                             st.markdown(f"#### {fmt_player_name(target_p_player, STATS_NUMBERS)} の打たせた打球方向と種類")
                             if "打球方向" in my_p.columns:
-                                valid_p_df = my_p[my_p["打球方向"].notna() & 
-                                                  (my_p["打球方向"] != "") & 
-                                                  (my_p["打球方向"] != "nan") & 
-                                                  (my_p["打球方向"] != "---")].copy()
+                                safe_pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+
+                                # 💡 ハイフン・ダッシュ類（-, —, ―, --- 等）や空欄を除外
+                                valid_p_df = my_p[
+                                    my_p["打球方向"].notna() & 
+                                    (~my_p["打球方向"].astype(str).str.strip().isin(["", "nan", "None", "-", "—", "―", "---"]))
+                                ].copy()
                                 
                                 if not valid_p_df.empty:
-                                    valid_p_df["方向"] = valid_p_df["打球方向"].astype(str).str.strip()
+                                    # 先頭のポジション名を抽出（例: "投-中" -> "投"）
+                                    valid_p_df["方向"] = valid_p_df["打球方向"].astype(str).str.strip().apply(lambda x: x.split("-")[0].split("—")[0])
                                     
-                                    if "打球種類" not in valid_p_df.columns:
-                                        valid_p_df["打球種類"] = "その他"
+                                    # 💡 正規ポジション（投・捕・一・二・三・遊・左・中・右）のみに絞り込む
+                                    valid_p_df = valid_p_df[valid_p_df["方向"].isin(safe_pos_order)]
+
+                                    if not valid_p_df.empty:
+                                        if "打球種類" not in valid_p_df.columns:
+                                            valid_p_df["打球種類"] = "その他"
+                                            
+                                        def determine_hit_type(res, current_type):
+                                            res_s = str(res)
+                                            if "本塁打" in res_s: return "本塁打"
+                                            if "二塁打" in res_s or "三塁打" in res_s: return "長打"
+                                            if "単打" in res_s or "安打" in res_s: return "単打"
+                                            if current_type != "その他" and pd.notna(current_type) and current_type != "":
+                                                return current_type 
+                                            if "ゴロ" in res_s: return "ゴロ"
+                                            if "フライ" in res_s or "飛" in res_s: return "フライ"
+                                            if "直" in res_s or "ライナー" in res_s: return "ライナー"
+                                            return "その他"
+                                            
+                                        valid_p_df["打球種類"] = valid_p_df.apply(lambda row: determine_hit_type(row.get("結果", ""), row.get("打球種類")), axis=1)
+                                        p_indiv_dir_counts = valid_p_df.groupby(["方向", "打球種類"]).size().reset_index(name="数")
                                         
-                                    def determine_hit_type(res, current_type):
-                                        res_s = str(res)
-                                        if "本塁打" in res_s: return "本塁打"
-                                        if "二塁打" in res_s or "三塁打" in res_s: return "長打"
-                                        if "単打" in res_s or "安打" in res_s: return "単打"
-                                        if current_type != "その他" and pd.notna(current_type) and current_type != "":
-                                            return current_type 
-                                        if "ゴロ" in res_s: return "ゴロ"
-                                        if "フライ" in res_s or "飛" in res_s: return "フライ"
-                                        if "直" in res_s or "ライナー" in res_s: return "ライナー"
-                                        return "その他"
-                                        
-                                    valid_p_df["打球種類"] = valid_p_df.apply(lambda row: determine_hit_type(row.get("結果", ""), row.get("打球種類")), axis=1)
-                                    p_indiv_dir_counts = valid_p_df.groupby(["方向", "打球種類"]).size().reset_index(name="数")
-                                    
-                                    if not p_indiv_dir_counts.empty:
-                                        safe_pos_order = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
                                         bar_p_dir_indiv = alt.Chart(p_indiv_dir_counts).mark_bar().encode(
                                             x=alt.X("方向:N", sort=safe_pos_order, title="ポジション", axis=alt.Axis(labelAngle=0)),
                                             y=alt.Y("数:Q", title="打球数"),
