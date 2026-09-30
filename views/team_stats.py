@@ -6,7 +6,6 @@ from config.settings import OFFICIAL_GAME_TYPES
 from utils.players import get_stats_active_players
 from utils.ui import render_scoreboard
 
-
 # ★ イニング文字列を計算用数値に変換する関数
 def parse_inn_order(inn_str):
     s = str(inn_str).strip()
@@ -111,7 +110,7 @@ def show_team_stats(df_batting, df_pitching):
         valid_batting = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
         valid_inn_mask_b = ~valid_batting["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in valid_batting.columns else pd.Series(True, index=valid_batting.index)
 
-        # 🌟 得点数の集計ロジック（2024・2025年はイニング記録のある「得点」のみ）
+        # 得点数の集計ロジック（2024・2025年はイニング記録のある「得点」のみ）
         if match_year in [2024, 2025]:
             runs = int((valid_batting[valid_inn_mask_b]["結果"] == "得点").sum()) if "結果" in valid_batting.columns else 0
         else:
@@ -220,7 +219,7 @@ def show_team_stats(df_batting, df_pitching):
         valid_pitching = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
         valid_inn_mask_p = ~valid_pitching["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in valid_pitching.columns else pd.Series(True, index=valid_pitching.index)
 
-        # 🌟 失点（相手得点）の集計ロジック（失点列を使わず、結果列の「得点」「本塁打」から自動集計）
+        # 失点（相手得点）の集計ロジック
         if match_year in [2024, 2025]:
             runs_allowed = int((valid_pitching[valid_inn_mask_p]["結果"] == "得点").sum()) if "結果" in valid_pitching.columns else 0
         else:
@@ -469,7 +468,7 @@ def show_team_stats(df_batting, df_pitching):
                 p_p_name = "投手名" if "投手名" in match_pit.columns else "選手名"
 
                 if has_team_rec:
-                    sb_bat = match_bat.copy() # 個人の安打も反映させるため全行コピーに変更
+                    sb_bat = match_bat.copy()
                     sb_pit = match_pit.copy()
 
                     sb_pit["失策"] = 0
@@ -602,7 +601,6 @@ def show_team_stats(df_batting, df_pitching):
                             res_col = player_group.get("結果") if "結果" in player_group.columns else None
                             tpa = res_col.isin(pa_list).sum() if res_col is not None else 0
 
-                            # 個人詳細表示での盗塁数の集計補正
                             sb_col = player_group.get("盗塁")
                             sb_num = int(pd.to_numeric(sb_col, errors='coerce').fillna(0).sum()) if sb_col is not None else 0
                             sb_res_count = int(player_group["結果"].astype(str).str.contains("盗塁").sum()) if "結果" in player_group.columns else 0
@@ -790,12 +788,10 @@ def show_team_stats(df_batting, df_pitching):
                     for p_name_val, group in personal_pit.groupby("投手名", sort=False):
                         clean_p_val = re.sub(r'[\s ]+', '', str(p_name_val)).split("(")[0].strip()
 
-                        # 1. 投手シートから球数・ストライク・ボールを取得
                         balls = pd.to_numeric(group.get("球数", 0), errors='coerce').fillna(0).sum()
                         s_cnt = pd.to_numeric(group.get("ストライク", 0), errors='coerce').fillna(0).sum()
                         b_cnt = pd.to_numeric(group.get("ボール", 0), errors='coerce').fillna(0).sum()
 
-                        # 2. 打撃シートから投手名が一致する行を照合
                         if not match_bat.empty and "投手名" in match_bat.columns:
                             match_bat_copy = match_bat.copy()
                             match_bat_copy["_p_name_clean"] = match_bat_copy["投手名"].astype(str).apply(lambda x: re.sub(r'[\s ]+', '', str(x)).split("(")[0].strip())
@@ -821,20 +817,17 @@ def show_team_stats(df_batting, df_pitching):
                         strike_rate = (s_cnt / balls * 100) if balls > 0 else 0.0
                         strike_rate_str = f"{strike_rate:.1f}%"
 
-                        # 3. 失点と自責点
                         match_date = pd.to_datetime(target_date_str, errors='coerce')
                         match_year = match_date.year if pd.notna(match_date) else 2026
 
                         valid_p_group = group[group["イニング"] != "まとめ入力"] if "イニング" in group.columns else group
                         valid_inn_mask_p = ~valid_p_group["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in valid_p_group.columns else pd.Series(True, index=valid_p_group.index)
 
-                        # 得点・本塁打から失点を自動集計
                         if match_year in [2024, 2025]:
                             runs = int((valid_p_group[valid_inn_mask_p]["結果"] == "得点").sum()) if "結果" in valid_p_group.columns else 0
                         else:
                             runs = int(valid_p_group["結果"].isin(["得点", "本塁打"]).sum()) if "結果" in valid_p_group.columns else 0
 
-                        # 「失点」列に直接数値（まとめ入力等）が入っている場合のフォールバック
                         if runs == 0 and "失点" in group.columns:
                             raw_runs = pd.to_numeric(group["失点"], errors='coerce').fillna(0).sum()
                             if raw_runs > 0:
@@ -843,7 +836,6 @@ def show_team_stats(df_batting, df_pitching):
                         er_col = "自責点" if "自責点" in group.columns else ("自責" if "自責" in group.columns else None)
                         er = int(pd.to_numeric(group[er_col], errors='coerce').fillna(0).sum()) if er_col else 0
 
-                        # 4. 結果列からの投球回（アウト数）、被安打、奪三振、四死球の自動集計
                         total_outs = 0; total_hits = 0; total_so = 0; total_bb = 0
                         
                         out_1_det = ["凡退", "凡退(ゴロ)", "凡退(フライ)", "三振", "振り逃げ三振", "犠打", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "牽制死"]
@@ -859,7 +851,6 @@ def show_team_stats(df_batting, df_pitching):
                             raw_so = pd.to_numeric(row.get("奪三振", 0), errors='coerce')
                             raw_bb = pd.to_numeric(row.get("与四球", 0), errors='coerce')
 
-                            # A. まとめ入力行
                             if res == "まとめ" or r_type == "まとめ":
                                 if pd.notna(raw_outs) and raw_outs > 0:
                                     total_outs += int(raw_outs)
@@ -873,11 +864,9 @@ def show_team_stats(df_batting, df_pitching):
                                 if pd.notna(raw_bb) and raw_bb > 0:
                                     total_bb += int(raw_bb)
 
-                            # B. 非プレイ行
                             elif "ダミー" in r_type or "スタメン" in res or "交代" in res or "ベンチ" in res:
                                 continue
 
-                            # C. 個別打者イベント行
                             else:
                                 if pd.notna(raw_outs) and raw_outs > 0:
                                     total_outs += int(raw_outs)
@@ -1015,11 +1004,8 @@ def show_team_stats(df_batting, df_pitching):
                         unsafe_allow_html=True
                     )
 
-                    # --------------------------------------------------
-                    # 修正後：攻撃・守備データの抽出フィルター
-                    # --------------------------------------------------
                     exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "残塁"]
-                    exclude_pattern = r"進塁|残塁"  # ★ 「得点」を除外対象から削除
+                    exclude_pattern = r"進塁|残塁"
 
                     if not match_bat.empty:
                         res_s = match_bat["結果"].astype(str).str.strip() if "結果" in match_bat.columns else pd.Series("", index=match_bat.index)
@@ -1040,7 +1026,6 @@ def show_team_stats(df_batting, df_pitching):
                         res_p_s = match_pit["結果"].astype(str).str.strip() if "結果" in match_pit.columns else pd.Series("", index=match_pit.index)
                         inn_p_s = match_pit["イニング"].astype(str).str.strip() if "イニング" in match_pit.columns else pd.Series("", index=match_pit.index)
 
-                        # イニングが正常で、「進塁」「残塁」以外の行を取得
                         mask_pit = (
                             ~inn_p_s.isin(["試合終了", "まとめ入力", "ベンチ", "試合前", "", "nan", "None"]) &
                             ~res_p_s.str.contains(exclude_pattern, na=False)
@@ -1084,14 +1069,11 @@ def show_team_stats(df_batting, df_pitching):
                             inn_id = inn.replace("回", "").replace("表", "").replace("裏", "")
                             st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
 
-                            # --------------------------------------------------
                             # 📍 攻撃イニングの表示
-                            # --------------------------------------------------
                             inn_bat_df = valid_batting_df[valid_batting_df["イニング"] == inn] if not valid_batting_df.empty and "イニング" in valid_batting_df.columns else pd.DataFrame()
                             if not inn_bat_df.empty:
                                 st.markdown("---")
                                 
-                                # イニング内での得点数集計
                                 m_inn_bat = match_bat[match_bat["イニング"] == inn] if not match_bat.empty and "イニング" in match_bat.columns else pd.DataFrame()
                                 if not m_inn_bat.empty and "結果" in m_inn_bat.columns:
                                     inn_runs = int(m_inn_bat["結果"].isin(["得点", "本塁打"]).sum())
@@ -1123,7 +1105,6 @@ def show_team_stats(df_batting, df_pitching):
                                     run_val = int(run) if pd.notna(run) else 0
                                     sb_val = int(sb) if pd.notna(sb) else (1 if "盗塁" in res and "盗塁死" not in res else 0)
 
-                                    # 🌟 「得点」行自体のハイライト表示
                                     if res == "得点":
                                         formatted_res = "<span style='color: #16a34a; font-weight: bold; background-color: #dcfce7; padding: 2px 8px; border-radius: 4px;'>🟢 得点（ホームイン）</span>"
                                     else:
@@ -1165,9 +1146,7 @@ def show_team_stats(df_batting, df_pitching):
                                 table_html += "</tbody></table></div>"
                                 st.markdown(table_html, unsafe_allow_html=True)
 
-                            # --------------------------------------------------
                             # 📍 守備イニングの表示
-                            # --------------------------------------------------
                             inn_pit_df = valid_pitching_df[valid_pitching_df["イニング"] == inn] if not valid_pitching_df.empty and "イニング" in valid_pitching_df.columns else pd.DataFrame()
                             if not inn_pit_df.empty:
                                 st.markdown("---")
@@ -1202,7 +1181,6 @@ def show_team_stats(df_batting, df_pitching):
                                     raw_res = str(row.get('結果', '')).strip()
                                     pos_str = str(row.get('打球方向', '')) or str(row.get('守備位置', ''))
 
-                                    # 🌟 「得点」（守備視点では相手の得点＝失点）行のハイライト表示
                                     if raw_res in ["得点", "本塁打"]:
                                         formatted_pit = "<span style='color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 8px; border-radius: 4px;'>💥 失点（相手ホームイン）</span>"
                                     else:

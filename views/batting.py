@@ -5,9 +5,11 @@ import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 
-from config.settings import ALL_POSITIONS, SPREADSHEET_URL, TARGET_COLUMNS
+from config.settings import ALL_POSITIONS, SPREADSHEET_URL, TARGET_COLUMNS, MY_TEAM
 from utils.players import get_active_players
 from utils.ui import fmt_player_name, render_out_indicator_3, render_scoreboard, show_homerun_effect
+from utils.db import get_connection
+from views.team_sharing import share_match_data_to_opponent
 
 
 # --- ヘルパー関数 ---
@@ -266,19 +268,14 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
                         }
                         updated_df = pd.concat([updated_df, pd.DataFrame([new_row])], ignore_index=True)
 
-            # 23列の不足分を補完
             for col in TARGET_COLUMNS:
                 if col not in updated_df.columns:
                     updated_df[col] = 0 if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"] else ""
 
-            # 23列に固定してデータを抽出
             save_df = updated_df[TARGET_COLUMNS].copy()
 
             try:
-                # ログイン中チームのURLを取得
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
-
-                # 保存先URLに target_url を指定
                 conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
                 st.cache_data.clear()
                 st.success("✅ 責任投手情報を保存しました！")
@@ -459,6 +456,32 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     render_scoreboard(scoreboard_df, today_pitching_df, selected_date_str, match_type, ground_name, opp_team, is_kagura_top)
     
     render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL, key_prefix="batting")
+
+    # ==================================================
+    # 🤝 相手チームへのデータ共有Pop-overボタン（スコアラー限定処置用）
+    # ==================================================
+    with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", use_container_width=True):
+        st.markdown(f"##### 🤝 対戦相手【{opp_team}】へのデータ共有")
+        st.caption("ホストチームとして記録したこの試合のスコア（打撃・投手データ）を反転させ、相手チームのスプレッドシートへ自動登録します。")
+        st.warning("※ 相手チーム側に同じ日付・同じ対戦相手のデータが既に存在する場合は、最新データで上書き更新されます。")
+        
+        if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", use_container_width=True, key=f"share_btn_batting_{selected_date_str}_{opp_team}"):
+            with st.spinner("相手チームのデータベースへ送信中..."):
+                conn_db = get_connection()
+                success, msg = share_match_data_to_opponent(
+                    conn=conn_db,
+                    host_team_name=MY_TEAM,
+                    target_opp=opp_team,
+                    match_date_str=selected_date_str,
+                    match_type=match_type,
+                    match_bat=today_batting_df,
+                    match_pit=today_pitching_df
+                )
+                if success:
+                    st.success(msg)
+                    st.balloons()
+                else:
+                    st.error(msg)
     
     st.divider()
 
@@ -528,6 +551,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         pitch_count_val = st.session_state.get(f"pitch_count_{curr_counter}", 0)
         strike_count_val = st.session_state.get(f"s_count_{curr_counter}", 0)
         ball_count_val = st.session_state.get(f"b_count_{curr_counter}", 0)
+        foul_count_val = st.session_state.get(f"f_count_{curr_counter}", 0)  
         
         final_ground = ground_name or st.session_state.get("ground_name", "")
         final_opp = opp_team or st.session_state.get("opp_team", "")
@@ -859,8 +883,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         elif quick_res == "三重殺": play_outs += 3
             
         for base in ["1b", "2b", "3b"]:
-            if st.session_state.get(f"runner_{base}_res_{curr_counter}") in ["走塁死", "盗塁死", "牽制死"]:
-                play_outs += 1
+            # 併殺打・三重殺の場合は、打席結果で既にアウトが加算されているため走塁死での重複加算を防ぐ
+            if quick_res not in ["併殺打", "三重殺"]:
+                if st.session_state.get(f"runner_{base}_res_{curr_counter}") in ["走塁死", "盗塁死", "牽制死"]:
+                    play_outs += 1
 
         is_change = (existing_outs + play_outs >= 3)
 
@@ -935,9 +961,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             r2_next = "2b" if cur_2b_name else None
             r3_next = "3b" if cur_3b_name else None
 
+            # 併殺打の場合は1塁走者を自動的にアウト（クリア）にする
+            if quick_res == "併殺打":
+                r1_next = None
+
             if cur_1b_name and res_1b:
                 if res_1b in ["盗塁", "進塁1", "進塁"]:
                     r1_next = "2b"
+
                 elif res_1b == "進塁2":
                     r1_next = "3b"
                 elif res_1b in ["得点", "走塁死", "盗塁死", "牽制死"]:
@@ -1068,7 +1099,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     @st.fragment
     def batting_input_fragment():
         curr_counter = st.session_state.get("quick_clear_counter", 0)
-        submitted = st.button("登録実行 (スコアボード反映)", type="primary", use_container_width=True)
+        submitted = st.button("スコア登録実行", type="primary", use_container_width=True)
 
         if st.session_state.get("batting_error_msg"):
             st.error(st.session_state["batting_error_msg"])

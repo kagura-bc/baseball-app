@@ -6,6 +6,7 @@ from config.settings import (
     OFFICIAL_GAME_TYPES,
     SPREADSHEET_URL,
 )
+from views.team_sharing import show_team_sharing_tab, share_match_data_to_opponent
 from streamlit_gsheets import GSheetsConnection
 import streamlit as st
 from utils.db import load_batting_data, load_pitching_data
@@ -353,8 +354,16 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
                 if bb_hbp == 0:
                     bb_hbp = b_stats["bb_hbp"]
 
-            runs = pd.to_numeric(p_sub.get("失点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
-            er = pd.to_numeric(p_sub.get("自責点", 0), errors='coerce').fillna(0).sum() if not p_sub.empty else 0
+            # 「失点」列が存在しないため、「結果」列から「本塁打」と「得点」の件数を集計
+            if not p_sub.empty and "結果" in p_sub.columns:
+                runs = p_sub["結果"].astype(str).isin(["本塁打", "得点"]).sum()
+            else:
+                runs = 0
+            # 「自責点」列からの安全な集計
+            if not p_sub.empty and "自責点" in p_sub.columns:
+                er = pd.to_numeric(p_sub["自責点"], errors='coerce').fillna(0).sum()
+            else:
+                er = 0
 
             pitches = 0
             strikes = 0
@@ -427,8 +436,7 @@ if st.session_state.get("user_role") == "admin":
       " 📊 個人成績",
       " 📈 データ分析",
       " 🔧 データ修正",
-      " 👥 選手管理",
-      " 🤝 チーム間共有（テスト）",
+      " 👥 登録管理",
   ]
 else:
   menu_options = [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析"]
@@ -556,8 +564,14 @@ if page == " 📝 試合データ入力":
         OPPONENTS_LIST if "その他" in OPPONENTS_LIST else OPPONENTS_LIST + ["その他"]
     )
     opp_key = f"main_selected_opp_{selected_date_str}"
-    if opp_key not in st.session_state:
-      st.session_state[opp_key] = res_opp if res_opp else None
+
+    # 🟢 選択値の安全チェック（セッション内の値やres_oppが選択肢に存在しない場合は追加）
+    target_opp_val = st.session_state.get(opp_key) or res_opp
+    if target_opp_val and target_opp_val not in opp_options:
+        opp_options = [target_opp_val] + [opt for opt in opp_options if opt != target_opp_val]
+
+    if opp_key not in st.session_state or st.session_state[opp_key] not in opp_options:
+      st.session_state[opp_key] = res_opp if (res_opp and res_opp in opp_options) else None
 
     order_list = ["先攻 (表)", "後攻 (裏)"]
     order_key = f"main_kagura_order_{selected_date_str}"
@@ -717,11 +731,12 @@ if page == " 📝 試合データ入力":
 
   st.write("")
 
-  tab_batting, tab_pitching, tab_game_pitching, tab_ideal, tab_edit = st.tabs([
+  tab_batting, tab_pitching, tab_game_pitching, tab_ideal, tab_sharing, tab_edit = st.tabs([
       " 🏠 打撃成績入力",
       " 🔥 投手成績入力",
       " 📊 投手成績分析",
       " 🎯 理想オーダー作成",
+      "🤝 データ共有",
       " 🔧 データ修正",
   ])
 
@@ -760,6 +775,9 @@ if page == " 📝 試合データ入力":
   with tab_ideal:
     ideal_order.show_ideal_order_tab(df_batting, df_pitching=df_pitching)
 
+  with tab_sharing:
+    show_team_sharing_tab()
+
   with tab_edit:
     edit_data.show_edit_page(df_batting, df_pitching)
 
@@ -775,8 +793,6 @@ elif page == " 📈 データ分析":
 elif page == " 🔧 データ修正":
   edit_data.show_edit_page(df_batting, df_pitching)
 
-elif page == " 👥 選手管理":
+elif page == " 👥 登録管理":
   player_management.show_player_management()
 
-elif page == " 🤝 チーム間共有（テスト）":
-  team_sharing.show_team_sharing_page()

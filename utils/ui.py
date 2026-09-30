@@ -22,8 +22,11 @@ def fmt_player_name(name, player_numbers_dict):
     return f"{name} ({num})" if num else name
 
 def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_first=True):
+    # 💡 ログイン中チーム名をセッションから取得（未設定時はデフォルト MY_TEAM）
+    my_team_name = st.session_state.get("my_team_name") or st.session_state.get("team_name") or MY_TEAM
+
     st.markdown(f"### 📅 {date_txt} ({m_type}) &nbsp;&nbsp; 🏟️ {g_name}")
-    st.subheader(f"⚾ {MY_TEAM} vs {opp_name}")
+    st.subheader(f"⚾ {my_team_name} vs {opp_name}")
     
     # --- 該当する試合（日付・対戦相手・試合種別）のデータだけに厳密に絞り込む ---
     if not b_df.empty and "日付" in b_df.columns:
@@ -179,13 +182,13 @@ def render_scoreboard(b_df, p_df, date_txt, m_type, g_name, opp_name, is_top_fir
     opp_e = int(pd.to_numeric(b_df["失策"], errors='coerce').fillna(0).sum()) if not b_df.empty and "失策" in b_df.columns else 0
 
     if is_top_first:
-        names = [MY_TEAM, opp_name]
+        names = [my_team_name, opp_name]
         scores = [k_inning, opp_inning]
         R = [int(total_k), int(total_opp)]
         H = [int(k_h), int(opp_h)]
         E = [int(k_e), int(opp_e)]
     else:
-        names = [opp_name, MY_TEAM]
+        names = [opp_name, my_team_name]
         scores = [opp_inning, k_inning]
         R = [int(total_opp), int(total_k)]
         H = [int(opp_h), int(k_h)]

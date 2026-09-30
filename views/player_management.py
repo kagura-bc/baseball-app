@@ -213,6 +213,8 @@ def show_player_management():
     st.divider()
     st.subheader("📋 相手チーム一覧・編集")
 
+    # 💡 column_order=["チーム名"] を指定することで、画面上は「チーム名」のみを表示・編集可能にします。
+    # 既存の「チームID」「管理パスワード」「閲覧パスワード」「スプレッドシートURL」等はDB上に保持されたまま保存されます。
     edited_opp_df = st.data_editor(
         df_opponents,
         num_rows="dynamic",
@@ -221,6 +223,7 @@ def show_player_management():
                 "チーム名", required=True
             ),
         },
+        column_order=["チーム名"],
         use_container_width=True,
         key="opponent_editor",
     )

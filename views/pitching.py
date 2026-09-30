@@ -4,9 +4,11 @@ import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 
-from config.settings import ALL_POSITIONS, SPREADSHEET_URL, TARGET_COLUMNS
+from config.settings import ALL_POSITIONS, SPREADSHEET_URL, TARGET_COLUMNS, MY_TEAM
 from utils.players import get_active_players
 from utils.ui import fmt_player_name, render_scoreboard
+from utils.db import get_connection
+from views.team_sharing import share_match_data_to_opponent
 
 
 # --- 🛠️ ヘルパー関数 ---
@@ -382,6 +384,30 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL)
 
+    # 🤝 相手チームへのデータ共有Pop-overボタン
+    with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", use_container_width=True):
+        st.markdown(f"##### 🤝 対戦相手【{opp_team}】へのデータ共有")
+        st.caption("ホストチームとして記録したこの試合のスコア（打撃・投手データ）を反転させ、相手チームのスプレッドシートへ自動登録します。")
+        st.warning("※ 相手チーム側に同じ日付・同じ対戦相手のデータが既に存在する場合は、最新データで上書き更新されます。")
+        
+        if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", use_container_width=True, key=f"share_btn_pitching_{selected_date_str}_{opp_team}"):
+            with st.spinner("相手チームのデータベースへ送信中..."):
+                conn_db = get_connection()
+                success, msg = share_match_data_to_opponent(
+                    conn=conn_db,
+                    host_team_name=MY_TEAM,
+                    target_opp=opp_team,
+                    match_date_str=selected_date_str,
+                    match_type=match_type,
+                    match_bat=today_batting_df,
+                    match_pit=today_pitching_df
+                )
+                if success:
+                    st.success(msg)
+                    st.balloons()
+                else:
+                    st.error(msg)
+
     if "p_clear_counter" not in st.session_state:
         st.session_state["p_clear_counter"] = 0
 
@@ -503,7 +529,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     # --- 投球入力ヘッダー・カウント入力 ---
     with st.container():
-        submit_detail = st.button("登録実行 (投手成績反映)", type="primary", use_container_width=True, key="submit_pitching_action")
+        submit_detail = st.button("スコア登録実行", type="primary", use_container_width=True, key="submit_pitching_action")
 
         if st.session_state.get("pitching_error_msg"):
             st.error(st.session_state["pitching_error_msg"])
@@ -671,25 +697,51 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
     curr_opp_idx = st.session_state.get("opp_batter_index", 1)
 
     default_opp_players = [f"選手{i}" for i in range(1, 21)]
-    opp_player_options = list(default_opp_players)
+    
+    # ★ 1. まず変数を空リストで初期化します（エラー解消用）
+    opp_player_options = []
 
+    # 2. 相手チーム登録・名簿データからの追加
     if "fetched_opp_players" in st.session_state:
         df_opp_p = st.session_state["fetched_opp_players"]
         p_col_opp = "打者名" if "打者名" in df_opp_p.columns else "選手名"
         if isinstance(df_opp_p, pd.DataFrame) and not df_opp_p.empty and p_col_opp in df_opp_p.columns:
             opp_player_options.extend(df_opp_p[p_col_opp].dropna().astype(str).str.strip().tolist())
 
+    # 3. 連携された「次戦オーダー（スタメン＋控え）」の全選手を自動追加
     if "fetched_opp_order" in st.session_state:
         df_opp_o = st.session_state["fetched_opp_order"]
-        o_col_opp = "打者名" if "打者名" in df_opp_o.columns else "選手名"
-        if isinstance(df_opp_o, pd.DataFrame) and not df_opp_o.empty and o_col_opp in df_opp_o.columns:
-            opp_player_options.extend(df_opp_o[o_col_opp].dropna().astype(str).str.strip().tolist())
+        if isinstance(df_opp_o, pd.DataFrame) and not df_opp_o.empty:
+            o_col_p = "打者名" if "打者名" in df_opp_o.columns else "選手名"
+            if o_col_p in df_opp_o.columns:
+                opp_player_options.extend(df_opp_o[o_col_p].dropna().astype(str).str.strip().tolist())
 
+    # 4. 連携された「ベンチ控え選手」を自動追加
+    opp_bench_list = st.session_state.get("persistent_opp_bench", [])
+    for b_name in opp_bench_list:
+        if b_name and str(b_name) not in ["None", "nan", ""]:
+            opp_player_options.append(str(b_name).strip())
+
+    # 5. 現在のスタメン（1〜9番）に入っている選手を追加
     for k, v in list(st.session_state.items()):
         if k.startswith("opp_sn_") and v and str(v) not in ["None", "nan", "選手"]:
-            opp_player_options.append(str(v))
+            opp_player_options.append(str(v).strip())
 
-    opp_player_options = list(dict.fromkeys([p for p in opp_player_options if p and p not in ["nan", "選手"]]))
+    # デフォルト名（「選手1」〜「選手20」）の判定用セット
+    default_names = {f"選手{i}" for i in range(1, 21)}
+
+    # デフォルト名を除外した「実在の登録選手」のみを抽出
+    real_players = [p for p in opp_player_options if p and p not in default_names and not p.startswith("選手")]
+
+    if real_players:
+        # 登録選手が存在する場合は、登録選手のみを表示
+        opp_player_options = real_players
+    else:
+        # 登録選手が未設定（0名）の場合のみ、デフォルト「選手1〜20」を表示
+        opp_player_options = list(default_opp_players)
+
+    # 重複除去（順序維持）と整形
+    opp_player_options = list(dict.fromkeys([p for p in opp_player_options if p and p not in ["nan", "None", ""]]))
     runner_options = ["なし"] + opp_player_options
 
     st.markdown("##### 🏃 走者状況")
@@ -790,21 +842,44 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
     if "fetched_opp_order" in st.session_state:
         df_opp_o = st.session_state["fetched_opp_order"]
         if isinstance(df_opp_o, pd.DataFrame) and not df_opp_o.empty:
-            if len(df_opp_o) >= 9:
-                st.session_state["opp_batter_count"] = max(st.session_state.get("opp_batter_count", 9), len(df_opp_o))
-            for idx, row in df_opp_o.iterrows():
+            starters_from_order = []
+            bench_from_order = []
+
+            for _, row in df_opp_o.iterrows():
+                order_str = str(row.get("打順", "")).strip()
+                pos_str = str(row.get("守備位置", row.get("位置", "未選択"))).strip()
+                name_str = str(row.get("打者名", row.get("選手名", ""))).strip()
+
+                if name_str and name_str not in ["nan", "None", "", "選手"]:
+                    if order_str == "控え" or pos_str == "控え":
+                        if name_str not in bench_from_order:
+                            bench_from_order.append(name_str)
+                    else:
+                        starters_from_order.append({"name": name_str, "pos": pos_str})
+
+            # スタメンの反映（1〜9番枠）
+            for idx, s in enumerate(starters_from_order):
                 sn_k = f"opp_sn_{idx}"
                 sp_k = f"opp_sp_{idx}"
-                s_name = str(row.get("打者名", row.get("選手名", ""))).strip()
-                s_pos = str(row.get("守備位置", row.get("位置", ""))).strip()
+                pill_sn_k = f"pill_{sn_k}"
+                pill_sp_k = f"pill_{sp_k}"
 
-                if s_name and s_name not in ["nan", "None", "", "選手"]:
-                    cur_val = st.session_state.get(sn_k)
-                    if not cur_val or cur_val in ["選手", ""] or (isinstance(cur_val, str) and cur_val.startswith("選手")):
-                        st.session_state[sn_k] = s_name
-                if s_pos and s_pos not in ["nan", "None", ""]:
-                    if st.session_state.get(sp_k) in [None, "未選択", ""]:
-                        st.session_state[sp_k] = s_pos
+                cur_pos = s["pos"] if s["pos"] in pos_options else "未選択"
+                cur_name = s["name"]
+
+                # 守備位置のセット＆ポップオーバーキー同調
+                st.session_state[sp_k] = cur_pos
+                st.session_state[pill_sp_k] = cur_pos
+
+                # 選手名のセット＆ポップオーバーキー同調
+                st.session_state[sn_k] = cur_name
+                st.session_state[pill_sn_k] = cur_name
+
+            # 控え選手の反映（ベンチリスト＆ウィジェットの同期）
+            if bench_from_order:
+                if "persistent_opp_bench" not in st.session_state or not st.session_state.get("persistent_opp_bench"):
+                    st.session_state["persistent_opp_bench"] = bench_from_order
+                    st.session_state["opp_bench_selection_widget"] = bench_from_order
 
     RES_SHORT_MAP = {
         "本塁打": "本", "三塁打": "三", "二塁打": "二", "単打": "安", "三振": "振",
@@ -815,8 +890,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     opp_history_dict = {}
     if not today_pitching_df.empty:
+        # 非打席イベント（スタメン登録・交代等）の定義
+        non_at_bat_events = ["スタメン", "スタ", "スタメン登録", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "None"]
+        
+        # イニング・結果列から非打席イベントを事前に除外
         detail_df = today_pitching_df[
-            ~today_pitching_df["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"])
+            ~today_pitching_df["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"]) &
+            ~today_pitching_df["結果"].astype(str).str.strip().isin(non_at_bat_events)
         ].copy()
 
         for b_num in range(1, opp_count + 1):
@@ -836,7 +916,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             total_runs = 0
 
             for _, row in rows.iterrows():
-                res = str(row.get("結果", ""))
+                res = str(row.get("結果", "")).strip()
+                
+                # 万が一残っていた非打席イベントをスキップ
+                if res in non_at_bat_events or "スタ" in res:
+                    continue
                 
                 if res in ["本塁打", "得点"]:
                     total_runs += 1
@@ -874,21 +958,38 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
     for i in range(opp_count):
         order_num = i + 1
         pos_key = f"opp_sp_{i}"
+        pill_pos_key = f"pill_{pos_key}"
         name_key = f"opp_sn_{i}"
         pill_name_key = f"pill_{name_key}"
 
+        # --- 守備位置の安全補正 ＆ 同期 ---
         cur_pos = st.session_state.get(pos_key)
         if not cur_pos or cur_pos not in pos_options:
             cur_pos = "未選択"
             st.session_state[pos_key] = "未選択"
+        st.session_state[pill_pos_key] = cur_pos  # ウィジェット用キーも常に同期
 
-        default_name = f"選手{order_num}"
+        # --- 選手名の安全補正 (セッションキー直接検証) ---
         cur_name = st.session_state.get(name_key)
 
-        if not cur_name or cur_name in ["選手", "未選択", "nan", "None", ""] or cur_name not in opp_player_options:
-            cur_name = default_name
-            st.session_state[name_key] = default_name
-            st.session_state[pill_name_key] = default_name
+        # 1. 有効な名前を決定（選択肢内の適切な名前を算出）
+        if not cur_name or cur_name not in opp_player_options:
+            if i < len(opp_player_options):
+                valid_name = opp_player_options[i]  # 打順に応じた選手名
+            elif opp_player_options:
+                valid_name = opp_player_options[0]  # 先頭選手
+            else:
+                valid_name = f"選手{order_num}"
+                opp_player_options.append(valid_name)
+            
+            # セッション変数を直接更新
+            st.session_state[name_key] = valid_name
+            st.session_state[pill_name_key] = valid_name
+            cur_name = valid_name
+
+        # 2. st.pillsのキー(pill_name_key)に無効な旧値("選手1"等)が残っている場合は上書き同調
+        if st.session_state.get(pill_name_key) not in opp_player_options:
+            st.session_state[pill_name_key] = cur_name
 
         is_current = (order_num == curr_opp_idx)
 
@@ -918,7 +1019,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         st.session_state[pos_key] = selected_pos
 
             with c_row[2]:
-                name_btn_label = f"🟢 {cur_name} 🔽" if cur_name != default_name else f"{default_name} 🔽"
+                name_btn_label = f"🟢 {cur_name} 🔽"
                 with st.popover(name_btn_label, use_container_width=True):
                     st.markdown(f"##### {order_num}番 選手を選択")
                     selected_name = st.pills(
@@ -938,11 +1039,15 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     unsafe_allow_html=True,
                 )
 
+    # DH投手用キーの事前同期保護
     dh_player_options = list(dict.fromkeys(["相手投手"] + opp_player_options))
     cur_opp_dh_p = st.session_state.get("opp_sn_dh_pitcher")
     if not cur_opp_dh_p or cur_opp_dh_p not in dh_player_options:
         cur_opp_dh_p = "相手投手"
         st.session_state["opp_sn_dh_pitcher"] = "相手投手"
+        st.session_state["pill_opp_sn_dh_pitcher"] = "相手投手"
+    elif st.session_state.get("pill_opp_sn_dh_pitcher") not in dh_player_options:
+        st.session_state["pill_opp_sn_dh_pitcher"] = cur_opp_dh_p
 
     with st.container(border=True):
         c_dh_row = st.columns([0.8, 2.5, 3.5, 5.2])
@@ -988,6 +1093,21 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 st.rerun()
 
     st.divider()
+    # --- 🚌 ベンチ控え選手のセッション同期処理 ---
+    opp_bench_list = st.session_state.get("persistent_opp_bench", [])
+    valid_opp_bench = [b for b in opp_bench_list if b in opp_player_options]
+
+    # ウィジェットキーが未設定、または空で、連携データが存在する場合に強制同調
+    if "opp_bench_selection_widget" not in st.session_state or (not st.session_state["opp_bench_selection_widget"] and valid_opp_bench):
+        st.session_state["opp_bench_selection_widget"] = valid_opp_bench
+
+    with st.expander(" 🚌 相手チーム ベンチ入りメンバー（控え）", expanded=True):
+        selected_opp_bench = st.multiselect(
+            "相手ベンチメンバー", 
+            options=opp_player_options, 
+            key="opp_bench_selection_widget"
+        )
+        st.session_state["persistent_opp_bench"] = selected_opp_bench
 
     # --- 登録保存処理 ---
     if submit_detail:
@@ -1400,7 +1520,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 r_f = st.session_state.get(f"p_runner_{b_key}_fielder_{curr_counter}", "")
 
                 if r_res:
-                    r_outs = 1 if r_res in ["走塁死", "盗塁死", "牽制死"] else 0
+                    # 投球結果で併殺打(+2)や三重殺(+3)が加算されている場合は走塁死の重複加算を防ぐ
+                    if p_res in ["併殺打", "三重殺"]:
+                        r_outs = 0
+                    else:
+                        r_outs = 1 if r_res in ["走塁死", "盗塁死", "牽制死"] else 0
 
                     fielder_disp = ""
                     if r_f:
@@ -1591,7 +1715,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 today_pitching_df["打順"].notna()
             )
             if "結果" in today_pitching_df.columns:
-                mask_pit = mask_pit & ~today_pitching_df["结果"].astype(str).str.contains(exclude_pattern, na=False)
+                mask_pit = mask_pit & ~today_pitching_df["結果"].astype(str).str.contains(exclude_pattern, na=False)
             valid_pitching_df = today_pitching_df[mask_pit].copy()
 
         raw_inns = list(
