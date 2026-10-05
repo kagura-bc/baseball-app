@@ -288,7 +288,20 @@ def show_personal_stats(df_batting, df_pitching):
                     fld_expanded = fld_expanded[fld_expanded["FielderName"].isin(STATS_PLAYERS)]
 
                     fld_expanded = fld_expanded[~fld_expanded["結果"].astype(str).str.contains("本塁打", na=False)]
-                    fld_expanded["is_error"] = fld_expanded["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
+
+                    # 💡 「エラー野手」列を参照した失策判定ロジック
+                    def check_is_error(row):
+                        res_has_error = any(kw in str(row["結果"]) for kw in ["失策", "暴投", "捕逸"])
+                        if not res_has_error:
+                            return False
+                        
+                        err_player = str(row.get("エラー野手", "")).strip() if "エラー野手" in row.index else ""
+                        if err_player and err_player not in ["nan", "None", ""]:
+                            return row["FielderName"] == err_player
+                        else:
+                            return True
+
+                    fld_expanded["is_error"] = fld_expanded.apply(check_is_error, axis=1)
 
                     fld_unique = fld_expanded.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(is_error=("is_error", "max")).reset_index()
                     saber_f = fld_unique.groupby("FielderName").agg(
@@ -764,7 +777,18 @@ def show_personal_stats(df_batting, df_pitching):
                             my_f = fld_expanded[fld_expanded["FielderName"] == sel_player].copy()
 
                             if not my_f.empty:
-                                my_f["is_error"] = my_f["結果"].astype(str).str.contains("失策|暴投|捕逸", na=False)
+                                # 💡 個人守備成績推移における「エラー野手」列参照ロジック
+                                def check_is_error_my(row):
+                                    res_has_error = any(kw in str(row["結果"]) for kw in ["失策", "暴投", "捕逸"])
+                                    if not res_has_error:
+                                        return False
+                                    err_player = str(row.get("エラー野手", "")).strip() if "エラー野手" in row.index else ""
+                                    if err_player and err_player not in ["nan", "None", ""]:
+                                        return row["FielderName"] == err_player
+                                    else:
+                                        return True
+
+                                my_f["is_error"] = my_f.apply(check_is_error_my, axis=1)
                                 fld_unique = my_f.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(
                                     Year=("Year", "first"), is_error=("is_error", "max")
                                 ).reset_index()
