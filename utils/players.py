@@ -4,26 +4,25 @@ from streamlit_gsheets import GSheetsConnection
 import streamlit as st
 
 
-# 💡 ログイン中のDB URLを動的に取得するヘルパー関数
 def _get_target_url(spreadsheet_url=None):
   return spreadsheet_url or st.session_state.get(
       "my_spreadsheet_url", SPREADSHEET_URL
   )
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def _load_players_df(spreadsheet_url=None):
   target_url = _get_target_url(spreadsheet_url)
-  conn = st.connection("gsheets", type=GSheetsConnection)
   try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
     df = conn.read(spreadsheet=target_url, worksheet="選手登録", ttl=0)
-    if df.empty:
+    if df is None or df.empty:
       return pd.DataFrame(
           columns=["選手名", "背番号", "成績非表示", "オーダー非表示"]
       )
     return df
-  except Exception as e:
-    st.error(f"選手情報の読み込みに失敗しました: {e}")
+  except Exception:
+    # 💡 エラーメッセージを出さずに空のDataFrameを返す
     return pd.DataFrame(
         columns=["選手名", "背番号", "成績非表示", "オーダー非表示"]
     )
@@ -90,7 +89,7 @@ def get_active_players(spreadsheet_url=None):
   return _extract_lists(df)
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_stats_active_players(spreadsheet_url=None):
   df = _load_players_df(spreadsheet_url=spreadsheet_url)
   if df.empty or "選手名" not in df.columns:

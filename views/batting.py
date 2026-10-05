@@ -288,6 +288,57 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
 # ==========================================
 # メイン表示関数
 # ==========================================
+# --- 直近の打撃スコア登録を取り消す（Undo）関数 ---
+def undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type, ws_batting, conn, cache_key):
+    target_date_str = pd.to_datetime(selected_date_str, errors='coerce').strftime('%Y-%m-%d')
+    if "日付" in df_batting.columns:
+        df_batting_copy = df_batting.copy()
+        df_batting_copy["_date_str"] = pd.to_datetime(df_batting_copy["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+        today_bat = df_batting_copy[
+            (df_batting_copy["_date_str"] == target_date_str) & 
+            (df_batting_copy["対戦相手"].astype(str).str.strip() == str(opp_team).strip()) & 
+            (df_batting_copy["試合種別"].astype(str).str.strip() == str(match_type).strip())
+        ]
+    else:
+        today_bat = pd.DataFrame()
+
+    if today_bat.empty:
+        st.warning("⚠️ 取り消し可能な本日のスコア登録データがありません。")
+        return
+
+    last_ids = st.session_state.get("last_added_ids_batting", [])
+    if not last_ids:
+        max_id = pd.to_numeric(today_bat["ID"], errors="coerce").max()
+        if pd.notna(max_id):
+            last_ids = [int(max_id)]
+
+    if not last_ids:
+        st.warning("⚠️ 取り消し対象のデータが見つかりませんでした。")
+        return
+
+    ids_to_remove = [str(i) for i in last_ids]
+    df_filtered = df_batting[~df_batting["ID"].astype(str).isin(ids_to_remove)].copy()
+    
+    if "_date_str" in df_filtered.columns:
+        df_filtered = df_filtered.drop(columns=["_date_str"])
+
+    for col in TARGET_COLUMNS:
+        if col not in df_filtered.columns:
+            df_filtered[col] = 0 if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"] else ""
+
+    df_to_save = df_filtered[TARGET_COLUMNS].copy()
+
+    try:
+        target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
+        conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
+        st.session_state[cache_key] = df_filtered
+        st.session_state.pop("last_added_ids_batting", None)
+        st.success("✅ 直近のスコア登録を取り消しました！")
+        time.sleep(0.5)
+        st.rerun()
+    except Exception as e:
+        st.error(f"取り消しに失敗しました: {e}")
+
 def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
@@ -1013,9 +1064,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         if rows_to_add:
             current_max_id = int(pd.to_numeric(df_batting["ID"], errors="coerce").fillna(0).max()) if not df_batting.empty and "ID" in df_batting.columns else 0
+            added_ids = []
             for r in rows_to_add:
                 current_max_id += 1
                 r["ID"] = current_max_id
+                added_ids.append(current_max_id)
 
             new_df_to_append = pd.DataFrame(rows_to_add)
             updated_full_df = pd.concat([df_batting, new_df_to_append], ignore_index=True)
@@ -1030,6 +1083,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                 conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
                 st.session_state[cache_key] = updated_full_df
+                st.session_state["last_added_ids_batting"] = added_ids
                 
                 next_counter = curr_counter + 1
                 st.session_state["quick_clear_counter"] = next_counter
@@ -1099,7 +1153,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     @st.fragment
     def batting_input_fragment():
         curr_counter = st.session_state.get("quick_clear_counter", 0)
-        submitted = st.button("スコア登録実行", type="primary", use_container_width=True)
+        
+        c_sub1, c_sub2 = st.columns([3, 2])
+        with c_sub1:
+            submitted = st.button("スコア登録実行", type="primary", use_container_width=True)
+        with c_sub2:
+            undo_submitted = st.button("↺ 直近の登録を取り消す", type="secondary", use_container_width=True, help="直前に登録した打撃スコアデータを取り消して登録前の状態に戻します")
+
+        if undo_submitted:
+            undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type, ws_batting, conn, cache_key)
 
         if st.session_state.get("batting_error_msg"):
             st.error(st.session_state["batting_error_msg"])

@@ -7,21 +7,19 @@ from streamlit_option_menu import option_menu
 
 # 各ページ（View）の読み込み
 from views import batting, pitching, team_stats, personal_stats, edit_data, analysis
+from views.league_stats import show_league_stats
 
-# 1. GitHub上の実際のファイル名 (logo-192.png) に合わせる
 ICON_URL = "https://raw.githubusercontent.com/kagura-bc/baseball-app/main/static/logo-192.png?v=3"
 
-# 2. set_page_config の設定 (必ず一番最初に記述)
 st.set_page_config(
     page_title="KAGUSTA",
     page_icon=ICON_URL,
     layout="wide"
 )
 
-# 3. Apple用アイコンの設定
 st.markdown(f'<link rel="apple-touch-icon" href="{ICON_URL}">', unsafe_allow_html=True)
 
-load_css() # CSS読み込み
+load_css()
 
 # ==========================================
 # 🔐 ログイン機能の実装
@@ -34,7 +32,6 @@ def show_login_screen():
     with center:
         st.write("")
         st.write("")
-        # ロゴのみを中央配置
         st.markdown(f"""
 <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px;">
     <img src="{ICON_URL}" style="width: 350px; height: 350px; object-fit: contain;">
@@ -77,8 +74,8 @@ with col_logout:
 # ==========================================
 page = option_menu(
     menu_title=None,  
-    options=["チーム成績", "個人成績", "データ分析"], 
-    icons=["trophy", "person-lines-fill", "graph-up"], 
+    options=["チーム成績", "個人成績", "データ分析", "🌐 リーグ戦績"], 
+    icons=["trophy", "person-lines-fill", "graph-up", "globe"], 
     default_index=0,  
     orientation="horizontal",  
     styles={
@@ -96,3 +93,5 @@ elif page == "個人成績":
     personal_stats.show_personal_stats(df_batting, df_pitching)
 elif page == "データ分析":
     analysis.show_analysis_page(df_batting, df_pitching)
+elif page == "リーグ戦績":
+    show_league_stats()

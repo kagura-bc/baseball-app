@@ -361,6 +361,56 @@ def render_game_result_popover(
 
 
 # --- メインページ表示関数 ---
+# --- 直近の投手スコア登録を取り消す（Undo）関数 ---
+def undo_last_pitching_entry(df_pitching, selected_date_str, opp_team, match_type, ws_pitching, conn):
+    target_date_str = pd.to_datetime(selected_date_str, errors='coerce').strftime('%Y-%m-%d')
+    if "日付" in df_pitching.columns:
+        df_pitching_copy = df_pitching.copy()
+        df_pitching_copy["_date_str"] = pd.to_datetime(df_pitching_copy["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
+        today_pit = df_pitching_copy[
+            (df_pitching_copy["_date_str"] == target_date_str) & 
+            (df_pitching_copy["対戦相手"].astype(str).str.strip() == str(opp_team).strip()) & 
+            (df_pitching_copy["試合種別"].astype(str).str.strip() == str(match_type).strip())
+        ]
+    else:
+        today_pit = pd.DataFrame()
+
+    if today_pit.empty:
+        st.warning("⚠️ 取り消し可能な本日の投手スコア登録データがありません。")
+        return
+
+    last_ids = st.session_state.get("last_added_ids_pitching", [])
+    if not last_ids:
+        max_id = pd.to_numeric(today_pit["ID"], errors="coerce").max()
+        if pd.notna(max_id):
+            last_ids = [int(max_id)]
+
+    if not last_ids:
+        st.warning("⚠️ 取り消し対象のデータが見つかりませんでした。")
+        return
+
+    ids_to_remove = [str(i) for i in last_ids]
+    df_filtered = df_pitching[~df_pitching["ID"].astype(str).isin(ids_to_remove)].copy()
+    
+    if "_date_str" in df_filtered.columns:
+        df_filtered = df_filtered.drop(columns=["_date_str"])
+
+    for col in TARGET_COLUMNS:
+        if col not in df_filtered.columns:
+            df_filtered[col] = 0 if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"] else ""
+
+    df_to_save = df_filtered[TARGET_COLUMNS].copy()
+
+    try:
+        target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
+        conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=df_to_save)
+        st.cache_data.clear()
+        st.session_state.pop("last_added_ids_pitching", None)
+        st.success("✅ 直近のスコア登録を取り消しました！")
+        time.sleep(0.5)
+        st.rerun()
+    except Exception as e:
+        st.error(f"取り消しに失敗しました: {e}")
 
 def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, selected_date_str: str, match_type: str, ground_name: str, opp_team: str, kagura_order: str):
     ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
@@ -527,9 +577,72 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         except ValueError:
             pass
 
-    # --- 投球入力ヘッダー・カウント入力 ---
+   # --- 1. 打順・オフセットの事前計算 ---
+    if "opp_batter_offset" not in st.session_state:
+        st.session_state["opp_batter_offset"] = 0
+
+    PA_RESULTS_PITCHING = [
+        "凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打",
+        "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "三重殺", "振り逃げ三振",
+        "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害"
+    ]
+
+    active_opp_orders = 9
+    opp_display_count = st.session_state.get("opp_batter_count", 9)
+    for idx_check in range(opp_display_count - 1, -1, -1):
+        if st.session_state.get(f"opp_sn_{idx_check}"):
+            active_opp_orders = idx_check + 1
+            break
+
+    if not today_pitching_df.empty and "結果" in today_pitching_df.columns:
+        valid_opp_pa = today_pitching_df[today_pitching_df["結果"].astype(str).isin(PA_RESULTS_PITCHING)]
+        total_opp_pa = len(valid_opp_pa)
+    else:
+        total_opp_pa = 0
+
+    current_opp_batter_index = (total_opp_pa + st.session_state.get("opp_batter_offset", 0)) % active_opp_orders
+    current_opp_order_num = current_opp_batter_index + 1
+
+    raw_opp_batter = st.session_state.get(f"opp_sn_{current_opp_batter_index}", "")
+    if raw_opp_batter and str(raw_opp_batter).strip() not in ["None", "nan", "", "未選択", f"選手{current_opp_order_num}"]:
+        formatted_opp_batter_name = str(raw_opp_batter).strip()
+    else:
+        formatted_opp_batter_name = "（未設定）"
+
+    st.divider()
+
+    # --- 2. 📍 打順調整 (オフセット) ボタン（batting.py と同じ登録ボタンの上の位置） ---
+    col_adj1, col_adj2, col_adj3, col_adj4 = st.columns([2.5, 1.0, 1.0, 1.0])
+    with col_adj1:
+        st.markdown(
+            f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>📍 打順調整 (オフセット: {st.session_state.get('opp_batter_offset', 0)})</div>",
+            unsafe_allow_html=True,
+        )
+    with col_adj2:
+        if st.button("◀ 前へ", key="btn_opp_offset_prev", use_container_width=True):
+            st.session_state["opp_batter_offset"] = st.session_state.get("opp_batter_offset", 0) - 1
+            st.rerun()
+    with col_adj3:
+        if st.button("リセット", key="btn_opp_offset_reset", use_container_width=True):
+            st.session_state["opp_batter_offset"] = 0
+            st.rerun()
+    with col_adj4:
+        if st.button("次へ ▶", key="btn_opp_offset_next", use_container_width=True):
+            st.session_state["opp_batter_offset"] = st.session_state.get("opp_batter_offset", 0) + 1
+            st.rerun()
+
+    st.divider()
+
+    # --- 3. 投球入力ヘッダー・カウント入力 ---
     with st.container():
-        submit_detail = st.button("スコア登録実行", type="primary", use_container_width=True, key="submit_pitching_action")
+        c_sub1, c_sub2 = st.columns([3, 2])
+        with c_sub1:
+            submit_detail = st.button("スコア登録実行", type="primary", use_container_width=True, key="submit_pitching_action")
+        with c_sub2:
+            undo_submit_detail = st.button("↺ 直近の登録を取り消す", type="secondary", use_container_width=True, key="undo_pitching_action", help="直前に登録した投手スコアデータを取り消して登録前の状態に戻します")
+
+        if undo_submit_detail:
+            undo_last_pitching_entry(df_pitching, selected_date_str, opp_team, match_type, ws_pitching, conn)
 
         if st.session_state.get("pitching_error_msg"):
             st.error(st.session_state["pitching_error_msg"])
@@ -616,33 +729,24 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     st.divider()
 
-    # --- 打順・結果選択 ---
-    c_mid1, c_mid2, c_mid3 = st.columns([1.0, 1.0, 3.5])
-    with c_mid1:
-        st.session_state["opp_batter_count"] = st.number_input(
-            "相手打順人数", 1, 20, value=st.session_state["opp_batter_count"]
-        )
-    with c_mid2:
-        st.session_state["opp_batter_index"] = st.number_input(
-            "現在の打順", 1, st.session_state["opp_batter_count"], value=st.session_state["opp_batter_index"]
-        )
+    # --- 4. 📍 打順表示ヘッダー & 投球結果選択 ---
+    q_cols = [4.0, 5.0]
+    qc = st.columns(q_cols)
 
-    with c_mid3:
-        st.markdown("<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>投球結果</div>", unsafe_allow_html=True)
+    with qc[0]:
+        st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 0px 12px; border-radius: 8px; border-left: 8px solid #ff4b4b; height: 50px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; box-sizing: border-box;">
+            <span style="color: #555; font-weight: bold; white-space: nowrap;">📍 打順</span>
+            <span style="color: #111; font-weight: bold; white-space: nowrap;">{current_opp_order_num}番</span>
+            <span style="color: #ff4b4b; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatted_opp_batter_name}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with qc[1]:
         current_res = st.session_state.get(f"pitching_quick_sr_{curr_counter}")
         current_dirs = st.session_state.get(f"pitching_quick_sd_{curr_counter}", [])
         current_ef = st.session_state.get(f"pitching_quick_ef_{curr_counter}")
-
         current_rbi = st.session_state.get(f"pitching_quick_si_{curr_counter}")
-        
-        r3_res_val = st.session_state.get(f"p_runner_3b_res_{curr_counter}")
-        r1_is_run = (st.session_state.get(f"p_runner_1b_res_{curr_counter}") == "得点")
-        r2_is_run = (st.session_state.get(f"p_runner_2b_res_{curr_counter}") == "得点")
-        r3_is_run = (r3_res_val == "得点" or r3_res_val == "盗塁")
-        is_hr = (current_res == "本塁打")
-
-        p_run = (1 if r1_is_run else 0) + (1 if r2_is_run else 0) + (1 if r3_is_run else 0) + (1 if is_hr else 0)
-
         current_er = st.session_state.get(f"pitching_quick_er_{curr_counter}")
         er_val = current_er if current_er is not None else 0
 
@@ -670,7 +774,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             st.pills("打球方向", dir_options, selection_mode="multi", key=f"pitching_quick_sd_{curr_counter}", label_visibility="collapsed")
 
             st.markdown("---")
-            st.markdown("##### ⚠️ エラー野手を選択（エラー発生時）")
+            st.markdown("##### ⚠️️ エラー野手を選択（エラー発生時）")
             ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
             st.pills("エラー野手", ef_options, key=f"pitching_quick_ef_{curr_counter}", label_visibility="collapsed")
 
@@ -1566,9 +1670,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
             if records_to_save:
                 current_max_id = int(pd.to_numeric(df_pitching["ID"], errors="coerce").fillna(0).max()) if not df_pitching.empty and "ID" in df_pitching.columns else 0
+                added_p_ids = []
                 for rec in records_to_save:
                     current_max_id += 1
                     rec["ID"] = current_max_id
+                    added_p_ids.append(current_max_id)
 
                 updated_p_df = pd.concat([df_pitching, pd.DataFrame(records_to_save)], ignore_index=True)
 
@@ -1580,6 +1686,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                 conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
                 st.cache_data.clear()
+                st.session_state["last_added_ids_pitching"] = added_p_ids
 
             non_batter_events = ["盗塁", "盗塁死", "牽制死", "暴投", "捕逸", "ボーク", "走塁死"]
             if p_res and p_res not in non_batter_events:

@@ -7,8 +7,10 @@ from config.settings import (
     SPREADSHEET_URL,
 )
 from views.team_sharing import show_team_sharing_tab, share_match_data_to_opponent
+from views.league_stats import show_league_stats  # 💡 リーグ戦績の追加インポート
 from streamlit_gsheets import GSheetsConnection
 import streamlit as st
+from streamlit_option_menu import option_menu
 from utils.db import load_batting_data, load_pitching_data
 from utils.players import get_active_players
 from utils.ui import fmt_player_name, load_css
@@ -117,7 +119,6 @@ def show_login_screen():
                 "チーム名", input_team_id
             )
 
-            # --- 修正後（安全装置つき） ---
             url_col = next(
                 (
                     c
@@ -129,11 +130,9 @@ def show_login_screen():
             
             target_url = target_row.get(url_col) if url_col else None
             
-            # URLが設定されている場合のみ割り当て
             if pd.notna(target_url) and str(target_url).strip() != "":
                 st.session_state["my_spreadsheet_url"] = str(target_url).strip()
             else:
-                # kagura 以外でURL未設定の場合は警告を出してストップ（カグラ本番DBへの上書きを防止）
                 if input_team_id != "kagura":
                     st.error("⚠️ このチームIDには専用のスプレッドシートURLが設定されていません。管理者に確認してください。")
                     st.stop()
@@ -215,15 +214,12 @@ def safe_index(lst, val):
     return 0
 
 
-# 🔹 集計用ヘルパー関数
 def calc_pitching_stats_from_results(p_sub: pd.DataFrame):
-    """結果列からアウト数、被安打、奪三振、四死球を正確に集計する"""
     if p_sub.empty or "結果" not in p_sub.columns:
         return {"outs": 0, "hits": 0, "so": 0, "bb_hbp": 0}
 
     res_s = p_sub["結果"].astype(str).str.strip()
 
-    # 1. アウト数の計算（「野選」を除外）
     single_out_list = [
         "三振", "凡退(ゴロ)", "凡退(フライ)", "ゴロ", "フライ", "ライナー",
         "犠打(ゴロ)", "犠打(フライ)", "犠打", "犠飛",
@@ -234,21 +230,13 @@ def calc_pitching_stats_from_results(p_sub: pd.DataFrame):
     t_outs = len(p_sub[res_s == "三重殺"]) * 3
     total_outs = s_outs + d_outs + t_outs
 
-    # 2. 被安打の計算
     hits = len(p_sub[res_s.isin(["単打", "二塁打", "三塁打", "本塁打", "安打"])])
-
-    # 3. 奪三振の計算
     so = len(p_sub[res_s.isin(["三振", "振り逃げ三振"])])
-
-    # 4. 四死球の計算
     bb_hbp = len(p_sub[res_s.isin(["四球", "死球", "四死球"])])
 
     return {"outs": total_outs, "hits": hits, "so": so, "bb_hbp": bb_hbp}
 
 
-# ==========================================
-# 📊 当日投手成績・球数分析表示用ヘルパー関数
-# ==========================================
 def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, match_type, opp_team, all_players):
     st.markdown("#### 📊 投手成績分析")
 
@@ -276,7 +264,6 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
         st.info("本日の試合データがまだ登録されていません。")
         return
 
-    # ★ 名前の表記揺れ（全半角スペース・背番号表記）を正規化する関数
     def clean_name(n):
         return re.sub(r'[\s ]+', '', str(n)).split("(")[0].strip()
 
@@ -290,7 +277,6 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
     if not today_b_df.empty and "投手名" in today_b_df.columns:
         b_pitchers = [p for p in today_b_df["投手名"].dropna().astype(str).tolist() if clean_name(p) not in ["", "nan", "None", "不明"]]
 
-    # 重複除去（正規化名で一意化）
     all_pitcher_names = []
     seen_clean = set()
     for p in (p_pitchers + b_pitchers):
@@ -323,26 +309,22 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
         for p_name in pitcher_list:
             c_p_name = clean_name(p_name)
             
-            # 投手シートデータ抽出
             if not today_p_df.empty and "投手名" in today_p_df.columns:
                 p_sub = today_p_df[today_p_df["投手名"].astype(str).apply(clean_name) == c_p_name]
             else:
                 p_sub = pd.DataFrame()
 
-            # 1. 投手シート側からの集計（完全一致・野選除外）
             stats = calc_pitching_stats_from_results(p_sub)
             outs = stats["outs"]
             hits = stats["hits"]
             so = stats["so"]
             bb_hbp = stats["bb_hbp"]
 
-            # 2. 打撃シート(today_b_df)側に相手投手としての記録がある場合
             if not today_b_df.empty and "投手名" in today_b_df.columns:
                 b_sub = today_b_df[today_b_df["投手名"].astype(str).apply(clean_name) == c_p_name]
             else:
                 b_sub = pd.DataFrame()
 
-            # 相手投手などで投手シートに記録がない（または補完が必要な）場合
             if not b_sub.empty and "結果" in b_sub.columns:
                 b_stats = calc_pitching_stats_from_results(b_sub)
                 if outs == 0:
@@ -354,12 +336,10 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
                 if bb_hbp == 0:
                     bb_hbp = b_stats["bb_hbp"]
 
-            # 「失点」列が存在しないため、「結果」列から「本塁打」と「得点」の件数を集計
             if not p_sub.empty and "結果" in p_sub.columns:
                 runs = p_sub["結果"].astype(str).isin(["本塁打", "得点"]).sum()
             else:
                 runs = 0
-            # 「自責点」列からの安全な集計
             if not p_sub.empty and "自責点" in p_sub.columns:
                 er = pd.to_numeric(p_sub["自責点"], errors='coerce').fillna(0).sum()
             else:
@@ -379,7 +359,6 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
                 strikes += pd.to_numeric(p_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
                 balls += pd.to_numeric(p_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
 
-            # 投球回の表記（21アウト -> 7.0回）
             inn_full = int(outs // 3)
             inn_rem = int(outs % 3)
             inn_str = f"{inn_full}" if inn_rem == 0 else f"{inn_full}.{inn_rem}"
@@ -425,32 +404,45 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
 
 
 # ==========================================
-# 🧭 ナビゲーション
+# ✨ ヘッダーエリア
 # ==========================================
-st.sidebar.markdown(f"### ⚾️ {st.session_state.get('my_team_name', 'KAGUSTA')}")
+col_title, col_space, col_logout = st.columns([3, 1, 1])
+with col_title:
+    st.markdown(f"### ⚾️ {st.session_state.get('my_team_name', 'KAGUSTA')}")
+with col_logout:
+    if st.button("🚪 ログアウト", key="logout_btn", use_container_width=True):
+        st.session_state["is_logged_in"] = False
+        st.rerun()
 
+# ==========================================
+# 🧭 ナビゲーション（上部横並びタブ）
+# ==========================================
+# 💡 「🌐 リーグ戦績」を追加
 if st.session_state.get("user_role") == "admin":
-  menu_options = [
-      " 📝 試合データ入力",
-      " 🏆 チーム成績",
-      " 📊 個人成績",
-      " 📈 データ分析",
-      " 🔧 データ修正",
-      " 👥 登録管理",
-  ]
+    menu_options = ["試合データ入力", "チーム成績", "個人成績", "データ分析", "リーグ戦績", "データ修正", "登録管理"]
+    menu_icons = ["pencil-square", "trophy", "person-lines-fill", "graph-up", "globe", "wrench", "people"]
 else:
-  menu_options = [" 🏆 チーム成績", " 📊 個人成績", " 📈 データ分析"]
+    menu_options = ["チーム成績", "個人成績", "データ分析", "リーグ戦績"]
+    menu_icons = ["trophy", "person-lines-fill", "graph-up", "globe"]
 
-page = st.sidebar.radio("メニュー", menu_options)
-
-if st.sidebar.button("🚪 ログアウト", use_container_width=True):
-  st.session_state["is_logged_in"] = False
-  st.rerun()
+page = option_menu(
+    menu_title=None,
+    options=menu_options,
+    icons=menu_icons,
+    default_index=0,
+    orientation="horizontal",
+    styles={
+        "container": {"padding": "0!important", "background-color": "#fafafa", "border-radius": "10px", "margin-bottom": "20px"},
+        "icon": {"color": "#333", "font-size": "18px"},
+        "nav-link": {"font-size": "15px", "text-align": "center", "margin": "0px", "--hover-color": "#eee"},
+        "nav-link-selected": {"background-color": "#ff4b4b", "color": "white"},
+    }
+)
 
 # ==========================================
 # 💻 メイン画面の表示制御
 # ==========================================
-if page == " 📝 試合データ入力":
+if page == "試合データ入力":
 
   st.markdown("### 📝 試合データ入力")
 
@@ -537,7 +529,6 @@ if page == " 📝 試合データ入力":
     p_list = ALL_PLAYERS
     scorer_key = "scorer_name_ui"
     
-    # 🌟選択肢リスト (p_list) に存在する文字列に変換・検証するロジック
     target_scorer_val = st.session_state.get(scorer_key) or res_scorer
     matched_scorer = None
     if target_scorer_val:
@@ -565,7 +556,6 @@ if page == " 📝 試合データ入力":
     )
     opp_key = f"main_selected_opp_{selected_date_str}"
 
-    # 🟢 選択値の安全チェック（セッション内の値やres_oppが選択肢に存在しない場合は追加）
     target_opp_val = st.session_state.get(opp_key) or res_opp
     if target_opp_val and target_opp_val not in opp_options:
         opp_options = [target_opp_val] + [opt for opt in opp_options if opt != target_opp_val]
@@ -781,18 +771,20 @@ if page == " 📝 試合データ入力":
   with tab_edit:
     edit_data.show_edit_page(df_batting, df_pitching)
 
-elif page == " 🏆 チーム成績":
+elif page == "チーム成績":
   team_stats.show_team_stats(df_batting, df_pitching)
 
-elif page == " 📊 個人成績":
+elif page == "個人成績":
   personal_stats.show_personal_stats(df_batting, df_pitching)
 
-elif page == " 📈 データ分析":
+elif page == "データ分析":
   analysis.show_analysis_page(df_batting, df_pitching)
 
-elif page == " 🔧 データ修正":
+elif page == "リーグ戦績":
+  show_league_stats()
+
+elif page == "データ修正":
   edit_data.show_edit_page(df_batting, df_pitching)
 
-elif page == " 👥 登録管理":
+elif page == "登録管理":
   player_management.show_player_management()
-
