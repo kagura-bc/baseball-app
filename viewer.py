@@ -74,7 +74,7 @@ with col_logout:
 # ==========================================
 page = option_menu(
     menu_title=None,  
-    options=["チーム成績", "個人成績", "データ分析", "🌐 リーグ戦績"], 
+    options=["チーム成績", "個人成績", "データ分析", "リーグ戦績"], 
     icons=["trophy", "person-lines-fill", "graph-up", "globe"], 
     default_index=0,  
     orientation="horizontal",  
