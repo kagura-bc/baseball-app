@@ -144,6 +144,7 @@ def show_personal_stats(df_batting, df_pitching):
         df_p_calc["is_p_walk"] = df_p_calc["結果"].isin(["四球"]).astype(int)
         df_p_calc["is_p_hbp"] = df_p_calc["結果"].isin(["死球"]).astype(int)
         df_p_calc["is_p_hr"] = df_p_calc["結果"].isin(["本塁打"]).astype(int)
+        df_p_calc["is_wp"] = df_p_calc["結果"].astype(str).str.contains("暴投", na=False).astype(int)
 
         temp_hit = df_p_calc["結果"].isin(["安打", "単打", "二塁打", "三塁打", "本塁打"]).astype(int)
         df_p_calc["被安打"] = df_p_calc[["被安打"]].assign(flag=temp_hit).max(axis=1)
@@ -161,32 +162,34 @@ def show_personal_stats(df_batting, df_pitching):
 
         return df.groupby(group_keys).agg(agg_dict).reset_index()
 
+    # 💡 枠線（カード表示）でランキングを出力
     def show_top10(title, df, sort_col, label_col, value_col, ascending=False, suffix="", format_float=False):
-        st.markdown(f"**{title}**")
-        if df.empty or sort_col not in df.columns or value_col not in df.columns or label_col not in df.columns:
-            st.caption("データなし")
-            return
+        with st.container(border=True):
+            st.markdown(f"##### {title}")
+            if df.empty or sort_col not in df.columns or value_col not in df.columns or label_col not in df.columns:
+                st.caption("データなし")
+                return
 
-        if ascending:
-            target = df.copy()
-        else:
-            target = df[df[value_col] > 0].copy()
-
-        if target.empty:
-            st.caption("データなし")
-            return
-
-        top10 = target.sort_values(sort_col, ascending=ascending).head(10).reset_index(drop=True)
-
-        for i, row in top10.iterrows():
-            rank = i + 1
-            icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"{rank}."
-            val = row[value_col]
-            if format_float:
-                val_str = f"{val:.3f}" if title in ["打率", "OPS", "出塁率", "長打率"] else f"{val:.2f}"
+            if ascending:
+                target = df.copy()
             else:
-                val_str = f"{int(val)}"
-            st.write(f"{icon} **{row[label_col]}** : {val_str}{suffix}")
+                target = df[df[value_col] > 0].copy()
+
+            if target.empty:
+                st.caption("データなし")
+                return
+
+            top10 = target.sort_values(sort_col, ascending=ascending).head(10).reset_index(drop=True)
+
+            for i, row in top10.iterrows():
+                rank = i + 1
+                icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"**{rank}.**"
+                val = row[value_col]
+                if format_float:
+                    val_str = f"{val:.3f}" if title in ["打率", "OPS", "出塁率", "長打率"] else f"{val:.2f}"
+                else:
+                    val_str = f"{int(val)}"
+                st.markdown(f"{icon} **{row[label_col]}** : **{val_str}**{suffix}")
 
     agg_rules_b = {
         "is_hit": "sum", "is_ab": "sum", "is_hr": "sum", "is_so": "sum",
@@ -197,7 +200,8 @@ def show_personal_stats(df_batting, df_pitching):
     agg_rules_p = {
         "アウト数": "sum", "自責点": "sum", "失点": "sum",
         "is_win": "sum", "is_lose": "sum", "被安打": "sum", "is_p_hr": "sum",
-        "total_bb": "sum", "is_p_walk": "sum", "is_p_hbp": "sum", "is_so": "sum", "奪三振": "sum"
+        "total_bb": "sum", "is_p_walk": "sum", "is_p_hbp": "sum", "is_so": "sum", "奪三振": "sum",
+        "is_wp": "sum"
     }
 
     t_total, t_year, t_rank_rec = st.tabs(["総合成績・ポイント", "個人年度別", "ランキング・歴代記録"])
@@ -289,31 +293,60 @@ def show_personal_stats(df_batting, df_pitching):
 
                     fld_expanded = fld_expanded[~fld_expanded["結果"].astype(str).str.contains("本塁打", na=False)]
 
-                    # 💡 「エラー野手」列を参照した失策判定ロジック
-                    def check_is_error(row):
-                        res_has_error = any(kw in str(row["結果"]) for kw in ["失策", "暴投", "捕逸"])
-                        if not res_has_error:
-                            return False
+                    # 失策・暴投・捕逸の個別の判定関数
+                    def check_fld_events(row):
+                        res_str = str(row["結果"])
+                        has_err = "失策" in res_str
+                        has_wp = "暴投" in res_str
+                        has_pb = "捕逸" in res_str
                         
                         err_player = str(row.get("エラー野手", "")).strip() if "エラー野手" in row.index else ""
-                        if err_player and err_player not in ["nan", "None", ""]:
-                            return row["FielderName"] == err_player
-                        else:
-                            return True
 
-                    fld_expanded["is_error"] = fld_expanded.apply(check_is_error, axis=1)
+                        is_error = False
+                        if has_err:
+                            if err_player and err_player not in ["nan", "None", ""]:
+                                is_error = (row["FielderName"] == err_player)
+                            else:
+                                is_error = True
 
-                    fld_unique = fld_expanded.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(is_error=("is_error", "max")).reset_index()
+                        is_wp = False
+                        if has_wp:
+                            if err_player and err_player not in ["nan", "None", ""]:
+                                is_wp = (row["FielderName"] == err_player)
+                            else:
+                                is_wp = True
+
+                        is_pb = False
+                        if has_pb:
+                            if err_player and err_player not in ["nan", "None", ""]:
+                                is_pb = (row["FielderName"] == err_player)
+                            else:
+                                is_pb = True
+
+                        return pd.Series([is_error, is_wp, is_pb], index=["is_error", "is_wp", "is_pb"])
+
+                    fld_expanded[["is_error", "is_wp", "is_pb"]] = fld_expanded.apply(check_fld_events, axis=1)
+
+                    fld_unique = fld_expanded.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(
+                        is_error=("is_error", "max"),
+                        is_wp=("is_wp", "max"),
+                        is_pb=("is_pb", "max")
+                    ).reset_index()
+
                     saber_f = fld_unique.groupby("FielderName").agg(
                         守備機会=("FielderName", "count"),
                         失策数=("is_error", "sum"),
+                        捕逸数=("is_pb", "sum"),
+                        暴投数=("is_wp", "sum"),
                         捕手守備機会=("FielderPos", lambda x: (x == "捕").sum())
                     ).reset_index().rename(columns={"FielderName": "選手名"})
 
-                    saber_f["守備率"] = saber_f.apply(lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 1.0, axis=1)
+                    saber_f["守備率"] = saber_f.apply(
+                        lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 1.0, axis=1
+                    )
 
                     saber_f["Defense_Score"] = saber_f.apply(
-                        lambda r: max(0.0, (r["守備機会"] - r["失策数"]) * 1.0 + r["捕手守備機会"] * 0.5 - r["失策数"] * 2.0),
+                        lambda r: max(0.0, (r["守備機会"] - r["失策数"]) * 1.0 + r["捕手守備機会"] * 0.5 - r["失策数"] * 2.0 - r["捕逸数"] * 1.0),
                         axis=1
                     )
 
@@ -342,7 +375,7 @@ def show_personal_stats(df_batting, df_pitching):
 
             fill_cols = [
                 "is_ab", "is_hit", "is_hr", "is_bb", "is_walk", "is_hbp", "打点", "得点", "盗塁", "盗塁死", "RC", "OPS", "打率",
-                "投球回", "is_win", "TotalSO", "守備機会", "失策数", "捕手守備機会", "試合参加数",
+                "投球回", "is_win", "TotalSO", "守備機会", "失策数", "捕逸数", "暴投数", "捕手守備機会", "試合参加数",
                 "Batting_Score", "Pitching_Score", "Defense_Score", "Game_Score"
             ]
             for c in fill_cols:
@@ -408,7 +441,7 @@ def show_personal_stats(df_batting, df_pitching):
                     * **総合ポイント** = 打撃P + 投手P + 守備P + (試合参加数 × 1.0)
                     * **打撃P**: `(OPS × 50.0) + (RC × 3.0) + (盗塁 × 3.0) - (盗塁死 × 1.0) - (併殺打 × 1.5)`
                     * **投手P**: `(投球回 × 1.8) + (奪三振 × 0.3) + (4.00 - 防御率) × 投球回 × 0.2`
-                    * **守備P**: `(成功守備機会 × 1.0) + (捕手守備機会 × 0.5) - (失策数 × 2.0)`
+                    * **守備P**: `(成功守備機会 × 1.0) + (捕手守備機会 × 0.5) - (失策数 × 2.0) - (捕逸数 × 1.0)`
                     * **RC (創出得点)**: `((安打 + 四死球) × 塁打) ÷ (打数 + 四死球)`
                     """)
             else:
@@ -483,11 +516,11 @@ def show_personal_stats(df_batting, df_pitching):
 
                 stats_p["Pitching_Score"] = stats_p.apply(p_score_calc, axis=1)
 
-                for c in ["is_win", "is_lose", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "失点", "自責点", "被安打", "is_p_hr"]:
+                for c in ["is_win", "is_lose", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "is_wp", "失点", "自責点", "被安打", "is_p_hr"]:
                     stats_p[c] = stats_p[c].astype(int)
 
-                disp_p = stats_p[["選手名", "Pitching_Score", "防御率", "WHIP", "K/BB", "K/7", "BB/7", "is_win", "is_lose", "投球回", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "失点", "自責点", "被安打", "is_p_hr"]].copy()
-                disp_p.columns = ["選手名", "投手P", "防御率", "WHIP", "K/BB", "K/7", "BB/7", "勝", "敗", "投球回", "奪三振", "四球", "死球", "四死球", "失点", "自責点", "被安打", "被本塁打"]
+                disp_p = stats_p[["選手名", "Pitching_Score", "防御率", "WHIP", "K/BB", "K/7", "BB/7", "is_win", "is_lose", "投球回", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "is_wp", "失点", "自責点", "被安打", "is_p_hr"]].copy()
+                disp_p.columns = ["選手名", "投手P", "防御率", "WHIP", "K/BB", "K/7", "BB/7", "勝", "敗", "投球回", "奪三振", "四球", "死球", "四死球", "暴投", "失点", "自責点", "被安打", "被本塁打"]
 
                 disp_p = disp_p.sort_values("投手P", ascending=False).reset_index(drop=True)
 
@@ -504,8 +537,8 @@ def show_personal_stats(df_batting, df_pitching):
 
         with st_fld:
             if not saber_f.empty:
-                disp_df = saber_f[["選手名", "Defense_Score", "守備機会", "捕手守備機会", "失策数", "守備率"]].copy()
-                disp_df.columns = ["選手名", "守備P", "守備機会", "捕手機会", "失策", "守備率"]
+                disp_df = saber_f[["選手名", "Defense_Score", "守備機会", "捕手守備機会", "失策数", "捕逸数", "暴投数", "守備率"]].copy()
+                disp_df.columns = ["選手名", "守備P", "守備機会", "捕手機会", "失策", "捕逸", "暴投", "守備率"]
 
                 disp_df = disp_df.sort_values(["守備P", "守備率", "守備機会"], ascending=[False, False, False]).reset_index(drop=True)
 
@@ -717,7 +750,7 @@ def show_personal_stats(df_batting, df_pitching):
                     )
                     combined_p["回"] = combined_p["アウト数"].apply(lambda x: f"{int(x // 3)}.{int(x % 3)}")
 
-                    for col in ["is_win", "is_lose", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "失点", "自責点", "被安打", "is_p_hr"]:
+                    for col in ["is_win", "is_lose", "TotalSO", "is_p_walk", "is_p_hbp", "total_bb", "is_wp", "失点", "自責点", "被安打", "is_p_hr"]:
                         combined_p[col] = combined_p[col].astype(int)
 
                     disp_p_hist = pd.DataFrame()
@@ -734,6 +767,7 @@ def show_personal_stats(df_batting, df_pitching):
                     disp_p_hist["四球"] = combined_p["is_p_walk"]
                     disp_p_hist["死球"] = combined_p["is_p_hbp"]
                     disp_p_hist["四死球"] = combined_p["total_bb"]
+                    disp_p_hist["暴投"] = combined_p["is_wp"]
                     disp_p_hist["失点"] = combined_p["失点"]
                     disp_p_hist["自責点"] = combined_p["自責点"]
                     disp_p_hist["被安打"] = combined_p["被安打"]
@@ -777,24 +811,41 @@ def show_personal_stats(df_batting, df_pitching):
                             my_f = fld_expanded[fld_expanded["FielderName"] == sel_player].copy()
 
                             if not my_f.empty:
-                                # 💡 個人守備成績推移における「エラー野手」列参照ロジック
-                                def check_is_error_my(row):
-                                    res_has_error = any(kw in str(row["結果"]) for kw in ["失策", "暴投", "捕逸"])
-                                    if not res_has_error:
-                                        return False
+                                def check_fld_events_my(row):
+                                    res_str = str(row["結果"])
+                                    has_err = "失策" in res_str
+                                    has_wp = "暴投" in res_str
+                                    has_pb = "捕逸" in res_str
                                     err_player = str(row.get("エラー野手", "")).strip() if "エラー野手" in row.index else ""
-                                    if err_player and err_player not in ["nan", "None", ""]:
-                                        return row["FielderName"] == err_player
-                                    else:
-                                        return True
 
-                                my_f["is_error"] = my_f.apply(check_is_error_my, axis=1)
+                                    is_error = (row["FielderName"] == err_player) if (has_err and err_player and err_player not in ["nan", "None", ""]) else has_err
+                                    is_wp = (row["FielderName"] == err_player) if (has_wp and err_player and err_player not in ["nan", "None", ""]) else has_wp
+                                    is_pb = (row["FielderName"] == err_player) if (has_pb and err_player and err_player not in ["nan", "None", ""]) else has_pb
+
+                                    return pd.Series([is_error, is_wp, is_pb], index=["is_error", "is_wp", "is_pb"])
+
+                                my_f[["is_error", "is_wp", "is_pb"]] = my_f.apply(check_fld_events_my, axis=1)
                                 fld_unique = my_f.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(
-                                    Year=("Year", "first"), is_error=("is_error", "max")
+                                    Year=("Year", "first"),
+                                    is_error=("is_error", "max"),
+                                    is_wp=("is_wp", "max"),
+                                    is_pb=("is_pb", "max")
                                 ).reset_index()
 
-                                hist_f = fld_unique.groupby("Year").agg(守備機会=("FielderName", "count"), 失策数=("is_error", "sum")).sort_index(ascending=False)
-                                hist_f_total = pd.DataFrame({"守備機会": [fld_unique["FielderName"].count()], "失策数": [fld_unique["is_error"].sum()]}, index=["通算"])
+                                hist_f = fld_unique.groupby("Year").agg(
+                                    守備機会=("FielderName", "count"),
+                                    失策数=("is_error", "sum"),
+                                    捕逸数=("is_pb", "sum"),
+                                    暴投数=("is_wp", "sum")
+                                ).sort_index(ascending=False)
+
+                                hist_f_total = pd.DataFrame({
+                                    "守備機会": [fld_unique["FielderName"].count()],
+                                    "失策数": [fld_unique["is_error"].sum()],
+                                    "捕逸数": [fld_unique["is_pb"].sum()],
+                                    "暴投数": [fld_unique["is_wp"].sum()]
+                                }, index=["通算"])
+
                                 combined_f = pd.concat([hist_f_total, hist_f])
                                 combined_f["守備率"] = combined_f.apply(lambda x: (x["守備機会"] - x["失策数"]) / x["守備機会"] if x["守備機会"] > 0 else 0.0, axis=1)
 
@@ -802,6 +853,8 @@ def show_personal_stats(df_batting, df_pitching):
                                 disp_f_hist["守備率"] = combined_f["守備率"]
                                 disp_f_hist["守備機会"] = combined_f["守備機会"]
                                 disp_f_hist["失策"] = combined_f["失策数"]
+                                disp_f_hist["捕逸"] = combined_f["捕逸数"]
+                                disp_f_hist["暴投"] = combined_f["暴投数"]
                                 disp_f_hist.index.name = "年度"
 
                                 st.markdown("##### 🧤 守備成績推移")
@@ -968,7 +1021,7 @@ def show_personal_stats(df_batting, df_pitching):
                 with p11:
                     show_top10("与死球", rank_p, "is_p_hbp", "選手名", "is_p_hbp", ascending=False, suffix="個")
                 with p12:
-                    show_top10("与四死球", rank_p, "total_bb", "選手名", "total_bb", ascending=False, suffix="個")
+                    show_top10("四死球", rank_p, "total_bb", "選手名", "total_bb", ascending=False, suffix="個")
 
                 st.write("")
                 p13, p14, p15, p16 = st.columns(4)
