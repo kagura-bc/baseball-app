@@ -119,8 +119,10 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
             if not p_sorted.empty and p_sorted.iloc[0]["Pitching_Score"] > 0:
                 ace_player = p_sorted.iloc[0]["選手名"]
 
-    if not ace_player and pos_df is not None and not pos_df.empty:
-        p_pitchers = pos_df[(pos_df["選手名"].isin(selected_players)) & (pos_df["位置"] == "投")]
+    pos_col = "位置" if pos_df is not None and "位置" in pos_df.columns else ("守備位置" if pos_df is not None and "守備位置" in pos_df.columns else None)
+
+    if not ace_player and pos_df is not None and not pos_df.empty and pos_col:
+        p_pitchers = pos_df[(pos_df["選手名"].isin(selected_players)) & (pos_df[pos_col] == "投")]
         if not p_pitchers.empty:
             ace_counts = p_pitchers.groupby("選手名").size().reset_index(name="count")
             ace_player = ace_counts.sort_values("count", ascending=False).iloc[0]["選手名"]
@@ -162,19 +164,20 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
 
     valid_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右"]
     other_used = [p for p in used_players if p != ace_player]
-    p_df = pos_df[pos_df["選手名"].isin(other_used) & pos_df["位置"].isin(valid_positions)] if pos_df is not None and not pos_df.empty else pd.DataFrame()
+    
+    p_df = pos_df[pos_df["選手名"].isin(other_used) & pos_df[pos_col].isin(valid_positions)] if pos_df is not None and not pos_df.empty and pos_col else pd.DataFrame()
     
     if not p_df.empty:
-        pos_counts = p_df.groupby(["選手名", "位置"]).size().reset_index(name="count")
+        pos_counts = p_df.groupby(["選手名", pos_col]).size().reset_index(name="count")
         pos_counts = pos_counts.sort_values("count", ascending=False)
     else:
-        pos_counts = pd.DataFrame(columns=["選手名", "位置", "count"])
+        pos_counts = pd.DataFrame(columns=["選手名", pos_col if pos_col else "位置", "count"])
     
     available_positions = set(valid_positions)
     
     for _, row in pos_counts.iterrows():
         player = row["選手名"]
-        pos = row["位置"]
+        pos = row[pos_col if pos_col else "位置"]
         if player not in assigned_positions and pos in available_positions:
             assigned_positions[player] = pos
             available_positions.remove(pos)
@@ -302,7 +305,7 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
         st.warning("分析する打撃データがありません。")
         return
 
-    # 💡 打撃データ・投手データの両方で「選手名」列を補正・統一
+    # 打撃データ・投手データの両方で「選手名」列を補正・統一
     b_p_col = "打者名" if "打者名" in df_batting.columns else "選手名"
     df_batting["選手名"] = df_batting[b_p_col]
 
@@ -328,8 +331,19 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
     df_calc["bases"] = df_calc["is_1b"] + (df_calc["is_2b"] * 2) + (df_calc["is_3b"] * 3) + (df_calc["is_hr"] * 4)
     df_calc["is_pa"] = ((df_calc["is_ab"] == 1) | (df_calc["is_bb"] == 1) | (df_calc["is_sf"] == 1)).astype(int)
 
-    for c in ["打点", "盗塁"]:
-        df_calc[c] = pd.to_numeric(df_calc[c], errors='coerce').fillna(0)
+    # 打点
+    if "打点" in df_calc.columns:
+        df_calc["打点"] = pd.to_numeric(df_calc["打点"], errors='coerce').fillna(0)
+    else:
+        df_calc["打点"] = 0
+
+    # 盗塁（結果列から盗塁判定＋既存の盗塁列があれば合算）
+    res_str = df_calc["結果"].astype(str)
+    steal_mask = (res_str == "盗塁") | (res_str.str.contains("盗塁") & ~res_str.str.contains("盗塁死"))
+    if "盗塁" in df_batting.columns:
+        df_calc["盗塁"] = pd.to_numeric(df_batting["盗塁"], errors='coerce').fillna(0) + steal_mask.astype(int)
+    else:
+        df_calc["盗塁"] = steal_mask.astype(int)
 
     cleaned_selected_players = [p.split(" (")[0] for p in selected_players]
     df_calc["選手名_clean"] = df_calc["選手名"].astype(str).apply(lambda x: x.split(" (")[0])
@@ -340,7 +354,7 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
         st.warning("選択された選手の打席データがありません。")
         return
 
-    df_selected["日付_dt"] = pd.to_datetime(df_selected["日付"], errors="coerce")
+    df_selected["日付_dt"] = pd.to_datetime(df_selected.get("日付", ""), errors="coerce")
     current_year = datetime.datetime.now().year
     df_this_season = df_selected[df_selected["日付_dt"].dt.year == current_year]
     
@@ -373,7 +387,7 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
     with tab_recent:
         st.write("各選手の直近10打席（四死球・犠飛含む）の成績をベースにした、現在の調子重視のオーダーです。")
         
-        df_selected["打順_num"] = pd.to_numeric(df_selected["打順"], errors="coerce")
+        df_selected["打順_num"] = pd.to_numeric(df_selected.get("打順", 0), errors="coerce")
         df_sorted = df_selected.sort_values(by=["日付_dt", "打順_num"], ascending=[True, True])
         df_pa = df_sorted[df_sorted["is_pa"] == 1]
         df_recent10 = df_pa.groupby("選手名").tail(10)
