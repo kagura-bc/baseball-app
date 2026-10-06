@@ -1,6 +1,6 @@
 import datetime
-import streamlit as st
 import pandas as pd
+import streamlit as st
 from utils.players import get_active_players
 from utils.ui import fmt_player_name
 
@@ -72,12 +72,12 @@ def calculate_saber_metrics(stats):
 
 
 def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=None, df_pitching=None):
-    """投手部門・貢献度ランキング(通算/総合貢献度タブの投手評価)のトップをエースとして特定し、打順を配置する"""
+    """投手部門・貢献度ランキングのトップをエースとして特定し、打順を配置する"""
     used_players = []
     lineup = {}
     assigned_positions = {}
 
-    # 🌟 1. 「投手部門・貢献度ランキング」の評価ロジックに基づいてエースを自動選出
+    # 1. エースの自動選出
     ace_player = None
     if df_pitching is not None and not df_pitching.empty:
         df_p_calc = df_pitching[df_pitching["選手名"] != "チーム記録"].copy()
@@ -147,7 +147,6 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
         else:
             lineup[order] = None
 
-    # 🌟 打順は打撃成績に応じて決定（上位から順に評価し、投手が未選出の場合は最後に9番に配置）[cite: 3]
     assign_player(3, "Score_3")
     assign_player(1, "Score_1")
     assign_player(2, "Score_2")
@@ -221,7 +220,6 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
             s_pa = season_pa_dict.get(player_name, 0)
             season_pa_text = f" | 今季打席数: **{s_pa}**"
 
-        # 🌟 投手成績を確実に「通算成績（アウト数・自責点ベース）」で計算・表記[cite: 3]
         pitcher_text = ""
         if assigned_pos == "投" and df_pitching is not None and not df_pitching.empty:
             p_rows = df_pitching[(df_pitching["選手名"] == player_name) & (df_pitching["選手名"] != "チーム記録")]
@@ -250,10 +248,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     
     st.divider()
 
-    # 背番号を除去したクレンジング済みの配置済み選手リストを作成
     used_players_clean = [str(u).split(" (")[0] for u in used_players]
-    
-    # クレンジングした状態で比較し、本当に配置されなかった選手のみを抽出
     unassigned = [p for p in selected_players if str(p).split(" (")[0] not in used_players_clean]
     
     if unassigned:
@@ -265,9 +260,8 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
 
     st.markdown("### 🧠 選択選手から理想オーダー作成")
-    st.write("本日参加するメンバーを選択すると、成績のセイバーメトリクス指標と過去の守備機会から、最適なスタメンと守備位置を自動生成します[cite: 3]。")
+    st.write("本日参加するメンバーを選択すると、成績のセイバーメトリクス指標と過去の守備機会から、最適なスタメンと守備位置を自動生成します。")
 
-    # セッションステートを用いたタッチ式選択の初期化（デフォルト未選択=[ ]）
     if "ideal_order_selected_players" not in st.session_state:
         st.session_state["ideal_order_selected_players"] = []
 
@@ -308,6 +302,14 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
         st.warning("分析する打撃データがありません。")
         return
 
+    # 💡 打撃データ・投手データの両方で「選手名」列を補正・統一
+    b_p_col = "打者名" if "打者名" in df_batting.columns else "選手名"
+    df_batting["選手名"] = df_batting[b_p_col]
+
+    if df_pitching is not None and not df_pitching.empty:
+        p_p_col = "投手名" if "投手名" in df_pitching.columns else "選手名"
+        df_pitching["選手名"] = df_pitching[p_p_col]
+
     df_calc = df_batting[df_batting["選手名"] != "チーム記録"].copy()
     df_calc["結果"] = df_calc["結果"].astype(str).str.replace(r"\s+", "", regex=True)
 
@@ -330,8 +332,6 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
         df_calc[c] = pd.to_numeric(df_calc[c], errors='coerce').fillna(0)
 
     cleaned_selected_players = [p.split(" (")[0] for p in selected_players]
-    
-    # データ側の選手名も安全のためにクレンジング用列を作成
     df_calc["選手名_clean"] = df_calc["選手名"].astype(str).apply(lambda x: x.split(" (")[0])
     
     df_selected = df_calc[df_calc["選手名_clean"].isin(cleaned_selected_players)].copy()
@@ -371,7 +371,7 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
             st.warning("規定打数（10打数）に到達している選択選手がいません。")
 
     with tab_recent:
-        st.write("各選手の直近10打席（四死球・犠飛含む）の成績をベースにした、現在の調子重視のオーダーです[cite: 3]。")
+        st.write("各選手の直近10打席（四死球・犠飛含む）の成績をベースにした、現在の調子重視のオーダーです。")
         
         df_selected["打順_num"] = pd.to_numeric(df_selected["打順"], errors="coerce")
         df_sorted = df_selected.sort_values(by=["日付_dt", "打順_num"], ascending=[True, True])
