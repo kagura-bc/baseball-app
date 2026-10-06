@@ -7,7 +7,7 @@ from config.settings import (
     SPREADSHEET_URL,
 )
 from views.team_sharing import show_team_sharing_tab, share_match_data_to_opponent
-from views.league_stats import show_league_stats  # 💡 リーグ戦績の追加インポート
+from views.league_stats import show_league_stats
 from streamlit_gsheets import GSheetsConnection
 import streamlit as st
 from streamlit_option_menu import option_menu
@@ -84,7 +84,7 @@ def show_login_screen():
         conn = st.connection("gsheets", type=GSheetsConnection)
         try:
           df_teams = conn.read(
-              spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録", ttl=0
+              spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録"
           )
 
           matched = (
@@ -154,7 +154,7 @@ if not st.session_state["is_logged_in"]:
   st.stop()
 
 # ==========================================
-# 📊 データ動的読み込み
+# 📊 データ動的読み込み（キャッシュ活用）
 # ==========================================
 MY_DB_URL = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
 
@@ -171,12 +171,12 @@ def local_fmt(name):
   )
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600, show_spinner=False)
 def get_cached_grounds(target_url):
   conn = st.connection("gsheets", type=GSheetsConnection)
   try:
     df_ground = conn.read(
-        spreadsheet=target_url, worksheet="グラウンド登録", ttl=0
+        spreadsheet=target_url, worksheet="グラウンド登録"
     )
     return (
         df_ground["グラウンド名"].dropna().tolist()
@@ -187,12 +187,12 @@ def get_cached_grounds(target_url):
     return ["その他"]
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600, show_spinner=False)
 def get_cached_opponents(target_url):
   conn = st.connection("gsheets", type=GSheetsConnection)
   try:
     df_opp = conn.read(
-        spreadsheet=target_url, worksheet="相手チーム登録", ttl=0
+        spreadsheet=target_url, worksheet="相手チーム登録"
     )
     return (
         df_opp["チーム名"].dropna().tolist()
@@ -417,7 +417,6 @@ with col_logout:
 # ==========================================
 # 🧭 ナビゲーション（上部横並びタブ）
 # ==========================================
-# 💡 「🌐 リーグ戦績」を追加
 if st.session_state.get("user_role") == "admin":
     menu_options = ["試合データ入力", "チーム成績", "個人成績", "データ分析", "リーグ戦績", "データ修正", "登録管理"]
     menu_icons = ["pencil-square", "trophy", "person-lines-fill", "graph-up", "globe", "wrench", "people"]
