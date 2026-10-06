@@ -1,4 +1,5 @@
 import datetime
+import re
 import pandas as pd
 import streamlit as st
 from utils.players import get_active_players
@@ -7,6 +8,11 @@ from utils.ui import fmt_player_name
 
 def local_fmt(name):
     return fmt_player_name(name, st.session_state.get("shared_player_numbers", {}))
+
+
+def clean_name(n):
+    """名前から背番号表記 (2) や余分な空白を取り除いて正規化する"""
+    return re.sub(r'[\s ]+', '', str(n)).split("(")[0].strip()
 
 
 def calculate_saber_metrics(stats):
@@ -107,67 +113,97 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     lineup = {}
     assigned_positions = {}
 
-    # 1. 投手成績（df_pitching）の「投手名」列から投手経験者を抽出（処理野手/守備位置は参照しない）
-    pitcher_experienced_players = set()
+    cleaned_selected = [clean_name(p) for p in selected_players]
+    raw_name_map = {clean_name(p): p for p in selected_players}
+
+    # 1. 投手成績（df_pitching）の解析と投手経験者の抽出
+    pitcher_experienced_set = set()
+    ace_player_clean = None
+
     if df_pitching is not None and not df_pitching.empty:
-        p_valid = df_pitching[df_pitching["選手名"] != "チーム記録"]
-        pitcher_experienced_players.update(p_valid["選手名"].dropna().unique())
-
-    # 2. 投手成績が存在する選手の中からエース（投手）を選出
-    ace_player = None
-
-    if df_pitching is not None and not df_pitching.empty and pitcher_experienced_players:
-        df_p_calc = df_pitching[(df_pitching["選手名"] != "チーム記録") & (df_pitching["選手名"].isin(pitcher_experienced_players))].copy()
-        df_p_sel = df_p_calc[df_p_calc["選手名"].isin(selected_players)] if selected_players else df_p_calc
+        df_p = df_pitching.copy()
+        p_col = "投手名" if "投手名" in df_p.columns else ("選手名" if "選手名" in df_p.columns else None)
         
-        if not df_p_sel.empty:
-            for c in ["自責点", "失点", "アウト数", "is_so", "奪三振"]:
-                if c not in df_p_sel.columns:
-                    df_p_sel.loc[:, c] = 0
-                df_p_sel.loc[:, c] = pd.to_numeric(df_p_sel[c], errors='coerce').fillna(0)
-            
-            temp_so = df_p_sel["結果"].isin(["三振", "振り逃げ三振"]).astype(int) if "結果" in df_p_sel.columns else 0
-            df_p_sel.loc[:, "total_so"] = df_p_sel[["奪三振", "is_so"]].max(axis=1) if "奪三振" in df_p_sel.columns else temp_so
+        if p_col:
+            df_p["選手名_clean"] = df_p[p_col].apply(clean_name)
+            df_p_calc = df_p[df_p["選手名_clean"] != "チーム記録"].copy()
+            pitcher_experienced_set = set(df_p_calc["選手名_clean"].dropna().unique())
 
-            p_agg = df_p_sel.groupby("選手名").agg(
-                outs=("アウト数", "sum"),
-                er=("自責点", "sum"),
-                so=("total_so", "sum")
-            ).reset_index()
+            # 個人成績と同等の「アウト数」「奪三振」導出ロジック
+            res_str = df_p_calc["結果"].astype(str) if "結果" in df_p_calc.columns else pd.Series([""] * len(df_p_calc))
+            outs = pd.Series(0, index=df_p_calc.index)
+            dp_mask = res_str.str.contains("併殺", na=False)
+            outs[dp_mask] = 2
 
-            p_agg["投球回"] = p_agg["outs"] / 3
-            p_agg["投手_防御率"] = p_agg.apply(lambda x: (x["er"] * 7) / x["投球回"] if x["投球回"] > 0 else 99.0, axis=1)
+            normal_out_mask = (
+                res_str.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) &
+                ~res_str.str.contains("失策|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)
+            )
+            outs[normal_out_mask] = 1
 
-            def calc_pitching_score(row):
-                p_inn = row.get("投球回", 0)
-                p_era = row.get("投手_防御率", 99.0)
-                p_so = row.get("so", 0)
-                if p_inn <= 0 or p_era >= 90:
-                    return 0.0
-                inn_pts = p_inn * 1.0
-                so_pts = p_so * 0.3
-                if p_era <= 3.50:
-                    era_pts = (3.50 - p_era) * p_inn * 0.5
-                else:
-                    era_pts = (3.50 - p_era) * p_inn * 0.2
-                return max(0.0, inn_pts + so_pts + era_pts)
+            if "アウト数" in df_p_calc.columns and df_p_calc["アウト数"].sum() > 0:
+                df_p_calc["outs_calc"] = pd.to_numeric(df_p_calc["アウト数"], errors='coerce').fillna(outs)
+            else:
+                df_p_calc["outs_calc"] = outs
 
-            p_agg["Pitching_Score"] = p_agg.apply(calc_pitching_score, axis=1)
-            p_sorted = p_agg.sort_values(by="Pitching_Score", ascending=False)
-            if not p_sorted.empty and p_sorted.iloc[0]["Pitching_Score"] > 0:
-                ace_player = p_sorted.iloc[0]["選手名"]
+            df_p_calc["so_calc"] = res_str.isin(["三振", "振り逃げ三振"]).astype(int)
+            if "自責点" in df_p_calc.columns:
+                df_p_calc["er_calc"] = pd.to_numeric(df_p_calc["自責点"], errors='coerce').fillna(0)
+            else:
+                df_p_calc["er_calc"] = 0
 
-    # スコア計算未到達の場合でも投手成績シートに登録のある選手から優先選出
-    if not ace_player:
-        exp_selected = [p for p in selected_players if p in pitcher_experienced_players]
+            # 選択メンバー内の投手データ集計
+            df_p_sel = df_p_calc[df_p_calc["選手名_clean"].isin(cleaned_selected)]
+
+            if not df_p_sel.empty:
+                p_agg = df_p_sel.groupby("選手名_clean").agg(
+                    outs=("outs_calc", "sum"),
+                    er=("er_calc", "sum"),
+                    so=("so_calc", "sum")
+                ).reset_index()
+
+                p_agg["投球回"] = p_agg["outs"] / 3
+                p_agg["投手_防御率"] = p_agg.apply(lambda x: (x["er"] * 7) / x["投球回"] if x["投球回"] > 0 else 99.0, axis=1)
+
+                def calc_pitching_score(row):
+                    p_inn = row.get("投球回", 0)
+                    p_era = row.get("投手_防御率", 99.0)
+                    p_so = row.get("so", 0)
+                    if p_inn <= 0 or p_era >= 90:
+                        return 0.0
+                    inn_pts = p_inn * 1.0
+                    so_pts = p_so * 0.3
+                    if p_era <= 3.50:
+                        era_pts = (3.50 - p_era) * p_inn * 0.5
+                    else:
+                        era_pts = (3.50 - p_era) * p_inn * 0.2
+                    return max(0.0, inn_pts + so_pts + era_pts)
+
+                p_agg["Pitching_Score"] = p_agg.apply(calc_pitching_score, axis=1)
+                # 投手スコア順、同点の場合は投球イニング（outs）順でソート
+                p_sorted = p_agg.sort_values(by=["Pitching_Score", "outs"], ascending=[False, False])
+                if not p_sorted.empty:
+                    ace_player_clean = p_sorted.iloc[0]["選手名_clean"]
+
+    # 2. バックアップ選出（スコアが未計算の場合でも投手経験者から選出）
+    if not ace_player_clean:
+        exp_selected = [p for p in cleaned_selected if p in pitcher_experienced_set]
         if exp_selected:
-            ace_player = exp_selected[0]
+            ace_player_clean = exp_selected[0]
+
+    # stats 側の選手名表現（`stats['選手名']`）とマッチング
+    stats["選手名_clean"] = stats["選手名"].apply(clean_name)
+    ace_player_in_stats = None
+    if ace_player_clean:
+        match_stats = stats[stats["選手名_clean"] == ace_player_clean]
+        if not match_stats.empty:
+            ace_player_in_stats = match_stats.iloc[0]["選手名"]
 
     def assign_player(order, sort_col, force_ace=False):
-        if force_ace and ace_player and ace_player not in used_players:
-            ace_row = stats[stats["選手名"] == ace_player]
+        if force_ace and ace_player_in_stats and ace_player_in_stats not in used_players:
+            ace_row = stats[stats["選手名"] == ace_player_in_stats]
             if not ace_row.empty:
-                used_players.append(ace_player)
+                used_players.append(ace_player_in_stats)
                 lineup[order] = ace_row.iloc[0]
                 return
 
@@ -196,36 +232,37 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     # 3. 守備位置の割り当て
     starters_9 = [lineup[i]["選手名"] for i in range(1, 10) if i in lineup and lineup[i] is not None]
     
-    # 投手成績データに存在するエースのみ「投」に割り当て
-    if ace_player and ace_player in starters_9:
-        assigned_positions[ace_player] = "投"
-    elif ace_player:
-        assigned_positions[ace_player] = "投"
+    if ace_player_in_stats and ace_player_in_stats in starters_9:
+        assigned_positions[ace_player_in_stats] = "投"
+    elif ace_player_in_stats:
+        assigned_positions[ace_player_in_stats] = "投"
 
     if "投" in assigned_positions.values():
         remaining_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右"]
     else:
-        # 投手成績ログに登録がある選手が不在の場合は野手8ポジション＋DH/控で編成
         remaining_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右", "DH/控"]
 
     unassigned_starters = [p for p in starters_9 if p not in assigned_positions]
     available_pos = set(remaining_positions)
 
-    # 野手守備データ（pos_df）からの優先マッチング（野手ポジションのみ対象）
+    # 野手守備データ（pos_df）からの優先マッチング
     pos_col = "位置" if pos_df is not None and "位置" in pos_df.columns else ("守備位置" if pos_df is not None and "守備位置" in pos_df.columns else None)
     if pos_df is not None and not pos_df.empty and pos_col:
-        p_df = pos_df[pos_df["選手名"].isin(unassigned_starters) & pos_df[pos_col].isin(remaining_positions)]
+        pos_df["選手名_clean"] = pos_df["選手名"].apply(clean_name) if "選手名" in pos_df.columns else pos_df.iloc[:, 0].apply(clean_name)
+        p_df = pos_df[pos_df["選手名_clean"].isin([clean_name(p) for p in unassigned_starters]) & pos_df[pos_col].isin(remaining_positions)]
         if not p_df.empty:
-            pos_counts = p_df.groupby(["選手名", pos_col]).size().reset_index(name="count")
+            pos_counts = p_df.groupby(["選手名_clean", pos_col]).size().reset_index(name="count")
             pos_counts = pos_counts.sort_values("count", ascending=False)
             
             for _, row in pos_counts.iterrows():
-                player = row["選手名"]
+                p_clean = row["選手名_clean"]
                 pos = row[pos_col]
-                if player in unassigned_starters and pos in available_pos:
-                    assigned_positions[player] = pos
+                # unassigned_starters から対応する元の名前を取得
+                orig_player = next((p for p in unassigned_starters if clean_name(p) == p_clean), None)
+                if orig_player and orig_player in unassigned_starters and pos in available_pos:
+                    assigned_positions[orig_player] = pos
                     available_pos.remove(pos)
-                    unassigned_starters.remove(player)
+                    unassigned_starters.remove(orig_player)
 
     # 残りのスタメン選手に空いている野手ポジションを割り当て
     for player in list(unassigned_starters):
@@ -256,7 +293,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
 
     st.markdown("#### 🎯 スタメンオーダー ＆ 守備位置")
     
-    if not ace_player:
+    if not ace_player_clean:
         st.warning("⚠️ 選択されたメンバーの中に投手成績データが記録されている選手が含まれていません。投手ポジションは未割り当てです。")
 
     for i in range(1, 16):
@@ -266,6 +303,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
         role_name, desc, sort_col = roles_info[i]
         p = lineup[i]
         player_name = p['選手名']
+        c_player_name = clean_name(player_name)
         assigned_pos = assigned_positions.get(player_name, "不明")
 
         st.markdown(f"##### {i}番 ({assigned_pos}): {role_name}")
@@ -273,33 +311,40 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
         
         season_pa_text = ""
         if season_pa_dict is not None:
-            s_pa = season_pa_dict.get(player_name, 0)
+            s_pa = season_pa_dict.get(player_name, season_pa_dict.get(c_player_name, 0))
             season_pa_text = f" | 今季打席数: **{s_pa}**"
 
         hitless_text = ""
-        if hitless_dict and player_name in hitless_dict:
-            h_info = hitless_dict[player_name]
-            c_pa = h_info["pa"]
-            c_ab = h_info["ab"]
-            if c_pa == 0:
-                hitless_text = " | 状態: **✨ 直近打席で安打あり**"
-            elif c_pa >= 10:
-                hitless_text = f" | 状態: **⚠️ {c_pa}打席（{c_ab}打数）連続無安打**"
-            else:
-                hitless_text = f" | 状態: **📉 {c_pa}打席（{c_ab}打数）連続無安打**"
+        if hitless_dict:
+            h_info = hitless_dict.get(player_name) or hitless_dict.get(c_player_name)
+            if h_info:
+                c_pa = h_info["pa"]
+                c_ab = h_info["ab"]
+                if c_pa == 0:
+                    hitless_text = " | 状態: **✨ 直近打席で安打あり**"
+                elif c_pa >= 10:
+                    hitless_text = f" | 状態: **⚠️ {c_pa}打席（{c_ab}打数）連続無安打**"
+                else:
+                    hitless_text = f" | 状態: **📉 {c_pa}打席（{c_ab}打数）連続無安打**"
 
         pitcher_text = ""
         if assigned_pos == "投" and df_pitching is not None and not df_pitching.empty:
-            p_rows = df_pitching[(df_pitching["選手名"] == player_name) & (df_pitching["選手名"] != "チーム記録")]
+            p_col_show = "投手名" if "投手名" in df_pitching.columns else "選手名"
+            p_rows = df_pitching[(df_pitching[p_col_show].apply(clean_name) == c_player_name) & (df_pitching[p_col_show] != "チーム記録")]
             if not p_rows.empty:
-                outs_sum = pd.to_numeric(p_rows["アウト数"], errors='coerce').fillna(0).sum() if "アウト数" in p_rows.columns else len(p_rows) * 3
+                res_s = p_rows["結果"].astype(str) if "結果" in p_rows.columns else pd.Series([""] * len(p_rows))
+                p_outs = pd.Series(0, index=p_rows.index)
+                p_outs[res_s.str.contains("併殺", na=False)] = 2
+                p_outs[res_s.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) & ~res_s.str.contains("失策|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)] = 1
+                
+                outs_sum = pd.to_numeric(p_rows["アウト数"], errors='coerce').fillna(p_outs).sum() if "アウト数" in p_rows.columns else p_outs.sum()
                 ip_val = outs_sum / 3.0
+                
                 run_col = "自責点" if "自責点" in p_rows.columns else ("失点" if "失点" in p_rows.columns else None)
                 er_sum = pd.to_numeric(p_rows[run_col], errors='coerce').fillna(0).sum() if run_col and run_col in p_rows.columns else 0
                 era = (er_sum * 7) / ip_val if ip_val > 0 else 0.0
                 
-                so_col = "is_so" if "is_so" in p_rows.columns else ("三振" if "三振" in p_rows.columns else None)
-                so_val = pd.to_numeric(p_rows[so_col], errors='coerce').fillna(0).sum() if so_col and so_col in p_rows.columns else 0
+                so_val = res_s.isin(["三振", "振り逃げ三振"]).sum()
                 if "奪三振" in p_rows.columns:
                     so_val = max(so_val, pd.to_numeric(p_rows["奪三振"], errors='coerce').fillna(0).sum())
                 
@@ -316,8 +361,8 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     
     st.divider()
 
-    used_players_clean = [str(u).split(" (")[0] for u in used_players]
-    unassigned = [p for p in selected_players if str(p).split(" (")[0] not in used_players_clean]
+    used_players_clean = [clean_name(u) for u in used_players]
+    unassigned = [p for p in selected_players if clean_name(p) not in used_players_clean]
     
     if unassigned:
         st.info(f"📌 **条件未到達等のため配置外の選手**: {', '.join(unassigned)}")
@@ -416,8 +461,8 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
     # 各選手の連続無安打数を算出
     hitless_dict = calc_consecutive_hitless(df_calc)
 
-    cleaned_selected_players = [p.split(" (")[0] for p in selected_players]
-    df_calc["選手名_clean"] = df_calc["選手名"].astype(str).apply(lambda x: x.split(" (")[0])
+    cleaned_selected_players = [clean_name(p) for p in selected_players]
+    df_calc["選手名_clean"] = df_calc["選手名"].astype(str).apply(clean_name)
     
     df_selected = df_calc[df_calc["選手名_clean"].isin(cleaned_selected_players)].copy()
 
