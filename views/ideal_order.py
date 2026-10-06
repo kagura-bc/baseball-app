@@ -102,29 +102,24 @@ def calc_consecutive_hitless(df_calc):
 
 
 def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=None, df_pitching=None, hitless_dict=None):
-    """投手経験者からエースを選出し、スタメンオーダーと守備位置を自動決定する"""
+    """投手成績データの投手名から厳格に投手を選出し、スタメンオーダーと守備位置を自動決定する"""
     used_players = []
     lineup = {}
     assigned_positions = {}
 
-    # 1. 投手経験を持つ全選手の集合を作成（投手成績データまたは守備位置『投』の記録がある選手）
+    # 1. 投手成績（df_pitching）の「投手名」列から投手経験者を抽出（処理野手/守備位置は参照しない）
     pitcher_experienced_players = set()
     if df_pitching is not None and not df_pitching.empty:
         p_valid = df_pitching[df_pitching["選手名"] != "チーム記録"]
         pitcher_experienced_players.update(p_valid["選手名"].dropna().unique())
 
-    pos_col = "位置" if pos_df is not None and "位置" in pos_df.columns else ("守備位置" if pos_df is not None and "守備位置" in pos_df.columns else None)
-    if pos_df is not None and not pos_df.empty and pos_col:
-        p_pos_pitchers = pos_df[pos_df[pos_col] == "投"]
-        pitcher_experienced_players.update(p_pos_pitchers["選手名"].dropna().unique())
-
-    # 2. 投手経験者の中からエースを選出
+    # 2. 投手成績が存在する選手の中からエース（投手）を選出
     ace_player = None
 
-    # A) 投手実績スコアに基づく選出（投手経験者のみ対象）
-    if df_pitching is not None and not df_pitching.empty:
+    if df_pitching is not None and not df_pitching.empty and pitcher_experienced_players:
         df_p_calc = df_pitching[(df_pitching["選手名"] != "チーム記録") & (df_pitching["選手名"].isin(pitcher_experienced_players))].copy()
         df_p_sel = df_p_calc[df_p_calc["選手名"].isin(selected_players)] if selected_players else df_p_calc
+        
         if not df_p_sel.empty:
             for c in ["自責点", "失点", "アウト数", "is_so", "奪三振"]:
                 if c not in df_p_sel.columns:
@@ -162,20 +157,11 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
             if not p_sorted.empty and p_sorted.iloc[0]["Pitching_Score"] > 0:
                 ace_player = p_sorted.iloc[0]["選手名"]
 
-    # B) 守備ログから登板機会の多い選手を選出（投手経験者のみ対象）
-    if not ace_player and pos_df is not None and not pos_df.empty and pos_col:
-        p_pitchers = pos_df[(pos_df["選手名"].isin(selected_players)) & (pos_df["選手名"].isin(pitcher_experienced_players)) & (pos_df[pos_col] == "投")]
-        if not p_pitchers.empty:
-            ace_counts = p_pitchers.groupby("選手名").size().reset_index(name="count")
-            ace_player = ace_counts.sort_values("count", ascending=False).iloc[0]["選手名"]
-
-    # C) スコア未計算の投手経験者から選出
+    # スコア計算未到達の場合でも投手成績シートに登録のある選手から優先選出
     if not ace_player:
         exp_selected = [p for p in selected_players if p in pitcher_experienced_players]
         if exp_selected:
             ace_player = exp_selected[0]
-
-    # ※選択メンバー内に投手経験者が1人もいない場合、ace_player は None のまま保持される（野手を無理やり投手にしない）
 
     def assign_player(order, sort_col, force_ace=False):
         if force_ace and ace_player and ace_player not in used_players:
@@ -210,7 +196,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     # 3. 守備位置の割り当て
     starters_9 = [lineup[i]["選手名"] for i in range(1, 10) if i in lineup and lineup[i] is not None]
     
-    # 投手経験者が選ばれている場合のみ「投」を割り当て
+    # 投手成績データに存在するエースのみ「投」に割り当て
     if ace_player and ace_player in starters_9:
         assigned_positions[ace_player] = "投"
     elif ace_player:
@@ -219,13 +205,14 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     if "投" in assigned_positions.values():
         remaining_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右"]
     else:
-        # 投手経験者が不在の場合は野手8ポジション＋DH/控で構成
+        # 投手成績ログに登録がある選手が不在の場合は野手8ポジション＋DH/控で編成
         remaining_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右", "DH/控"]
 
     unassigned_starters = [p for p in starters_9 if p not in assigned_positions]
     available_pos = set(remaining_positions)
 
-    # 守備データ（pos_df）からの優先マッチング
+    # 野手守備データ（pos_df）からの優先マッチング（野手ポジションのみ対象）
+    pos_col = "位置" if pos_df is not None and "位置" in pos_df.columns else ("守備位置" if pos_df is not None and "守備位置" in pos_df.columns else None)
     if pos_df is not None and not pos_df.empty and pos_col:
         p_df = pos_df[pos_df["選手名"].isin(unassigned_starters) & pos_df[pos_col].isin(remaining_positions)]
         if not p_df.empty:
@@ -270,7 +257,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     st.markdown("#### 🎯 スタメンオーダー ＆ 守備位置")
     
     if not ace_player:
-        st.warning("⚠️ 選択されたメンバーの中に投手経験者（投手成績ログまたは守備位置『投』の記録）が含まれていません。投手ポジションは未割り当てです。")
+        st.warning("⚠️ 選択されたメンバーの中に投手成績データが記録されている選手が含まれていません。投手ポジションは未割り当てです。")
 
     for i in range(1, 16):
         if i not in lineup or lineup[i] is None:
