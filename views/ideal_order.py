@@ -71,13 +71,43 @@ def calculate_saber_metrics(stats):
     return stats
 
 
-def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=None, df_pitching=None):
-    """投手部門・貢献度ランキングのトップをエースとして特定し、打順を配置する"""
+def calc_consecutive_hitless(df_calc):
+    """全打撃ログを時系列ソートし、最新打席から遡って現在の連続無安打数（打席/打数）を算出する"""
+    if df_calc.empty:
+        return {}
+        
+    df_sorted = df_calc.sort_values(by=["日付_dt", "打順_num"], ascending=[True, True])
+    
+    hitless_dict = {}
+    for player, group in df_sorted.groupby("選手名"):
+        pa_df = group[group["is_pa"] == 1]
+        c_pa = 0
+        if not pa_df.empty:
+            for _, row in pa_df.iloc[::-1].iterrows():
+                if row["is_hit"] == 1:
+                    break
+                c_pa += 1
+                
+        ab_df = group[group["is_ab"] == 1]
+        c_ab = 0
+        if not ab_df.empty:
+            for _, row in ab_df.iloc[::-1].iterrows():
+                if row["is_hit"] == 1:
+                    break
+                c_ab += 1
+                
+        hitless_dict[player] = {"ab": c_ab, "pa": c_pa}
+        
+    return hitless_dict
+
+
+def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=None, df_pitching=None, hitless_dict=None):
+    """スタメン（1〜9番）に必ず全9ポジション（投・捕・一・二・三・遊・左・中・右）を重複なく割り当てて表示する"""
     used_players = []
     lineup = {}
     assigned_positions = {}
 
-    # 1. エースの自動選出
+    # 1. エース（投手）の選出
     ace_player = None
     if df_pitching is not None and not df_pitching.empty:
         df_p_calc = df_pitching[df_pitching["選手名"] != "チーム記録"].copy()
@@ -130,9 +160,6 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     if not ace_player and selected_players:
         ace_player = selected_players[0]
 
-    if ace_player:
-        assigned_positions[ace_player] = "投"
-
     def assign_player(order, sort_col, force_ace=False):
         if force_ace and ace_player and ace_player not in used_players:
             ace_row = stats[stats["選手名"] == ace_player]
@@ -149,6 +176,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
         else:
             lineup[order] = None
 
+    # 打順（1〜9番スタメン＋10〜15番控え）決定
     assign_player(3, "Score_3")
     assign_player(1, "Score_1")
     assign_player(2, "Score_2")
@@ -162,32 +190,45 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
     for i in range(10, 16):
         assign_player(i, "OPS")
 
-    valid_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右"]
-    other_used = [p for p in used_players if p != ace_player]
+    # 🛡️ 守備位置の絶対割り当て（スタメン1〜9番で必ず9ポジションを埋める）
+    starters_9 = [lineup[i]["選手名"] for i in range(1, 10) if i in lineup and lineup[i] is not None]
     
-    p_df = pos_df[pos_df["選手名"].isin(other_used) & pos_df[pos_col].isin(valid_positions)] if pos_df is not None and not pos_df.empty and pos_col else pd.DataFrame()
-    
-    if not p_df.empty:
-        pos_counts = p_df.groupby(["選手名", pos_col]).size().reset_index(name="count")
-        pos_counts = pos_counts.sort_values("count", ascending=False)
-    else:
-        pos_counts = pd.DataFrame(columns=["選手名", pos_col if pos_col else "位置", "count"])
-    
-    available_positions = set(valid_positions)
-    
-    for _, row in pos_counts.iterrows():
-        player = row["選手名"]
-        pos = row[pos_col if pos_col else "位置"]
-        if player not in assigned_positions and pos in available_positions:
-            assigned_positions[player] = pos
-            available_positions.remove(pos)
+    # エースがスタメンに居れば投手に割り当て
+    if ace_player and ace_player in starters_9:
+        assigned_positions[ace_player] = "投"
+    elif starters_9:
+        assigned_positions[starters_9[-1]] = "投" # 万が一居ない場合は9番打者を投手に設定
+
+    remaining_positions = ["捕", "一", "二", "三", "遊", "左", "中", "右"]
+    unassigned_starters = [p for p in starters_9 if p not in assigned_positions]
+    available_pos = set(remaining_positions)
+
+    # 守備データ（pos_df）からの優先マッチング
+    if pos_df is not None and not pos_df.empty and pos_col:
+        p_df = pos_df[pos_df["選手名"].isin(unassigned_starters) & pos_df[pos_col].isin(remaining_positions)]
+        if not p_df.empty:
+            pos_counts = p_df.groupby(["選手名", pos_col]).size().reset_index(name="count")
+            pos_counts = pos_counts.sort_values("count", ascending=False)
             
-    for player in used_players:
-        if player not in assigned_positions:
-            if available_positions:
-                assigned_positions[player] = available_positions.pop()
-            else:
-                assigned_positions[player] = "DH/控"
+            for _, row in pos_counts.iterrows():
+                player = row["選手名"]
+                pos = row[pos_col]
+                if player in unassigned_starters and pos in available_pos:
+                    assigned_positions[player] = pos
+                    available_pos.remove(pos)
+                    unassigned_starters.remove(player)
+
+    # 守備経験がない/被ったスタメン選手に残りの守備位置を確実に割り当て
+    for player in list(unassigned_starters):
+        if available_pos:
+            assigned_positions[player] = available_pos.pop()
+
+    # 控え選手（10〜15番）は「DH/控」に割り当て
+    for i in range(10, 16):
+        if i in lineup and lineup[i] is not None:
+            p_name = lineup[i]["選手名"]
+            if p_name not in assigned_positions:
+                assigned_positions[p_name] = "DH/控"
 
     roles_info = {
         1: ("最強のチャンスメーカー", "OBP*2.0 + RC/PA*0.5 + SB*0.02 - K*0.8", "Score_1"),
@@ -223,6 +264,18 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
             s_pa = season_pa_dict.get(player_name, 0)
             season_pa_text = f" | 今季打席数: **{s_pa}**"
 
+        hitless_text = ""
+        if hitless_dict and player_name in hitless_dict:
+            h_info = hitless_dict[player_name]
+            c_pa = h_info["pa"]
+            c_ab = h_info["ab"]
+            if c_pa == 0:
+                hitless_text = " | 状態: **✨ 直近打席で安打あり**"
+            elif c_pa >= 10:
+                hitless_text = f" | 状態: **⚠️ {c_pa}打席（{c_ab}打数）連続無安打**"
+            else:
+                hitless_text = f" | 状態: **📉 {c_pa}打席（{c_ab}打数）連続無安打**"
+
         pitcher_text = ""
         if assigned_pos == "投" and df_pitching is not None and not df_pitching.empty:
             p_rows = df_pitching[(df_pitching["選手名"] == player_name) & (df_pitching["選手名"] != "チーム記録")]
@@ -246,7 +299,7 @@ def assign_and_display_lineup(stats, pos_df, selected_players, season_pa_dict=No
             f"**{player_name}**\n\n"
             f"評価値({sort_col}): **{score_val:.3f}** | "
             f"打率: {p['AVG']:.3f} | 出塁率: {p['OBP']:.3f} | 長打率: {p['SLG']:.3f} | OPS: {p['OPS']:.3f} | RC/PA: {p['RC_per_PA']:.3f}\n\n"
-            f"本塁打: {int(p['HR'])} | 打点: {int(p['RBI'])} | 盗塁: {int(p['SB'])} | 三振率: {p['K_rate']:.3f}{season_pa_text}{pitcher_text}"
+            f"本塁打: {int(p['HR'])} | 打点: {int(p['RBI'])} | 盗塁: {int(p['SB'])} | 三振率: {p['K_rate']:.3f}{season_pa_text}{hitless_text}{pitcher_text}"
         )
     
     st.divider()
@@ -337,13 +390,19 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
     else:
         df_calc["打点"] = 0
 
-    # 盗塁（結果列から盗塁判定＋既存の盗塁列があれば合算）
+    # 盗塁
     res_str = df_calc["結果"].astype(str)
     steal_mask = (res_str == "盗塁") | (res_str.str.contains("盗塁") & ~res_str.str.contains("盗塁死"))
     if "盗塁" in df_batting.columns:
         df_calc["盗塁"] = pd.to_numeric(df_batting["盗塁"], errors='coerce').fillna(0) + steal_mask.astype(int)
     else:
         df_calc["盗塁"] = steal_mask.astype(int)
+
+    df_calc["日付_dt"] = pd.to_datetime(df_calc.get("日付", ""), errors="coerce")
+    df_calc["打順_num"] = pd.to_numeric(df_calc.get("打順", 0), errors="coerce")
+
+    # 各選手の連続無安打数を算出
+    hitless_dict = calc_consecutive_hitless(df_calc)
 
     cleaned_selected_players = [p.split(" (")[0] for p in selected_players]
     df_calc["選手名_clean"] = df_calc["選手名"].astype(str).apply(lambda x: x.split(" (")[0])
@@ -354,7 +413,6 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
         st.warning("選択された選手の打席データがありません。")
         return
 
-    df_selected["日付_dt"] = pd.to_datetime(df_selected.get("日付", ""), errors="coerce")
     current_year = datetime.datetime.now().year
     df_this_season = df_selected[df_selected["日付_dt"].dt.year == current_year]
     
@@ -380,14 +438,13 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
 
         if not stats_all.empty:
             stats_all = calculate_saber_metrics(stats_all)
-            assign_and_display_lineup(stats_all, df_selected, selected_players, season_pa_dict=season_pa_dict, df_pitching=df_pitching)
+            assign_and_display_lineup(stats_all, df_selected, selected_players, season_pa_dict=season_pa_dict, df_pitching=df_pitching, hitless_dict=hitless_dict)
         else:
             st.warning("規定打数（10打数）に到達している選択選手がいません。")
 
     with tab_recent:
         st.write("各選手の直近10打席（四死球・犠飛含む）の成績をベースにした、現在の調子重視のオーダーです。")
         
-        df_selected["打順_num"] = pd.to_numeric(df_selected.get("打順", 0), errors="coerce")
         df_sorted = df_selected.sort_values(by=["日付_dt", "打順_num"], ascending=[True, True])
         df_pa = df_sorted[df_sorted["is_pa"] == 1]
         df_recent10 = df_pa.groupby("選手名").tail(10)
@@ -406,6 +463,6 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
 
         if not stats_recent.empty:
             stats_recent = calculate_saber_metrics(stats_recent)
-            assign_and_display_lineup(stats_recent, df_recent10, selected_players, season_pa_dict=season_pa_dict, df_pitching=df_pitching)
+            assign_and_display_lineup(stats_recent, df_recent10, selected_players, season_pa_dict=season_pa_dict, df_pitching=df_pitching, hitless_dict=hitless_dict)
         else:
             st.warning("直近の打席データを持つ選択選手がいません。")
