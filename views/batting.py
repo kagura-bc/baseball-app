@@ -316,8 +316,10 @@ def undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type,
         st.warning("⚠️ 取り消し対象のデータが見つかりませんでした。")
         return
 
-    ids_to_remove = [str(i) for i in last_ids]
-    df_filtered = df_batting[~df_batting["ID"].astype(str).isin(ids_to_remove)].copy()
+    # 数値型に統一して判定（float と int/str の比較不一致を防止）
+    last_numeric_ids = set(pd.to_numeric(pd.Series(last_ids), errors="coerce").dropna().tolist())
+    df_numeric_ids = pd.to_numeric(df_batting["ID"], errors="coerce")
+    df_filtered = df_batting[~df_numeric_ids.isin(last_numeric_ids)].copy()
     
     if "_date_str" in df_filtered.columns:
         df_filtered = df_filtered.drop(columns=["_date_str"])
@@ -331,8 +333,25 @@ def undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type,
     try:
         target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
         conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
+        
+        # キャッシュの削除とセッション状態の更新
+        st.cache_data.clear()
         st.session_state[cache_key] = df_filtered
+        st.session_state.pop("cached_df_batting", None)
         st.session_state.pop("last_added_ids_batting", None)
+
+        # 🏃 走者・カウント・入力ピルキーのリセット処理を追加
+        st.session_state["persistent_runners"] = {"1b": None, "2b": None, "3b": None}
+        st.session_state["quick_clear_counter"] = st.session_state.get("quick_clear_counter", 0) + 1
+
+        keys_to_clear = [k for k in list(st.session_state.keys()) if any(k.startswith(p) for p in [
+            "runner_1b_", "runner_2b_", "runner_3b_", 
+            "quick_sr_", "quick_sd_", "quick_ef_", "quick_si_", "quick_er_", 
+            "b_count_", "s_count_", "f_count_", "pitch_count_"
+        ])]
+        for k in keys_to_clear:
+            del st.session_state[k]
+        
         st.success("✅ 直近のスコア登録を取り消しました！")
         time.sleep(0.5)
         st.rerun()
@@ -934,7 +953,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         elif quick_res == "三重殺": play_outs += 3
             
         for base in ["1b", "2b", "3b"]:
-            # 併殺打・三重殺の場合は、打席結果で既にアウトが加算されているため走塁死での重複加算を防ぐ
             if quick_res not in ["併殺打", "三重殺"]:
                 if st.session_state.get(f"runner_{base}_res_{curr_counter}") in ["走塁死", "盗塁死", "牽制死"]:
                     play_outs += 1
@@ -1012,7 +1030,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             r2_next = "2b" if cur_2b_name else None
             r3_next = "3b" if cur_3b_name else None
 
-            # 併殺打の場合は1塁走者を自動的にアウト（クリア）にする
             if quick_res == "併殺打":
                 r1_next = None
 
@@ -1082,6 +1099,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             try:
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                 conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
+                
+                st.cache_data.clear()
                 st.session_state[cache_key] = updated_full_df
                 st.session_state["last_added_ids_batting"] = added_ids
                 
