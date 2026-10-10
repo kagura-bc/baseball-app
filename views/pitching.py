@@ -584,11 +584,18 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     current_inn_val = st.session_state.get("p_det_inn", f"1回{p_inning_suffix}")
 
-    p_inn_df_check = (
-        today_pitching_df[today_pitching_df["イニング"] == current_inn_val]
-        if not today_pitching_df.empty and "イニング" in today_pitching_df.columns
-        else pd.DataFrame()
-    )
+    # ★ 追加：すでに3アウトになっている場合は自動で次のイニングへ進める（batting_15.pyと同等の処理）
+    if not today_pitching_df.empty and "イニング" in today_pitching_df.columns:
+        p_inn_df_check = today_pitching_df[today_pitching_df["イニング"] == current_inn_val]
+        existing_outs = calculate_outs(p_inn_df_check)
+        if existing_outs >= 3:
+            try:
+                curr_idx = inn_options.index(current_inn_val)
+                if curr_idx < len(inn_options) - 2:
+                    current_inn_val = inn_options[curr_idx + 2]
+                    st.session_state["p_det_inn"] = current_inn_val
+            except ValueError:
+                pass
 
     if "opp_batter_offset" not in st.session_state:
         st.session_state["opp_batter_offset"] = 0
@@ -661,7 +668,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         c_inn, c_outs = st.columns([1.2, 3.8])
         with c_inn:
             def_inn_ix = inn_options.index(current_inn_val) if current_inn_val in inn_options else 0
-            current_inn = st.selectbox("イニング選択", inn_options, index=def_inn_ix, label_visibility="collapsed", key="pitching_inn_select")
+            # ★ 修正：key="pitching_inn_select" を削除し、打撃側と同じく index の動的更新が効くようにする
+            current_inn = st.selectbox("イニング選択", inn_options, index=def_inn_ix, label_visibility="collapsed")
             st.session_state["p_det_inn"] = current_inn
 
         with c_outs:
