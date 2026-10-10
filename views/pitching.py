@@ -585,6 +585,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     current_inn_val = st.session_state.get("p_det_inn", f"1回{p_inning_suffix}")
 
+    # 3アウト検知によるイニング自動更新（batting_16.pyと同等処理）
     if not today_pitching_df.empty and "イニング" in today_pitching_df.columns:
         p_inn_df_check = today_pitching_df[today_pitching_df["イニング"] == current_inn_val]
         existing_outs = calculate_outs(p_inn_df_check)
@@ -622,7 +623,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
     st.divider()
 
     # ==================================================
-    # ⚾ 投手成績入力用フラグメント (batting_input_fragmentと同構造)
+    # ⚾ 投手成績入力用フラグメント
     # ==================================================
     @st.fragment
     def pitching_input_fragment():
@@ -642,11 +643,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             st.error(st.session_state["pitching_error_msg"])
             st.session_state["pitching_error_msg"] = None
 
-        # 2. イニング選択 & BSO・球数インジケーター
+        # 2. イニング選択 & BSO・球数インジケーター（★ key パラメータを外して自動更新を有効化）
         c_inn, c_outs = st.columns([1.2, 3.8])
         with c_inn:
             def_inn_ix = inn_options.index(current_inn_val) if current_inn_val in inn_options else 0
-            current_inn = st.selectbox("イニング選択", inn_options, index=def_inn_ix, label_visibility="collapsed", key="pitching_inning_selectbox")
+            current_inn = st.selectbox("イニング選択", inn_options, index=def_inn_ix, label_visibility="collapsed")
             st.session_state["p_det_inn"] = current_inn
 
         with c_outs:
@@ -1524,6 +1525,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 existing_outs = calculate_outs(p_inn_df)
                 total_outs_after = existing_outs + add_outs_total
 
+                # ★ 3アウト時に次イニング（2回進める）へ自動更新
                 if total_outs_after >= 3:
                     st.session_state["p_persistent_runners"] = {"1b": None, "2b": None, "3b": None}
                     try:
