@@ -651,7 +651,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     st.divider()
 
-    with st.container():
+    @st.fragment
+    def pitching_input_fragment():
+        curr_counter = st.session_state.get("p_clear_counter", 0)
+
         c_sub1, c_sub2 = st.columns([3, 2])
         with c_sub1:
             submit_detail = st.button("スコア登録実行", type="primary", use_container_width=True, key="submit_pitching_action")
@@ -669,7 +672,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         with c_inn:
             def_inn_ix = inn_options.index(current_inn_val) if current_inn_val in inn_options else 0
             # ★ 修正：key="pitching_inn_select" を削除し、打撃側と同じく index の動的更新が効くようにする
-            current_inn = st.selectbox("イニング選択", inn_options, index=def_inn_ix, label_visibility="collapsed")
+            current_inn = st.selectbox("イニング選択", inn_options, index=def_inn_ix, label_visibility="collapsed", key="pitching_inning_selectbox")
             st.session_state["p_det_inn"] = current_inn
 
         with c_outs:
