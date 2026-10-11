@@ -899,17 +899,16 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             if p_val and p_val not in runner_options and p_val not in ["なし", "None", "nan", ""]:
                 runner_options.append(p_val)
 
-        # 修正後（or st.session_state[sel_key] is None を削除）
         for b_key in ["1b", "2b", "3b"]:
             sel_key = f"p_runner_{b_key}_{curr_counter}"
-            # 初回描画時のみ設定
             if sel_key not in st.session_state:
                 val = p_runners.get(b_key)
                 st.session_state[sel_key] = val if (val and val in runner_options) else "なし"
 
-        r3_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "牽制死"]
-        r2_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "牽制死", "進塁1"]
-        r1_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "牽制死", "進塁1", "進塁2"]
+        # ★ 併殺死を追加
+        r3_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死"]
+        r2_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1"]
+        r1_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "進塁2"]
         out_fielder_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
 
         r_cols = st.columns(3)
@@ -926,13 +925,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             r3_res = st.session_state.get(f"p_runner_3b_res_{curr_counter}")
             r3_f = st.session_state.get(f"p_runner_3b_fielder_{curr_counter}")
             r3_btn = (
-                f"🟢 {r3_res}({r3_f}) 🔽" if (r3_res in ["走塁死", "盗塁死", "牽制死"] and r3_f)
+                f"🟢 {r3_res}({r3_f}) 🔽" if (r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r3_f)
                 else (f"🟢 {r3_res} 🔽" if r3_res else "走塁結果 🔽")
             )
             with st.popover(r3_btn, use_container_width=True):
                 st.markdown("##### 3塁 走塁結果を選択")
-                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key=f"p_runner_3b_res_{curr_counter}", label_visibility="collapsed")
-                if cur_r3_res in ["走塁死", "盗塁死", "牽制死"]:
+                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key=f"runner_3b_res_{curr_counter}", label_visibility="collapsed")
+                if cur_r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("3塁処理野手ピル", out_fielder_options, key=f"p_runner_3b_fielder_{curr_counter}", label_visibility="collapsed")
@@ -949,13 +948,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             r2_res = st.session_state.get(f"p_runner_2b_res_{curr_counter}")
             r2_f = st.session_state.get(f"p_runner_2b_fielder_{curr_counter}")
             r2_btn = (
-                f"🟢 {r2_res}({r2_f}) 🔽" if (r2_res in ["走塁死", "盗塁死", "牽制死"] and r2_f)
+                f"🟢 {r2_res}({r2_f}) 🔽" if (r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r2_f)
                 else (f"🟢 {r2_res} 🔽" if r2_res else "走塁結果 🔽")
             )
             with st.popover(r2_btn, use_container_width=True):
                 st.markdown("##### 2塁 走塁結果を選択")
-                cur_r2_res = st.pills("2塁結果ピル", r2_res_options, key=f"p_runner_2b_res_{curr_counter}", label_visibility="collapsed")
-                if cur_r2_res in ["走塁死", "盗塁死", "牽制死"]:
+                cur_r2_res = st.pills("2塁結果ピル", r2_res_options, key=f"runner_2b_res_{curr_counter}", label_visibility="collapsed")
+                if cur_r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("2塁処理野手ピル", out_fielder_options, key=f"p_runner_2b_fielder_{curr_counter}", label_visibility="collapsed")
@@ -972,13 +971,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             r1_res = st.session_state.get(f"p_runner_1b_res_{curr_counter}")
             r1_f = st.session_state.get(f"p_runner_1b_fielder_{curr_counter}")
             r1_btn = (
-                f"🟢 {r1_res}({r1_f}) 🔽" if (r1_res in ["走塁死", "盗塁死", "牽制死"] and r1_f)
+                f"🟢 {r1_res}({r1_f}) 🔽" if (r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r1_f)
                 else (f"🟢 {r1_res} 🔽" if r1_res else "走塁結果 🔽")
             )
             with st.popover(r1_btn, use_container_width=True):
                 st.markdown("##### 1塁 走塁結果を選択")
-                cur_r1_res = st.pills("1塁結果ピル", r1_res_options, key=f"p_runner_1b_res_{curr_counter}", label_visibility="collapsed")
-                if cur_r1_res in ["走塁死", "盗塁死", "牽制死"]:
+                cur_r1_res = st.pills("1塁結果ピル", r1_res_options, key=f"runner_1b_res_{curr_counter}", label_visibility="collapsed")
+                if cur_r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("1塁処理野手ピル", out_fielder_options, key=f"p_runner_1b_fielder_{curr_counter}", label_visibility="collapsed")
@@ -1411,8 +1410,18 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             current_er = st.session_state.get(f"pitching_quick_er_{curr_counter}")
             p_er = current_er if current_er is not None else 0
 
+            # ★ 併殺打のバリデーションチェック
+            has_runner = bool(cur_1b or cur_2b or cur_3b)
+            has_dp_out_runner = any(r in ["併殺死", "走塁死"] for r in [res_1b, res_2b, res_3b])
+
             if sub_validation_error:
                 st.session_state["pitching_error_msg"] = sub_validation_error
+                st.rerun()
+            elif p_res == "併殺打" and not has_runner:
+                st.session_state["pitching_error_msg"] = "⚠️ 併殺打を登録するには、ランナーが1人以上必要です。"
+                st.rerun()
+            elif p_res == "併殺打" and not has_dp_out_runner:
+                st.session_state["pitching_error_msg"] = "⚠️ 併殺打が選択されています。アウトになった走者の走塁結果に「併殺死」を選択してください。"
                 st.rerun()
             elif not p_res and not (res_1b or res_2b or res_3b) and not opp_rows_to_add:
                 st.session_state["pitching_error_msg"] = "⚠️ 登録する内容（投球結果・走塁結果・メンバー変更等）を選択してください。"
@@ -1465,9 +1474,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
                     add_outs = 0
                     if p_res == "併殺打":
-                        add_outs = 2
+                        add_outs = 1  # ★ 打者分のアウト数
                     elif p_res == "三重殺":
-                        add_outs = 3
+                        add_outs = 1  # ★ 打者分のアウト数
                     elif p_res in [
                         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
                         "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
@@ -1531,10 +1540,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         r_res = "得点"
 
                     if r_res:
-                        if p_res in ["併殺打", "三重殺"]:
-                            r_outs = 0
-                        else:
-                            r_outs = 1 if r_res in ["走塁死", "盗塁死", "牽制死"] else 0
+                        # ★ 走者のアウトカウント計算（併殺死を含む）
+                        r_outs = 1 if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] else 0
 
                         fielder_disp = ""
                         if r_f:
@@ -1592,7 +1599,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                     conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
                     st.cache_data.clear()
-                    st.session_state[cache_key] = updated_p_df  # ★この1行を追加
+                    st.session_state[cache_key] = updated_p_df
                     st.session_state["last_added_ids_pitching"] = added_p_ids
 
                 if p_res and p_res in PA_RESULTS_PITCHING and p_res not in ["盗塁", "盗塁死", "牽制死", "暴投", "捕逸", "ボーク", "走塁死"]:
@@ -1621,28 +1628,25 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     r2_next = "2b" if cur_2b_runner_name else None
                     r3_next = "3b" if cur_3b_runner_name else None
 
-                    if p_res == "併殺打":
-                        r1_next = None
-
-                    # 1塁走者の進塁計算
+                    # ★ 1塁走者の進塁計算（併殺死を追加）
                     if cur_1b_runner_name:
                         if res_1b in ["盗塁", "進塁1", "進塁"] or (p_res == "盗塁" and not res_1b):
                             r1_next = "2b"
                         elif res_1b == "進塁2":
                             r1_next = "3b"
-                        elif res_1b in ["得点", "走塁死", "盗塁死", "牽制死"]:
+                        elif res_1b in ["得点", "走塁死", "盗塁死", "牽制死", "併殺死"]:
                             r1_next = None
 
-                    # 2塁走者の進塁計算
+                    # ★ 2塁走者の進塁計算（併殺死を追加）
                     if cur_2b_runner_name:
                         if res_2b in ["盗塁", "進塁1", "進塁"] or (p_res == "盗塁" and not res_2b):
                             r2_next = "3b"
-                        elif res_2b in ["進塁2", "得点", "走塁死", "盗塁死", "牽制死"]:
+                        elif res_2b in ["進塁2", "得点", "走塁死", "盗塁死", "牽制死", "併殺死"]:
                             r2_next = None
 
-                    # 3塁走者の進塁計算
+                    # ★ 3塁走者の進塁計算（併殺死を追加）
                     if cur_3b_runner_name:
-                        if res_3b in ["得点", "走塁死", "盗塁死", "牽制死", "盗塁", "進塁1", "進塁2", "進塁"]:
+                        if res_3b in ["得点", "走塁死", "盗塁死", "牽制死", "併殺死", "盗塁", "進塁1", "進塁2", "進塁"]:
                             r3_next = None
 
                     # 満塁・押し出し（四死球）の進塁計算
@@ -1669,10 +1673,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         next_runners[r2_next] = cur_2b_runner_name
                     if r3_next and cur_3b_runner_name:
                         next_runners[r3_next] = cur_3b_runner_name
-                    if b_next and current_batter_name:
+                    if b_next and current_batter_name and p_res != "併殺打":
                         next_runners[b_next] = current_batter_name
 
-                    # 走者の重複防止（同一選手が複数塁に入った場合、優先度の低い側の塁をクリア）
+                    # 走者の重複防止
                     seen_players = set()
                     for base in ["1b", "2b", "3b"]:
                         p_name = next_runners[base]
@@ -1751,159 +1755,3 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             if st.session_state["opp_batter_count"] < 20:
                 st.session_state["opp_batter_count"] += 1
                 st.rerun()
-
-    # --- 全イニング詳細履歴表示 ---
-    st.write("")
-    st.markdown("#### 📊 全イニング 攻撃・守備 詳細履歴")
-
-    has_batting_history = not today_batting_df.empty
-    has_pitching_history = (
-        not today_pitching_df.empty
-        and not today_pitching_df[~today_pitching_df["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"])].empty
-    )
-
-    if has_batting_history or has_pitching_history:
-        exclude_res = ["スタメン", "守備変更", "交代", "ベンチ", "試合前", "まとめ入力", "", "nan", "残塁"]
-        exclude_pattern = r"進塁|得点|残塁"
-
-        valid_batting_df = pd.DataFrame()
-        if not today_batting_df.empty:
-            res_s = today_batting_df["結果"].astype(str).str.strip() if "結果" in today_batting_df.columns else pd.Series("", index=today_batting_df.index)
-            pos_col = "守備位置" if "守備位置" in today_batting_df.columns else ("位置" if "位置" in today_batting_df.columns else "")
-            pos_s = today_batting_df[pos_col].astype(str).str.strip() if pos_col else pd.Series("", index=today_batting_df.index)
-
-            is_bat_excluded = (
-                res_s.isin(exclude_res) | 
-                res_s.str.contains(exclude_pattern, na=False) |
-                pos_s.str.contains(exclude_pattern, na=False)
-            )
-            valid_batting_df = today_batting_df[~is_bat_excluded].copy()
-
-        valid_pitching_df = pd.DataFrame()
-        if not today_pitching_df.empty:
-            mask_pit = (
-                ~today_pitching_df["イニング"].astype(str).isin(["試合終了", "まとめ入力", "", "nan"]) &
-                today_pitching_df["打順"].notna()
-            )
-            if "結果" in today_pitching_df.columns:
-                mask_pit = mask_pit & ~today_pitching_df["結果"].astype(str).str.contains(exclude_pattern, na=False)
-            valid_pitching_df = today_pitching_df[mask_pit].copy()
-
-        raw_inns = list(
-            set(
-                (valid_batting_df["イニング"].dropna().astype(str).tolist() if not valid_batting_df.empty and "イニング" in valid_batting_df.columns else [])
-                + (valid_pitching_df["イニング"].dropna().astype(str).tolist() if not valid_pitching_df.empty and "イニング" in valid_pitching_df.columns else [])
-            )
-        )
-
-        exclude_inns = ["まとめ入力", "試合前", "ベンチ", "", "nan", "None"]
-        active_innings = [inn for inn in raw_inns if inn not in exclude_inns]
-
-        def inning_sort_key(inn):
-            inn_str = str(inn)
-            is_ext = 1 if "延長" in inn_str else 0
-            m = re.search(r"(\d+)", inn_str)
-            num = int(m.group(1)) if m else 99
-            sub = 0 if "表" in inn_str else (1 if "裏" in inn_str else 2)
-            return (is_ext, num, sub)
-
-        active_innings.sort(key=inning_sort_key)
-
-        if active_innings:
-            for inn in active_innings:
-                inn_id = inn.replace("回", "").replace("表", "").replace("裏", "")
-                st.markdown(f"<div id='inning-{inn_id}' style='scroll-margin-top: 100px;'></div>", unsafe_allow_html=True)
-
-                inn_bat_df = (
-                    valid_batting_df[valid_batting_df["イニング"] == inn]
-                    if not valid_batting_df.empty and "イニング" in valid_batting_df.columns
-                    else pd.DataFrame()
-                )
-                if not inn_bat_df.empty:
-                    st.markdown("---")
-                    st.markdown(f"### 📍 **{inn}（攻撃）**")
-                    bat_items = []
-                    for _, row in inn_bat_df.iterrows():
-                        b_order = row.get("打順", "")
-                        try:
-                            b_order_str = f"{int(float(b_order))}番" if pd.notna(b_order) and str(b_order).strip() != "" else ""
-                        except (ValueError, TypeError):
-                            b_order_str = f"{b_order}番" if b_order else ""
-
-                        p_name = row.get("打者名", row.get("選手名", ""))
-                        res = row.get("結果", "")
-                        direction = row.get("打球方向", "")
-                        rbi = pd.to_numeric(row.get("打点", 0), errors="coerce")
-                        run = pd.to_numeric(row.get("得点", 0), errors="coerce")
-
-                        res_str = str(res)
-                        if direction and str(direction) not in ["---", "nan", "None", ""]:
-                            res_str = f"{direction}{res_str}"
-                        if pd.notna(rbi) and rbi > 0:
-                            res_str = f"{res_str} ・ 打点{int(rbi)}"
-                        if pd.notna(run) and run > 0:
-                            res_str = f"{res_str} 🟢得点"
-
-                        bat_items.append({"打順": b_order_str, "打者": p_name, "結果": res_str})
-                    df_bat_disp = pd.DataFrame(bat_items).T
-                    st.dataframe(apply_dataframe_style(df_bat_disp, highlight_batting), use_container_width=True)
-
-                inn_pit_df = (
-                    valid_pitching_df[valid_pitching_df["イニング"] == inn]
-                    if not valid_pitching_df.empty and "イニング" in valid_pitching_df.columns
-                    else pd.DataFrame()
-                )
-                if not inn_pit_df.empty:
-                    st.markdown("---")
-                    st.markdown(f"### 📍 **{inn}（守備）**")
-                    pit_items = []
-                    for _, row in inn_pit_df.iterrows():
-                        b_ord_val = row.get("打順")
-                        if pd.notna(b_ord_val) and str(b_ord_val).strip() not in ["", "nan", "None"]:
-                            try:
-                                b_idx = f"{int(float(b_ord_val))}番"
-                            except (ValueError, TypeError):
-                                b_idx = f"{b_ord_val}番"
-                        else:
-                            raw_b_idx = str(row.get("種別", "")).split(":")[1].replace("番打者", "") if "種別" in row and ":" in str(row.get("種別", "")) else "?"
-                            try:
-                                b_idx = f"{int(float(raw_b_idx))}番"
-                            except (ValueError, TypeError):
-                                b_idx = f"{raw_b_idx}番" if raw_b_idx != "?" else "?"
-
-                        pitcher_n = row.get("投手名", row.get("選手名", ""))
-                        batter_n = row.get("打者名", "")
-
-                        raw_res = str(row.get("結果", ""))
-                        pos_str = str(row.get("打球方向", "")) or str(row.get("守備位置", "")) or str(row.get("位置", ""))
-                        if pos_str and pos_str not in ["nan", "None", ""]:
-                            raw_res = f"{raw_res}({pos_str})"
-
-                        ef_pos = str(row.get("エラー野手", ""))
-                        if ef_pos and ef_pos not in ["nan", "None", ""]:
-                            raw_res = f"{raw_res} [失策:{ef_pos}]"
-
-                        fielder_name = str(row.get("処理野手", ""))
-                        if fielder_name and fielder_name not in ["nan", "None", ""]:
-                            clean_name = fielder_name.replace("(", "").replace(")", "")
-                            res_text = f"{raw_res} [{clean_name}]"
-                        else:
-                            res_text = raw_res
-
-                        rbi_val = pd.to_numeric(row.get("打点", 0), errors="coerce")
-                        rbi = int(rbi_val) if pd.notna(rbi_val) else 0
-                        if rbi > 0:
-                            res_text = f"{res_text} 打点{rbi}"
-
-                        item_dict = {"打順": b_idx, "投手": pitcher_n}
-                        if batter_n:
-                            item_dict["打者"] = batter_n
-                        item_dict["結果"] = res_text
-
-                        pit_items.append(item_dict)
-                    df_pit_disp = pd.DataFrame(pit_items).T
-                    st.dataframe(apply_dataframe_style(df_pit_disp, highlight_pitching), use_container_width=True)
-        else:
-            st.caption("詳細データはまだありません。")
-    else:
-        st.caption("詳細データはまだありません。")
