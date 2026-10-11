@@ -368,7 +368,9 @@ def render_game_result_popover(
             try:
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                 conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
-                st.cache_data.clear()
+               
+                st.session_state["cached_df_pitching"] = updated_df
+                
                 st.success("✅ 責任投手情報を保存しました！")
                 time.sleep(0.5)
                 st.rerun()
@@ -421,10 +423,9 @@ def undo_last_pitching_entry(df_pitching, selected_date_str, opp_team, match_typ
         target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
         conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=df_to_save)
         
-        st.cache_data.clear()
+        st.session_state["cached_df_pitching"] = df_filtered 
         cache_key = f"cache_pitching_{selected_date_str}_{opp_team}_{match_type}"
         st.session_state[cache_key] = df_filtered
-        st.session_state.pop("cached_df_pitching", None)
         st.session_state.pop("last_added_ids_pitching", None)
 
         st.session_state["p_persistent_runners"] = {"1b": None, "2b": None, "3b": None}
@@ -1613,12 +1614,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
                     save_df = updated_p_df[TARGET_COLUMNS].copy()
                     target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
-                    
-                    # ★ 保存中にスピナーを表示
                     with st.spinner("データを保存しています..."):
                         conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
-                        
-                    st.cache_data.clear()
+                    
+                    st.session_state["cached_df_pitching"] = updated_p_df
+                    
                     st.session_state[cache_key] = updated_p_df
                     st.session_state["last_added_ids_pitching"] = added_p_ids
 

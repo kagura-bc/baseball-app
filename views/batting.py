@@ -293,7 +293,9 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
             try:
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                 conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
-                st.cache_data.clear()
+
+                st.session_state["cached_df_pitching"] = updated_df
+                
                 st.success("✅ 責任投手情報を保存しました！")
                 time.sleep(0.5)
                 st.rerun()
@@ -346,12 +348,13 @@ def undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type,
 
     try:
         target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
-        conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
+        conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save) 
+
+        st.session_state["cached_df_batting"] = df_filtered 
         
-        st.cache_data.clear()
+        cache_key = f"cache_batting_{selected_date_str}_{opp_team}_{match_type}" 
         st.session_state[cache_key] = df_filtered
-        st.session_state.pop("cached_df_batting", None)
-        st.session_state.pop("last_added_ids_batting", None)
+        st.session_state.pop("last_added_ids_batting", None) 
 
         st.session_state["persistent_runners"] = {"1b": None, "2b": None, "3b": None}
         st.session_state["quick_clear_counter"] = st.session_state.get("quick_clear_counter", 0) + 1
@@ -1164,7 +1167,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 with st.spinner("データを保存しています..."):
                     conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
                 
-                st.cache_data.clear()
+                st.session_state["cached_df_batting"] = updated_full_df 
                 st.session_state[cache_key] = updated_full_df
                 st.session_state["last_added_ids_batting"] = added_ids
                 

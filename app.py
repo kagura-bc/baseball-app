@@ -154,12 +154,23 @@ if not st.session_state["is_logged_in"]:
   st.stop()
 
 # ==========================================
-# 📊 データ動的読み込み（キャッシュ活用）
+# 📊 データ動的読み込み（API制限対策・キャッシュ活用）
 # ==========================================
 MY_DB_URL = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
 
-df_batting = load_batting_data(spreadsheet_url=MY_DB_URL)
-df_pitching = load_pitching_data(spreadsheet_url=MY_DB_URL)
+raw_df_batting = load_batting_data(spreadsheet_url=MY_DB_URL)
+if "cached_df_batting" in st.session_state:
+    df_batting = st.session_state["cached_df_batting"]
+else:
+    df_batting = raw_df_batting
+    st.session_state["cached_df_batting"] = df_batting
+
+raw_df_pitching = load_pitching_data(spreadsheet_url=MY_DB_URL)
+if "cached_df_pitching" in st.session_state:
+    df_pitching = st.session_state["cached_df_pitching"]
+else:
+    df_pitching = raw_df_pitching
+    st.session_state["cached_df_pitching"] = df_pitching
 
 ALL_PLAYERS, PLAYER_NUMBERS = get_active_players(spreadsheet_url=MY_DB_URL)
 st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
