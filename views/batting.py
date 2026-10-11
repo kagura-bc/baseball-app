@@ -1001,11 +1001,16 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     add_outs += 1
 
-            inn_df_check = today_batting_df[today_batting_df["イニング"] == inn_val] if not today_batting_df.empty else pd.DataFrame()
-            s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
-            t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
+            # ★ 列の存在チェックを挟んで安全にアウト数を計算
+            if not today_batting_df.empty and "イニング" in today_batting_df.columns and "結果" in today_batting_df.columns:
+                inn_df_check = today_batting_df[today_batting_df["イニング"] == inn_val]
+                s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
+                t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
+            else:
+                s_outs = 0
+                t_outs = 0
 
-            # is_change の判定から d_outs を削除
+            # is_change の判定
             is_change = (s_outs + t_outs + add_outs) >= 3
 
         # --------------------------------------------------
