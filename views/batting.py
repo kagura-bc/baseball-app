@@ -1144,6 +1144,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 next_counter = curr_counter + 1
                 st.session_state["quick_clear_counter"] = next_counter
 
+                # ★【追加】登録完了後、前打席の走者選択・走塁結果キーを明示的にクリアする
+                keys_to_clear = [k for k in list(st.session_state.keys()) if any(k.startswith(p) for p in [
+                    "runner_1b_", "runner_2b_", "runner_3b_"
+                ])]
+                for k in keys_to_clear:
+                    del st.session_state[k]
+
                 is_pa_completed = bool(quick_res and quick_res in PA_RESULTS)
                 if not is_pa_completed:
                     st.session_state[f"b_count_{next_counter}"] = ball_count_val

@@ -1632,6 +1632,15 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 next_counter = curr_counter + 1
                 st.session_state["p_clear_counter"] = next_counter
 
+                # ★【追加】登録完了後、相手チームの走者選択・走塁結果キーをクリア
+                p_keys_to_clear = [k for k in list(st.session_state.keys()) if any(k.startswith(p) for p in [
+                    "p_runner_1b_", "p_runner_2b_", "p_runner_3b_"
+                ])]
+                for k in p_keys_to_clear:
+                    del st.session_state[k]
+
+                is_pa_completed = bool(p_res and p_res in PA_RESULTS_PITCHING)
+
                 PA_RESULTS = [
                     "凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打",
                     "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "三重殺", "振り逃げ三振",
