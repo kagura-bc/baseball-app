@@ -445,8 +445,22 @@ def undo_last_pitching_entry(df_pitching, selected_date_str, opp_team, match_typ
 
 # --- メインページ表示関数 ---
 def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, selected_date_str: str, match_type: str, ground_name: str, opp_team: str, kagura_order: str):
-    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
+    fetched_players, fetched_numbers = get_active_players()
+    
+    if fetched_players:
+        st.session_state["backup_all_players"] = fetched_players
+        st.session_state["backup_player_numbers"] = fetched_numbers
+        ALL_PLAYERS = fetched_players
+        PLAYER_NUMBERS = fetched_numbers
+    else:
+        ALL_PLAYERS = st.session_state.get("backup_all_players", [])
+        PLAYER_NUMBERS = st.session_state.get("backup_player_numbers", {})
+
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
+
+    if not ALL_PLAYERS:
+        st.error("⚠️ 選手データの取得に一時的に失敗しました。通信環境を確認し、画面を再読み込みしてください。")
+        st.stop()
 
     ws_pitching = "投手成績"
     is_kagura_top = (kagura_order == "先攻 (表)")

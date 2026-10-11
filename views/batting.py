@@ -375,8 +375,24 @@ def undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type,
         st.error(f"取り消しに失敗しました: {e}")
 
 def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, ground_name, opp_team, kagura_order, is_test_mode=False):
-    ALL_PLAYERS, PLAYER_NUMBERS = get_active_players()
+    fetched_players, fetched_numbers = get_active_players()
+    
+    # ★【追加】取得成功時はバックアップし、一時的な取得失敗時はバックアップを使用
+    if fetched_players:
+        st.session_state["backup_all_players"] = fetched_players
+        st.session_state["backup_player_numbers"] = fetched_numbers
+        ALL_PLAYERS = fetched_players
+        PLAYER_NUMBERS = fetched_numbers
+    else:
+        ALL_PLAYERS = st.session_state.get("backup_all_players", [])
+        PLAYER_NUMBERS = st.session_state.get("backup_player_numbers", {})
+
     st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
+
+    # ★【追加】バックアップすらない場合（初回接続失敗時）は安全に中断してリセットを防止
+    if not ALL_PLAYERS:
+        st.error("⚠️ 選手データの取得に一時的に失敗しました。通信環境を確認し、画面を再読み込みしてください。")
+        st.stop()
     
     conn = st.connection("gsheets", type=GSheetsConnection)
     
