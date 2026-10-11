@@ -1432,11 +1432,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.divider()
 
+        # 修正後（or st.session_state[curr_r_key] is None を削除）
         p_runners = st.session_state.get("persistent_runners", {"1b": None, "2b": None, "3b": None})
-        
+
         for b_key in ["1b", "2b", "3b"]:
             curr_r_key = f"runner_{b_key}_{curr_counter}"
-            if curr_r_key not in st.session_state or st.session_state[curr_r_key] is None:
+            # 初回描画時（キー未存在時）のみ自動引き継ぎし、手動解除(None)時は復元しない
+            if curr_r_key not in st.session_state:
                 st.session_state[curr_r_key] = p_runners.get(b_key)
 
         st.markdown("##### 🏃 走者状況")

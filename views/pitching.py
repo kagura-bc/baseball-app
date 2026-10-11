@@ -899,9 +899,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             if p_val and p_val not in runner_options and p_val not in ["なし", "None", "nan", ""]:
                 runner_options.append(p_val)
 
+        # 修正後（or st.session_state[sel_key] is None を削除）
         for b_key in ["1b", "2b", "3b"]:
             sel_key = f"p_runner_{b_key}_{curr_counter}"
-            if sel_key not in st.session_state or st.session_state[sel_key] is None:
+            # 初回描画時のみ設定
+            if sel_key not in st.session_state:
                 val = p_runners.get(b_key)
                 st.session_state[sel_key] = val if (val and val in runner_options) else "なし"
 
