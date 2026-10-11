@@ -44,19 +44,32 @@ PA_RESULTS = [
 
 
 def calculate_outs(df: pd.DataFrame) -> int:
-    """投手成績入力ページと同等のアウト数計算ロジック"""
+    """打者の打席結果と走者の走塁結果から正確にアウト数を算出"""
     if df.empty or "結果" not in df.columns:
         return 0
     
+    # 単独で1アウトになる結果一覧（併殺打・三重殺は除く）
     single_out_list = [
         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
         "犠飛", "牽制死", "盗塁死", "走塁死", "併殺死", "振り逃げ三振"
     ]
     
     s_outs = len(df[df["結果"].isin(single_out_list)])
-    d_outs = len(df[df["結果"] == "併殺打"]) * 2
+    
+    # 併殺打の計算：走者の「併殺死」件数をカウント
+    # ・走者併殺死が1人（通常の併殺）: 打者(+1) + 走者併殺死(+1) = 計2アウト（打者分で+1加算）
+    # ・走者併殺死が2人（走者2人アウト）: 打者セーフ(0) + 走者併殺死(+2) = 計2アウト（打者分は加算しない）
+    dp_rows = df[df["結果"] == "併殺打"]
+    dp_outs = 0
+    if not dp_rows.empty:
+        dp_runner_outs = len(df[df["結果"] == "併殺死"])
+        # 走者の併殺死が2人未満なら、打者自身のアウト(+1)を加算
+        if dp_runner_outs < 2 * len(dp_rows):
+            dp_outs = len(dp_rows)
+            
     t_outs = len(df[df["結果"] == "三重殺"]) * 3
-    return s_outs + d_outs + t_outs
+    
+    return s_outs + dp_outs + t_outs
 
 
 # --- BSOおよび球数インジケーターのHTML描画関数 ---
