@@ -1118,17 +1118,31 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             elif quick_res == "三塁打":
                 b_next = "3b"
 
+            # 打者名と走者名の重複を解消し、同一選手が複数塁に存在しないよう制御
             next_runners = {"1b": None, "2b": None, "3b": None}
 
             def clean_and_match(name_str):
                 if not name_str: return None
                 return next((p for p in player_options if p == name_str or p.split(" (")[0].strip() == name_str.split(" (")[0].strip()), name_str)
 
+            # 打者と同名の走者はあらかじめクリア（臨代走等の特殊ケースを除く）
+            clean_batter = clean_and_match(target_batter_name)
+
             if r1_next in next_runners: next_runners[r1_next] = clean_and_match(cur_1b_name)
             if r2_next in next_runners: next_runners[r2_next] = clean_and_match(cur_2b_name)
             if r3_next in next_runners: next_runners[r3_next] = clean_and_match(cur_3b_name)
             if b_next in next_runners and target_batter_name:
-                next_runners[b_next] = clean_and_match(target_batter_name)
+                next_runners[b_next] = clean_batter
+
+            # 重複防止：同じ選手が複数の塁に割り当てられた場合、より優先度の高い塁（打者自身の1塁出塁など）を残して他をクリア
+            seen_players = set()
+            for base in ["1b", "2b", "3b"]:
+                p_name = next_runners[base]
+                if p_name:
+                    if p_name in seen_players:
+                        next_runners[base] = None
+                    else:
+                        seen_players.add(p_name)
 
             st.session_state["persistent_runners"] = next_runners
 

@@ -1670,6 +1670,16 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     if b_next and current_batter_name:
                         next_runners[b_next] = current_batter_name
 
+                    # 走者の重複防止（同一選手が複数塁に入った場合、優先度の低い側の塁をクリア）
+                    seen_players = set()
+                    for base in ["1b", "2b", "3b"]:
+                        p_name = next_runners[base]
+                        if p_name:
+                            if p_name in seen_players:
+                                next_runners[base] = None
+                            else:
+                                seen_players.add(p_name)
+
                     st.session_state["p_persistent_runners"] = next_runners
 
                 next_counter = curr_counter + 1
