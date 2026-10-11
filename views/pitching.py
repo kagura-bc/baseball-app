@@ -622,7 +622,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     st.divider()
 
-    # ★ 【修正箇所】 🏃 走者・相手選手選択用リスト（opp_player_options）を上位スコープで事前に構築
+    # 🏃 走者・相手選手選択用リスト（opp_player_options）を上位スコープで事前に構築
     default_opp_players = [f"選手{i}" for i in range(1, 21)]
     opp_player_options = []
 
@@ -1169,16 +1169,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             sub_validation_error = None
             opp_rows_to_add = []
 
-            require_dir_results = [
-                "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打",
-                "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)",
-                "野選", "併殺打", "三重殺"
-            ]
-
-            must_advance_results = [
-                "単打", "二塁打", "三塁打", 
-                "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"
-            ]
             final_ground = ground_name or st.session_state.get("ground_name", "")
             final_opp = opp_team or st.session_state.get("opp_team", "")
             final_match_type = match_type or st.session_state.get("match_type", "")
@@ -1199,6 +1189,60 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     valid_m = valid_m[~valid_m.isin(["", "nan", "None"])]
                     if not valid_m.empty:
                         final_match_type = valid_m.iloc[-1]
+
+            # 相手スタメンが未登録の場合、「スコア登録実行」時に「イニング: 試合前」「結果: スタメン」のデータを自動保存に追加
+            has_starter_records = False
+            if not today_pitching_df.empty and "イニング" in today_pitching_df.columns and "結果" in today_pitching_df.columns:
+                starter_check = today_pitching_df[
+                    (today_pitching_df["イニング"].astype(str) == "試合前") &
+                    (today_pitching_df["結果"].astype(str) == "スタメン")
+                ]
+                if not starter_check.empty:
+                    has_starter_records = True
+
+            if not has_starter_records:
+                opp_cnt = st.session_state.get("opp_batter_count", 9)
+                for idx_s in range(opp_cnt):
+                    o_num = idx_s + 1
+                    s_pos = st.session_state.get(f"opp_sp_{idx_s}", "未選択")
+                    s_name = st.session_state.get(f"opp_sn_{idx_s}", f"選手{o_num}")
+                    
+                    if s_name and s_name not in ["nan", "None", "", "未選択", "相手投手"]:
+                        rec_st = {
+                            "日付": selected_date_str,
+                            "グラウンド": final_ground,
+                            "対戦相手": final_opp,
+                            "試合種別": final_match_type,
+                            "イニング": "試合前",
+                            "投手名": "相手投手",
+                            "打順": o_num,
+                            "打者名": s_name,
+                            "守備位置": s_pos,
+                            "打球方向": "ー",
+                            "処理野手": "ー",
+                            "エラー野手": "ー",
+                            "結果": "スタメン",
+                            "打点": 0,
+                            "自責点": 0,
+                            "勝敗": "ー",
+                            "球数": 0,
+                            "ストライク": 0,
+                            "ファールボール": 0,
+                            "ボール": 0,
+                            "ランナー状況": "ー"
+                        }
+                        opp_rows_to_add.append(rec_st)
+
+            require_dir_results = [
+                "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打",
+                "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)",
+                "野選", "併殺打", "三重殺"
+            ]
+
+            must_advance_results = [
+                "単打", "二塁打", "三塁打", 
+                "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"
+            ]
 
             POS_ALIASES = {
                 "投": ["投", "投手", "P", "1"],
