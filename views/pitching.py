@@ -883,9 +883,14 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
         p_runners = st.session_state.get("p_persistent_runners", {"1b": None, "2b": None, "3b": None})
 
+        # 保持中の走者が選択肢にない場合は動的に追加
+        for p_val in p_runners.values():
+            if p_val and p_val not in runner_options and p_val not in ["なし", "None", "nan", ""]:
+                runner_options.append(p_val)
+
         for b_key in ["1b", "2b", "3b"]:
             sel_key = f"p_runner_{b_key}_{curr_counter}"
-            if sel_key not in st.session_state or st.session_state[sel_key] is None or st.session_state[sel_key] not in runner_options:
+            if sel_key not in st.session_state or st.session_state[sel_key] is None:
                 val = p_runners.get(b_key)
                 st.session_state[sel_key] = val if (val and val in runner_options) else "なし"
 
@@ -1355,13 +1360,18 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             target_fielder_pos_list = st.session_state.get(f"pitching_quick_sd_{curr_counter}", [])
             p_ef = st.session_state.get(f"pitching_quick_ef_{curr_counter}", "") or ""
 
-            cur_1b_runner_name = st.session_state.get(f"p_runner_1b_{curr_counter}")
-            cur_2b_runner_name = st.session_state.get(f"p_runner_2b_{curr_counter}")
-            cur_3b_runner_name = st.session_state.get(f"p_runner_3b_{curr_counter}")
+            def get_clean_runner(val):
+                if not val or str(val).strip() in ["なし", "None", "nan", ""]:
+                    return None
+                return str(val).strip()
 
-            cur_1b = cur_1b_runner_name not in [None, "なし", ""]
-            cur_2b = cur_2b_runner_name not in [None, "なし", ""]
-            cur_3b = cur_3b_runner_name not in [None, "なし", ""]
+            cur_1b_runner_name = get_clean_runner(st.session_state.get(f"p_runner_1b_{curr_counter}"))
+            cur_2b_runner_name = get_clean_runner(st.session_state.get(f"p_runner_2b_{curr_counter}"))
+            cur_3b_runner_name = get_clean_runner(st.session_state.get(f"p_runner_3b_{curr_counter}"))
+
+            cur_1b = cur_1b_runner_name is not None
+            cur_2b = cur_2b_runner_name is not None
+            cur_3b = cur_3b_runner_name is not None
 
             res_1b = st.session_state.get(f"p_runner_1b_res_{curr_counter}")
             res_2b = st.session_state.get(f"p_runner_2b_res_{curr_counter}")
@@ -1601,29 +1611,34 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     if p_res == "併殺打":
                         r1_next = None
 
-                    if cur_1b_runner_name and res_1b:
-                        if res_1b in ["盗塁", "進塁1", "進塁"]:
+                    # 1塁走者の進塁計算
+                    if cur_1b_runner_name:
+                        if res_1b in ["盗塁", "進塁1", "進塁"] or (p_res == "盗塁" and not res_1b):
                             r1_next = "2b"
                         elif res_1b == "進塁2":
                             r1_next = "3b"
                         elif res_1b in ["得点", "走塁死", "盗塁死", "牽制死"]:
                             r1_next = None
 
-                    if cur_2b_runner_name and res_2b:
-                        if res_2b in ["盗塁", "進塁1", "進塁"]:
+                    # 2塁走者の進塁計算
+                    if cur_2b_runner_name:
+                        if res_2b in ["盗塁", "進塁1", "進塁"] or (p_res == "盗塁" and not res_2b):
                             r2_next = "3b"
                         elif res_2b in ["進塁2", "得点", "走塁死", "盗塁死", "牽制死"]:
                             r2_next = None
 
-                    if cur_3b_runner_name and res_3b:
+                    # 3塁走者の進塁計算
+                    if cur_3b_runner_name:
                         if res_3b in ["得点", "走塁死", "盗塁死", "牽制死", "盗塁", "進塁1", "進塁2", "進塁"]:
                             r3_next = None
 
+                    # 満塁・押し出し（四死球）の進塁計算
                     if p_res in ["四球", "死球"]:
                         r1_next = "2b" if cur_1b_runner_name else None
                         r2_next = "3b" if (cur_2b_runner_name and cur_1b_runner_name) else ("2b" if cur_2b_runner_name else None)
                         r3_next = None if (cur_3b_runner_name and cur_2b_runner_name and cur_1b_runner_name) else ("3b" if cur_3b_runner_name else None)
 
+                    # 打者の進塁（出塁）計算
                     b_next = None
                     if p_res in ["単打", "四球", "死球", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"]:
                         b_next = "1b"
@@ -1634,10 +1649,14 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
                     next_runners = {"1b": None, "2b": None, "3b": None}
 
-                    if r1_next in next_runners: next_runners[r1_next] = cur_1b_runner_name
-                    if r2_next in next_runners: next_runners[r2_next] = cur_2b_runner_name
-                    if r3_next in next_runners: next_runners[r3_next] = cur_3b_runner_name
-                    if b_next in next_runners and current_batter_name:
+                    # 有効な走者・打者のみを次の塁へ設定
+                    if r1_next and cur_1b_runner_name:
+                        next_runners[r1_next] = cur_1b_runner_name
+                    if r2_next and cur_2b_runner_name:
+                        next_runners[r2_next] = cur_2b_runner_name
+                    if r3_next and cur_3b_runner_name:
+                        next_runners[r3_next] = cur_3b_runner_name
+                    if b_next and current_batter_name:
                         next_runners[b_next] = current_batter_name
 
                     st.session_state["p_persistent_runners"] = next_runners
