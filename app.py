@@ -158,22 +158,24 @@ if not st.session_state["is_logged_in"]:
 # ==========================================
 MY_DB_URL = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
 
-raw_df_batting = load_batting_data(spreadsheet_url=MY_DB_URL)
-if "cached_df_batting" in st.session_state:
-    df_batting = st.session_state["cached_df_batting"]
-else:
-    df_batting = raw_df_batting
-    st.session_state["cached_df_batting"] = df_batting
+# ★ session_state にない初回のみ API から読み込む
+if "cached_df_batting" not in st.session_state:
+    st.session_state["cached_df_batting"] = load_batting_data(spreadsheet_url=MY_DB_URL)
+df_batting = st.session_state["cached_df_batting"]
 
-raw_df_pitching = load_pitching_data(spreadsheet_url=MY_DB_URL)
-if "cached_df_pitching" in st.session_state:
-    df_pitching = st.session_state["cached_df_pitching"]
-else:
-    df_pitching = raw_df_pitching
-    st.session_state["cached_df_pitching"] = df_pitching
+# ★ session_state にない初回のみ API から読み込む
+if "cached_df_pitching" not in st.session_state:
+    st.session_state["cached_df_pitching"] = load_pitching_data(spreadsheet_url=MY_DB_URL)
+df_pitching = st.session_state["cached_df_pitching"]
 
-ALL_PLAYERS, PLAYER_NUMBERS = get_active_players(spreadsheet_url=MY_DB_URL)
-st.session_state["shared_player_numbers"] = PLAYER_NUMBERS
+# ★ 選手一覧も初回のみ API から取得して session_state に保持
+if "cached_all_players" not in st.session_state or "shared_player_numbers" not in st.session_state:
+    all_players, player_numbers = get_active_players(spreadsheet_url=MY_DB_URL)
+    st.session_state["cached_all_players"] = all_players
+    st.session_state["shared_player_numbers"] = player_numbers
+
+ALL_PLAYERS = st.session_state["cached_all_players"]
+PLAYER_NUMBERS = st.session_state["shared_player_numbers"]
 
 
 def local_fmt(name):
