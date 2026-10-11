@@ -468,6 +468,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     conn = st.connection("gsheets", type=GSheetsConnection)
 
+    cache_key = f"cache_pitching_{selected_date_str}_{opp_team}_{match_type}"
+    if cache_key in st.session_state:
+        df_pitching = st.session_state[cache_key]
+
     today_batting_df = filter_today_df(df_batting, selected_date_str)
     today_pitching_df = filter_today_df(df_pitching, selected_date_str)
 
@@ -960,12 +964,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("1塁処理野手ピル", out_fielder_options, key=f"p_runner_1b_fielder_{curr_counter}", label_visibility="collapsed")
-
-        st.session_state["p_persistent_runners"] = {
-            "1b": st.session_state.get(f"p_runner_1b_{curr_counter}") if st.session_state.get(f"p_runner_1b_{curr_counter}") not in [None, "なし", ""] else None,
-            "2b": st.session_state.get(f"p_runner_2b_{curr_counter}") if st.session_state.get(f"p_runner_2b_{curr_counter}") not in [None, "なし", ""] else None,
-            "3b": st.session_state.get(f"p_runner_3b_{curr_counter}") if st.session_state.get(f"p_runner_3b_{curr_counter}") not in [None, "なし", ""] else None,
-        }
 
         st.divider()
 
@@ -1571,6 +1569,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                     conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
                     st.cache_data.clear()
+                    st.session_state[cache_key] = updated_p_df  # ★この1行を追加
                     st.session_state["last_added_ids_pitching"] = added_p_ids
 
                 if p_res and p_res in PA_RESULTS_PITCHING and p_res not in ["盗塁", "盗塁死", "牽制死", "暴投", "捕逸", "ボーク", "走塁死"]:
