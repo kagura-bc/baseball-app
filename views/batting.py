@@ -976,12 +976,22 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 "グラウンド": final_ground
             })
 
-            # ★【修正】アウト数加算ロジック（打者自身のアウト数を計算）
+            # ★ 走者の併殺死選択数をカウント
+            dp_runner_outs = sum(
+                1 for base in ["1b", "2b", "3b"]
+                if st.session_state.get(f"runner_{base}_res_{curr_counter}") == "併殺死"
+            )
+
+            # ★【修正】アウト数加算ロジック
             single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "併殺死", "牽制死", "振り逃げ三振"]
 
             add_outs = 0
-            if quick_res in ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "三重殺", "振り逃げ三振"]:
+            if quick_res in ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "三重殺", "振り逃げ三振"]:
                 add_outs += 1
+            elif quick_res == "併殺打":
+                # ★ 併殺死の走者が2人未満（1人またはランナー1人）の場合は打者もアウト
+                if dp_runner_outs < 2:
+                    add_outs += 1
 
             for base in ["1b", "2b", "3b"]:
                 r_res = st.session_state.get(f"runner_{base}_res_{curr_counter}")
@@ -1070,22 +1080,29 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     r1_next = "3b"
                 elif res_1b in ["得点", "走塁死", "盗塁死", "牽制死", "併殺死"]:
                     r1_next = None
+                elif res_1b == "残塁":
+                    r1_next = "1b"  # ★ 残塁の場合は1塁に保持
 
             if cur_2b_name and res_2b:
                 if res_2b in ["盗塁", "進塁1", "進塁"]:
                     r2_next = "3b"
                 elif res_2b in ["進塁2", "得点", "走塁死", "盗塁死", "牽制死", "併殺死"]:
                     r2_next = None
+                elif res_2b == "残塁":
+                    r2_next = "2b"  # ★ 残塁の場合は2塁に保持
 
             if cur_3b_name and res_3b:
                 if res_3b in ["得点", "走塁死", "盗塁死", "牽制死", "併殺死", "盗塁", "進塁1", "進塁2", "進塁"]:
                     r3_next = None
+                elif res_3b == "残塁":
+                    r3_next = "3b"  # ★ 残塁の場合は3塁に保持
 
             if quick_res in ["四球", "死球"]:
                 r1_next = "2b" if cur_1b_name else None
                 r2_next = "3b" if (cur_2b_name and cur_1b_name) else ("2b" if cur_2b_name else None)
                 r3_next = None if (cur_3b_name and cur_2b_name and cur_1b_name) else ("3b" if cur_3b_name else None)
 
+            # ★ 打者の進塁（出塁）計算
             b_next = None
             if quick_res in ["単打", "四球", "死球", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"]:
                 b_next = "1b"
@@ -1093,6 +1110,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 b_next = "2b"
             elif quick_res == "三塁打":
                 b_next = "3b"
+            elif quick_res == "併殺打" and dp_runner_outs >= 2:
+                # ★ 走者2人が併殺死の場合は打者がセーフで1塁に残る
+                b_next = "1b"
 
             next_runners = {"1b": None, "2b": None, "3b": None}
 
@@ -1105,7 +1125,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             if r1_next in next_runners: next_runners[r1_next] = clean_and_match(cur_1b_name)
             if r2_next in next_runners: next_runners[r2_next] = clean_and_match(cur_2b_name)
             if r3_next in next_runners: next_runners[r3_next] = clean_and_match(cur_3b_name)
-            if b_next in next_runners and target_batter_name and quick_res != "併殺打":
+            # ★ 併殺打でも走者2人併殺死なら打者を1塁に設定
+            if b_next in next_runners and target_batter_name and (quick_res != "併殺打" or dp_runner_outs >= 2):
                 next_runners[b_next] = clean_batter
 
             seen_players = set()
@@ -1412,10 +1433,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
         st.markdown("##### 🏃 走者状況")
         
-        # ★【修正】併殺死の選択肢を追加
-        r3_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死"]
-        r2_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1"]
-        r1_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "進塁2"]
+        # ★ 走塁結果の選択肢に「残塁」を追加
+        r3_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "残塁"]
+        r2_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "残塁"]
+        r1_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "進塁2", "残塁"]
         out_fielder_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
         
         r_cols = st.columns(3)

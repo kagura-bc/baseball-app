@@ -905,10 +905,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 val = p_runners.get(b_key)
                 st.session_state[sel_key] = val if (val and val in runner_options) else "なし"
 
-        # ★ 併殺死を追加
-        r3_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死"]
-        r2_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1"]
-        r1_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "進塁2"]
+        # ★ 走塁結果の選択肢に「残塁」を追加
+        r3_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "残塁"]
+        r2_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "残塁"]
+        r1_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "進塁2", "残塁"]
         out_fielder_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
 
         r_cols = st.columns(3)
@@ -1467,6 +1467,12 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 records_to_save = list(opp_rows_to_add)
                 add_outs_total = 0
 
+                # ★ 走者の併殺死・走塁死選択数をカウント
+                dp_runner_outs = sum(
+                    1 for b_key in ["1b", "2b", "3b"]
+                    if st.session_state.get(f"p_runner_{b_key}_res_{curr_counter}") in ["併殺死", "走塁死"]
+                )
+
                 if p_res:
                     target_fielder_pos_str = "-".join(target_fielder_pos_list)
 
@@ -1477,9 +1483,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
                     add_outs = 0
                     if p_res == "併殺打":
-                        add_outs = 1  # ★ 打者分のアウト数
+                        # ★ 走者2人が併殺死の場合は打者セーフ（打者分アウト0）
+                        if dp_runner_outs >= 2:
+                            add_outs = 0
+                        else:
+                            add_outs = 1  # ランナー1人または走者1人併殺死時は打者アウト
                     elif p_res == "三重殺":
-                        add_outs = 1  # ★ 打者分のアウト数
+                        add_outs = 1
                     elif p_res in [
                         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
                         "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
@@ -1631,7 +1641,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     r2_next = "2b" if cur_2b_runner_name else None
                     r3_next = "3b" if cur_3b_runner_name else None
 
-                    # ★ 1塁走者の進塁計算（併殺死を追加）
+                    # ★ 1塁走者の進塁・残塁計算
                     if cur_1b_runner_name:
                         if res_1b in ["盗塁", "進塁1", "進塁"] or (p_res == "盗塁" and not res_1b):
                             r1_next = "2b"
@@ -1639,18 +1649,24 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             r1_next = "3b"
                         elif res_1b in ["得点", "走塁死", "盗塁死", "牽制死", "併殺死"]:
                             r1_next = None
+                        elif res_1b == "残塁":
+                            r1_next = "1b"
 
-                    # ★ 2塁走者の進塁計算（併殺死を追加）
+                    # ★ 2塁走者の進塁・残塁計算
                     if cur_2b_runner_name:
                         if res_2b in ["盗塁", "進塁1", "進塁"] or (p_res == "盗塁" and not res_2b):
                             r2_next = "3b"
                         elif res_2b in ["進塁2", "得点", "走塁死", "盗塁死", "牽制死", "併殺死"]:
                             r2_next = None
+                        elif res_2b == "残塁":
+                            r2_next = "2b"
 
-                    # ★ 3塁走者の進塁計算（併殺死を追加）
+                    # ★ 3塁走者の進塁・残塁計算
                     if cur_3b_runner_name:
                         if res_3b in ["得点", "走塁死", "盗塁死", "牽制死", "併殺死", "盗塁", "進塁1", "進塁2", "進塁"]:
                             r3_next = None
+                        elif res_3b == "残塁":
+                            r3_next = "3b"
 
                     # 満塁・押し出し（四死球）の進塁計算
                     if p_res in ["四球", "死球"]:
@@ -1658,7 +1674,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         r2_next = "3b" if (cur_2b_runner_name and cur_1b_runner_name) else ("2b" if cur_2b_runner_name else None)
                         r3_next = None if (cur_3b_runner_name and cur_2b_runner_name and cur_1b_runner_name) else ("3b" if cur_3b_runner_name else None)
 
-                    # 打者の進塁（出塁）計算
+                    # ★ 打者の進塁（出塁）計算
                     b_next = None
                     if p_res in ["単打", "四球", "死球", "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "振り逃げ三振"]:
                         b_next = "1b"
@@ -1666,6 +1682,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         b_next = "2b"
                     elif p_res == "三塁打":
                         b_next = "3b"
+                    elif p_res == "併殺打" and dp_runner_outs >= 2:
+                        # ★ 走者2人が併殺死の場合は打者が1塁に残る
+                        b_next = "1b"
 
                     next_runners = {"1b": None, "2b": None, "3b": None}
 
@@ -1676,7 +1695,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         next_runners[r2_next] = cur_2b_runner_name
                     if r3_next and cur_3b_runner_name:
                         next_runners[r3_next] = cur_3b_runner_name
-                    if b_next and current_batter_name and p_res != "併殺打":
+                    # ★ 併殺打でも走者2人併殺死なら打者を1塁に設定
+                    if b_next and current_batter_name and (p_res != "併殺打" or dp_runner_outs >= 2):
                         next_runners[b_next] = current_batter_name
 
                     # 走者の重複防止
