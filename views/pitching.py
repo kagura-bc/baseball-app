@@ -585,7 +585,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     current_inn_val = st.session_state.get("p_det_inn", f"1回{p_inning_suffix}")
 
-    # 3アウト検知によるイニング自動更新（batting_16.pyと同等処理）
+    # 3アウト検知によるイニング自動更新
     if not today_pitching_df.empty and "イニング" in today_pitching_df.columns:
         p_inn_df_check = today_pitching_df[today_pitching_df["イニング"] == current_inn_val]
         existing_outs = calculate_outs(p_inn_df_check)
@@ -622,6 +622,44 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     st.divider()
 
+    # ★ 【修正箇所】 🏃 走者・相手選手選択用リスト（opp_player_options）を上位スコープで事前に構築
+    default_opp_players = [f"選手{i}" for i in range(1, 21)]
+    opp_player_options = []
+
+    if "fetched_opp_players" in st.session_state:
+        df_opp_p = st.session_state["fetched_opp_players"]
+        p_col_opp = "打者名" if "打者名" in df_opp_p.columns else "選手名"
+        if isinstance(df_opp_p, pd.DataFrame) and not df_opp_p.empty and p_col_opp in df_opp_p.columns:
+            opp_player_options.extend(df_opp_p[p_col_opp].dropna().astype(str).str.strip().tolist())
+
+    if "fetched_opp_order" in st.session_state:
+        df_opp_o = st.session_state["fetched_opp_order"]
+        if isinstance(df_opp_o, pd.DataFrame) and not df_opp_o.empty:
+            o_col_p = "打者名" if "打者名" in df_opp_o.columns else "選手名"
+            if o_col_p in df_opp_o.columns:
+                opp_player_options.extend(df_opp_o[o_col_p].dropna().astype(str).str.strip().tolist())
+
+    opp_bench_list = st.session_state.get("persistent_opp_bench", [])
+    for b_name in opp_bench_list:
+        if b_name and str(b_name) not in ["None", "nan", ""]:
+            opp_player_options.append(str(b_name).strip())
+
+    for k, v in list(st.session_state.items()):
+        if k.startswith("opp_sn_") and v and str(v) not in ["None", "nan", "選手", "相手投手"]:
+            opp_player_options.append(str(v).strip())
+
+    default_names = {f"選手{i}" for i in range(1, 21)}
+    real_players = [p for p in opp_player_options if p and p not in default_names and not p.startswith("選手") and p != "相手投手"]
+
+    if real_players:
+        active_sn = [str(st.session_state.get(f"opp_sn_{i}")).strip() for i in range(20) if st.session_state.get(f"opp_sn_{i}")]
+        opp_player_options = list(dict.fromkeys(real_players + [p for p in active_sn if p and p not in ["None", "nan", "", "相手投手"]]))
+    else:
+        opp_player_options = list(default_opp_players)
+
+    opp_player_options = list(dict.fromkeys([p for p in opp_player_options if p and p not in ["nan", "None", "", "相手投手"]]))
+
+
     # ==================================================
     # ⚾ 投手成績入力用フラグメント
     # ==================================================
@@ -643,7 +681,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             st.error(st.session_state["pitching_error_msg"])
             st.session_state["pitching_error_msg"] = None
 
-        # 2. イニング選択 & BSO・球数インジケーター（★ key パラメータを外して自動更新を有効化）
+        # 2. イニング選択 & BSO・球数インジケーター
         c_inn, c_outs = st.columns([1.2, 3.8])
         with c_inn:
             def_inn_ix = inn_options.index(current_inn_val) if current_inn_val in inn_options else 0
@@ -821,41 +859,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         st.divider()
 
         # 4. 🏃 走者状況
-        default_opp_players = [f"選手{i}" for i in range(1, 21)]
-        opp_player_options = []
-
-        if "fetched_opp_players" in st.session_state:
-            df_opp_p = st.session_state["fetched_opp_players"]
-            p_col_opp = "打者名" if "打者名" in df_opp_p.columns else "選手名"
-            if isinstance(df_opp_p, pd.DataFrame) and not df_opp_p.empty and p_col_opp in df_opp_p.columns:
-                opp_player_options.extend(df_opp_p[p_col_opp].dropna().astype(str).str.strip().tolist())
-
-        if "fetched_opp_order" in st.session_state:
-            df_opp_o = st.session_state["fetched_opp_order"]
-            if isinstance(df_opp_o, pd.DataFrame) and not df_opp_o.empty:
-                o_col_p = "打者名" if "打者名" in df_opp_o.columns else "選手名"
-                if o_col_p in df_opp_o.columns:
-                    opp_player_options.extend(df_opp_o[o_col_p].dropna().astype(str).str.strip().tolist())
-
-        opp_bench_list = st.session_state.get("persistent_opp_bench", [])
-        for b_name in opp_bench_list:
-            if b_name and str(b_name) not in ["None", "nan", ""]:
-                opp_player_options.append(str(b_name).strip())
-
-        for k, v in list(st.session_state.items()):
-            if k.startswith("opp_sn_") and v and str(v) not in ["None", "nan", "選手", "相手投手"]:
-                opp_player_options.append(str(v).strip())
-
-        default_names = {f"選手{i}" for i in range(1, 21)}
-        real_players = [p for p in opp_player_options if p and p not in default_names and not p.startswith("選手") and p != "相手投手"]
-
-        if real_players:
-            active_sn = [str(st.session_state.get(f"opp_sn_{i}")).strip() for i in range(20) if st.session_state.get(f"opp_sn_{i}")]
-            opp_player_options = list(dict.fromkeys(real_players + [p for p in active_sn if p and p not in ["None", "nan", "", "相手投手"]]))
-        else:
-            opp_player_options = list(default_opp_players)
-
-        opp_player_options = list(dict.fromkeys([p for p in opp_player_options if p and p not in ["nan", "None", "", "相手投手"]]))
         runner_options = ["なし"] + opp_player_options
 
         st.markdown("##### 🏃 走者状況")
@@ -1525,7 +1528,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 existing_outs = calculate_outs(p_inn_df)
                 total_outs_after = existing_outs + add_outs_total
 
-                # ★ 3アウト時に次イニング（2回進める）へ自動更新
                 if total_outs_after >= 3:
                     st.session_state["p_persistent_runners"] = {"1b": None, "2b": None, "3b": None}
                     try:
@@ -1608,7 +1610,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     # --- フラグメント外の各種コントロール & ベンチメンバー選択 ---
     st.divider()
-    opp_bench_list = st.session_state.get("persistent_opp_bench", [])
     valid_opp_bench = [b for b in opp_bench_list if b in opp_player_options]
 
     if "opp_bench_selection_widget" not in st.session_state or (not st.session_state["opp_bench_selection_widget"] and valid_opp_bench):
