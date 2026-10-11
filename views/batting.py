@@ -982,8 +982,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 if st.session_state.get(f"runner_{base}_res_{curr_counter}") == "併殺死"
             )
 
-            # ★【修正】アウト数加算ロジック
-            single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "併殺死", "牽制死", "振り逃げ三振"]
+            # ★【修正】アウト数加算ロジック（併殺打をリストに追加し、d_outs を削除）
+            single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "併殺死", "牽制死", "振り逃げ三振", "併殺打"]
 
             add_outs = 0
             if quick_res in ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "三重殺", "振り逃げ三振"]:
@@ -1000,10 +1000,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             inn_df_check = today_batting_df[today_batting_df["イニング"] == inn_val] if not today_batting_df.empty else pd.DataFrame()
             s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
-            d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
             t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
 
-            is_change = (s_outs + d_outs + t_outs + add_outs) >= 3
+            # is_change の判定から d_outs を削除
+            is_change = (s_outs + t_outs + add_outs) >= 3
 
         # --------------------------------------------------
         # 走者の登録レコード生成ループ
@@ -1159,7 +1159,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             try:
                 target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
-                conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
+                
+                # ★ 保存中にスピナーを表示
+                with st.spinner("データを保存しています..."):
+                    conn.update(spreadsheet=target_url, worksheet=ws_batting, data=df_to_save)
                 
                 st.cache_data.clear()
                 st.session_state[cache_key] = updated_full_df
@@ -1252,11 +1255,18 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         
         c_sub1, c_sub2 = st.columns([3, 2])
         with c_sub1:
-            submitted = st.button("スコア登録実行", type="primary", use_container_width=True)
+            # ★ key="submit_batting_action" を追加
+            submitted = st.button("スコア登録実行", type="primary", use_container_width=True, key="submit_batting_action")
         with c_sub2:
-            undo_submitted = st.button("↺ 直近の登録を取り消す", type="secondary", use_container_width=True, help="直前に登録した打撃スコアデータを取り消して登録前の状態に戻します")
+            # ★ key="undo_batting_action" を追加
+            undo_submitted = st.button("↺ 直近の登録を取り消す", type="secondary", use_container_width=True, key="undo_batting_action", help="直前に登録した打撃スコアデータを取り消して登録前の状態に戻します")
+
+        # ★ エラーメッセージ表示（ここではクリアしない）
+        if st.session_state.get("batting_error_msg"):
+            st.error(st.session_state["batting_error_msg"])
 
         if undo_submitted:
+            st.session_state["batting_error_msg"] = None  # 取り消し時にクリア
             undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type, ws_batting, conn, cache_key)
 
         if st.session_state.get("batting_error_msg"):
@@ -1566,6 +1576,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("<div style='font-size:13px; color:#6b7280; padding-top:10px;'>※ DH制で打順に入らない投手を設定（打席は回りません）</div>", unsafe_allow_html=True)
 
         if submitted:
+            # ★ 実行ボタンが押されたタイミングでエラーメッセージをクリア
+            st.session_state["batting_error_msg"] = None
+            
             quick_res = st.session_state.get(f"quick_sr_{curr_counter}")
             quick_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
             quick_ef = st.session_state.get(f"quick_ef_{curr_counter}")

@@ -691,10 +691,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             submit_detail = st.button("スコア登録実行", type="primary", use_container_width=True, key="submit_pitching_action")
         with c_sub2:
             undo_submit_detail = st.button("↺ 直近の登録を取り消す", type="secondary", use_container_width=True, key="undo_pitching_action", help="直前に登録した投手スコアデータを取り消して登録前の状態に戻します")
-
         if undo_submit_detail:
+            st.session_state["pitching_error_msg"] = None  # 取り消し時にクリア
             undo_last_pitching_entry(df_pitching, selected_date_str, opp_team, match_type, ws_pitching, conn)
 
+        # ★ エラーメッセージ表示（ここではクリアしない）
         if st.session_state.get("pitching_error_msg"):
             st.error(st.session_state["pitching_error_msg"])
             st.session_state["pitching_error_msg"] = None
@@ -1198,6 +1199,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
         # 6. 「スコア登録実行」ボタンが押された時のバリデーション＆データ保存処理
         if submit_detail:
+            # ★ 実行ボタンが押されたタイミングでエラーメッセージをクリア
+            st.session_state["pitching_error_msg"] = None
             sub_validation_error = None
             opp_rows_to_add = []
 
@@ -1610,7 +1613,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
                     save_df = updated_p_df[TARGET_COLUMNS].copy()
                     target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
-                    conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
+                    
+                    # ★ 保存中にスピナーを表示
+                    with st.spinner("データを保存しています..."):
+                        conn.update(spreadsheet=target_url, worksheet=ws_pitching, data=save_df)
+                        
                     st.cache_data.clear()
                     st.session_state[cache_key] = updated_p_df
                     st.session_state["last_added_ids_pitching"] = added_p_ids
