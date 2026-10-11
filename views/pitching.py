@@ -930,7 +930,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             )
             with st.popover(r3_btn, use_container_width=True):
                 st.markdown("##### 3塁 走塁結果を選択")
-                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key=f"runner_3b_res_{curr_counter}", label_visibility="collapsed")
+                # ★ key を p_runner_3b_res_{curr_counter} に修正
+                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key=f"p_runner_3b_res_{curr_counter}", label_visibility="collapsed")
                 if cur_r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
@@ -953,7 +954,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             )
             with st.popover(r2_btn, use_container_width=True):
                 st.markdown("##### 2塁 走塁結果を選択")
-                cur_r2_res = st.pills("2塁結果ピル", r2_res_options, key=f"runner_2b_res_{curr_counter}", label_visibility="collapsed")
+                # ★ key を p_runner_2b_res_{curr_counter} に修正
+                cur_r2_res = st.pills("2塁結果ピル", r2_res_options, key=f"p_runner_2b_res_{curr_counter}", label_visibility="collapsed")
                 if cur_r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
@@ -976,7 +978,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             )
             with st.popover(r1_btn, use_container_width=True):
                 st.markdown("##### 1塁 走塁結果を選択")
-                cur_r1_res = st.pills("1塁結果ピル", r1_res_options, key=f"runner_1b_res_{curr_counter}", label_visibility="collapsed")
+                # ★ key を p_runner_1b_res_{curr_counter} に修正
+                cur_r1_res = st.pills("1塁結果ピル", r1_res_options, key=f"p_runner_1b_res_{curr_counter}", label_visibility="collapsed")
                 if cur_r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
