@@ -1247,11 +1247,21 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             st.session_state["batting_error_msg"] = None
 
         c_inn, c_outs = st.columns([1.2, 3.8])
-        
+
         with c_inn:
-            def_inn_ix = inn_list.index(current_inn_val) if current_inn_val in inn_list else 0
-            curr_inn = st.selectbox("イニング選択", inn_list, index=def_inn_ix, label_visibility="collapsed")
-            st.session_state["persistent_inn"] = curr_inn
+          def_inn_ix = (
+              inn_list.index(current_inn_val)
+              if current_inn_val in inn_list
+              else 0
+          )
+          curr_inn = st.selectbox(
+              "イニング選択",
+              inn_list,
+              index=def_inn_ix,
+              key=f"b_select_inn_{curr_counter}",  # ★ keyを追加
+              label_visibility="collapsed",
+          )
+          st.session_state["persistent_inn"] = curr_inn
         
         with c_outs:
             disp_outs = 0
