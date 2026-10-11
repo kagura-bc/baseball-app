@@ -1203,13 +1203,23 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     current_inn_val = st.session_state.get("persistent_inn", f"1回{b_inning_suffix}")
     
     if not today_batting_df.empty:
+        # 変数名を inn_df_check に統一
         inn_df_check = today_batting_df[today_batting_df["イニング"] == current_inn_val]
-        single_out_list = ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "走塁死", "盗塁死", "併殺死", "牽制死", "振り逃げ三振"]
+        # それぞれ1アウトとして扱う結果（打者の併殺打、走者の併殺死をともに1カウントとする）
+        single_out_list = [
+            "凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", 
+            "犠飛", "走塁死", "盗塁死", "牽制死", "振り逃げ三振", "併殺打", "併殺死"
+        ]
+
+        # inn_df -> inn_df_check に修正
         s_outs = len(inn_df_check[inn_df_check["結果"].isin(single_out_list)])
-        d_outs = len(inn_df_check[inn_df_check["結果"] == "併殺打"]) * 2
         t_outs = len(inn_df_check[inn_df_check["結果"] == "三重殺"]) * 3
+
+        # 合計アウト数
+        disp_outs = (s_outs + t_outs) % 3
         
-        if (s_outs + d_outs + t_outs) >= 3:
+        # d_outs を削除し、s_outs + t_outs で判定
+        if (s_outs + t_outs) >= 3:
             try:
                 curr_idx = inn_list.index(current_inn_val)
                 if curr_idx < len(inn_list) - 2:
