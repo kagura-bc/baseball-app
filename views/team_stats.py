@@ -543,7 +543,10 @@ def show_team_stats(df_batting, df_pitching):
                             }
 
                             def get_inn_order(inn_str):
-                                m = re.search(r'(\d+)回(表|裏)', str(inn_str))
+                                s = str(inn_str).strip()
+                                if "試合前" in s:
+                                    return 0  # 試合前を最優先（0番）にする
+                                m = re.search(r'(\d+)回(表|裏)', s)
                                 if m:
                                     return int(m.group(1)) * 2 + (0 if m.group(2) == "表" else 1)
                                 return 999
