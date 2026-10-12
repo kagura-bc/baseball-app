@@ -477,7 +477,7 @@ def show_personal_stats(df_batting, df_pitching):
                 disp = stats.rename(columns={
                     "is_hit": "安打", "is_ab": "打数", "is_1b": "単打", "is_2b": "二塁打", "is_3b": "三塁打",
                     "is_hr": "本塁打", "is_bb": "四死球", "is_walk": "四球", "is_hbp": "死球", "is_so": "三振", "is_dp": "併殺打"
-                }).sort_values("OPS", ascending=False).reset_index(drop=True)
+                }).sort_values("Batting_Score", ascending=False).reset_index(drop=True)
 
                 disp.insert(0, "順位", range(1, len(disp) + 1))
 

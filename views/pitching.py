@@ -57,7 +57,7 @@ def calculate_outs(df: pd.DataFrame) -> int:
     
     single_out_list = [
         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
-        "犠飛", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
+        "犠飛", "牽制死", "盗塁死", "走塁死"
     ]
     
     s_outs = len(df[df["結果"].isin(single_out_list)])
@@ -518,7 +518,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
     # ★ 自チームの守備イニング（攻撃が先攻(表)なら投手成績は「裏」、後攻(裏)なら「表」）
     p_inning_suffix = "裏" if is_kagura_top else "表"
 
-    current_match_id = f"{selected_date_str}_{opp_team}_{match_type}"
+    current_match_id = f"{selected_date_str}_{opp_team}_{match_type}_{kagura_order}"
     if st.session_state.get("last_p_match_id") != current_match_id:
         keys_to_reset = [
             "p_det_inn", "opp_batter_index", "p_persistent_runners", "opp_sn_dh_pitcher", "opp_lineup_states"
@@ -538,8 +538,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         st.session_state["opp_batter_index"] = 1
     if "opp_batter_count" not in st.session_state:
         st.session_state["opp_batter_count"] = 9
-    if "p_det_inn" not in st.session_state:
-        st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
+    target_default_p_inn = f"1回{p_inning_suffix}"
+    if "p_det_inn" not in st.session_state or not st.session_state["p_det_inn"].endswith(p_inning_suffix):
+        st.session_state["p_det_inn"] = target_default_p_inn
 
     if "opp_lineup_states" not in st.session_state:
         st.session_state["opp_lineup_states"] = {}
@@ -857,8 +858,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 res_options = [
                     "凡退(ゴロ)", "凡退(フライ)", "三振", "単打", "二塁打", "三塁打", "本塁打",
                     "四球", "死球", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "併殺打", "三重殺", "振り逃げ三振",
-                    "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "ボーク", "暴投", "捕逸",
-                    "牽制死", "盗塁死", "盗塁", "走塁死"
+                    "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害", "ボーク", "暴投", "捕逸"
                 ]
                 st.pills("投球結果", res_options, key=f"pitching_quick_sr_{curr_counter}", label_visibility="collapsed")
 
@@ -1487,7 +1487,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         add_outs = 1
                     elif p_res in [
                         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
-                        "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"
+                        "犠飛", "牽制死", "盗塁死", "走塁死"
                     ]:
                         add_outs = 1
 

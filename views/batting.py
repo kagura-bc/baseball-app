@@ -51,13 +51,12 @@ PA_RESULTS = [
 
 
 def calculate_outs(df: pd.DataFrame) -> int:
-    """打者の打席結果と走者の走塁結果から正確にアウト数を算出"""
     if df.empty or "結果" not in df.columns:
         return 0
     
     single_out_list = [
         "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
-        "犠飛", "牽制死", "盗塁死", "走塁死", "併殺死", "振り逃げ三振"
+        "犠飛", "牽制死", "盗塁死", "走塁死", "併殺死"
     ]
     
     s_outs = len(df[df["結果"].isin(single_out_list)])
@@ -440,7 +439,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     if "quick_clear_counter" not in st.session_state:
         st.session_state["quick_clear_counter"] = 0
 
-    current_match_id = f"{selected_date_str}_{opp_team}_{match_type}"
+    current_match_id = f"{selected_date_str}_{opp_team}_{match_type}_{kagura_order}"
     
     if "last_match_id" not in st.session_state:
         st.session_state["last_match_id"] = current_match_id
@@ -457,8 +456,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
         st.session_state["last_match_id"] = current_match_id
 
-    if "persistent_inn" not in st.session_state:
-        st.session_state["persistent_inn"] = f"1回{b_inning_suffix}"
+    target_default_inn = f"1回{b_inning_suffix}"
+    if "persistent_inn" not in st.session_state or not st.session_state["persistent_inn"].endswith(b_inning_suffix):
+        st.session_state["persistent_inn"] = target_default_inn
 
     if "batter_offset" not in st.session_state:
         st.session_state["batter_offset"] = 0
@@ -1026,7 +1026,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     add_outs = 1
             elif quick_res == "三重殺":
                 add_outs = 1
-            elif quick_res in ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "野選", "牽制死", "盗塁死", "走塁死", "振り逃げ三振"]:
+            elif quick_res in ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "牽制死", "盗塁死", "走塁死"]:
                 add_outs = 1
 
             for base in ["1b", "2b", "3b"]:
