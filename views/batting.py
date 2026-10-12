@@ -1605,6 +1605,35 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             res_2b = st.session_state.get(f"runner_2b_res_{curr_counter}")
             res_3b = st.session_state.get(f"runner_3b_res_{curr_counter}")
 
+            # ★ スタメンや交代・メンバーの変更があるかチェックするフラグを追加
+            has_lineup_change = False
+            
+            # スタメン未登録かつ名前が選択されているか確認
+            has_today_lineup = False
+            if not today_batting_df.empty and "イニング" in today_batting_df.columns and "結果" in today_batting_df.columns:
+                starter_check = today_batting_df[
+                    (today_batting_df["イニング"].astype(str) == "試合前") &
+                    (today_batting_df["結果"].astype(str) == "スタメン")
+                ]
+                if not starter_check.empty:
+                    has_today_lineup = True
+
+            if not has_today_lineup:
+                # スタメンがまだ登録されていない場合、1人でも選手が設定されていれば変更ありと判定
+                for idx_check in range(st.session_state.get("display_order_count", 9)):
+                    if st.session_state.get(f"sn{idx_check}"):
+                        has_lineup_change = True
+                        break
+            else:
+                # 登録済みの場合、以前の状態と変更があるか確認
+                for idx_check in range(st.session_state.get("display_order_count", 9)):
+                    sn_val = st.session_state.get(f"sn{idx_check}")
+                    sp_val = st.session_state.get(f"sp{idx_check}")
+                    prev_state = st.session_state.get("lineup_states", {}).get(idx_check, {})
+                    if sn_val and (sn_val.split(" (")[0].strip() != prev_state.get("name") or (sp_val and sp_val != prev_state.get("pos"))):
+                        has_lineup_change = True
+                        break
+
             require_dir_results = [
                 "凡退(ゴロ)", "凡退(フライ)", "単打", "二塁打", "三塁打", "本塁打",
                 "犠打(ゴロ)", "犠打(フライ)", "犠飛", "失策(ゴロ)", "失策(フライ)",
@@ -1625,7 +1654,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             elif quick_res == "併殺打" and not has_dp_out_runner:
                 st.session_state["batting_error_msg"] = "⚠️ 併殺打が選択されています。アウトになった走者の走塁結果に「併殺死」を選択してください。"
                 st.rerun()
-            elif not quick_res and not (res_1b or res_2b or res_3b):
+            # ★ and not has_lineup_change 条件を追加（打席結果も走塁結果も空でも、スタメン/メンバー変更があれば通す）
+            elif not quick_res and not (res_1b or res_2b or res_3b) and not has_lineup_change:
                 st.session_state["batting_error_msg"] = "⚠️ 登録する内容（打席結果・走塁結果・メンバー変更等）を選択してください。"
                 st.rerun()
             elif quick_res and quick_res in require_dir_results and not quick_dirs:

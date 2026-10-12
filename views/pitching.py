@@ -1574,6 +1574,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         if col not in updated_p_df.columns:
                             updated_p_df[col] = 0 if col in ["ID", "打点", "自責点", "球数", "ストライク", "ファールボール", "ボール"] else ""
 
+                    cache_key = f"cache_pitching_{selected_date_str}_{opp_team}_{match_type}" 
+
                     save_df = updated_p_df[TARGET_COLUMNS].copy()
                     target_url = st.session_state.get("my_spreadsheet_url", SPREADSHEET_URL)
                     with st.spinner("データを保存しています..."):
