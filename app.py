@@ -139,6 +139,10 @@ def show_login_screen():
                 else:
                     st.session_state["my_spreadsheet_url"] = SPREADSHEET_URL
 
+            # ★ 【追加】ログイン成功時に古いデータキャッシュをクリアして正しいDBから再取得させる
+            for cache_key in ["cached_df_batting", "cached_df_pitching", "cached_all_players", "shared_player_numbers"]:
+                st.session_state.pop(cache_key, None)
+
             st.success(
                 f"{st.session_state['my_team_name']} としてログインしました！"
             )
