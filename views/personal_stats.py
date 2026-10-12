@@ -103,21 +103,18 @@ def show_personal_stats(df_batting, df_pitching):
                 elif "負" in r_str or "敗" in r_str or "●" in r_str:
                     df_p_calc.loc[group.index[0], "is_lose"] = 1
 
-        if "アウト数" not in df_p_calc.columns or df_p_calc["アウト数"].sum() == 0:
-            res_str = df_p_calc["結果"].astype(str) if "結果" in df_p_calc.columns else pd.Series([""] * len(df_p_calc))
-            outs = pd.Series(0, index=df_p_calc.index)
-            
-            dp_mask = res_str.str.contains("併殺", na=False)
-            outs[dp_mask] = 2
-            
-            normal_out_mask = (
-                res_str.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) &
-                ~res_str.str.contains("失策|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)
-            )
-            outs[normal_out_mask] = 1
-            df_p_calc["アウト数"] = outs
-        else:
-            df_p_calc["アウト数"] = pd.to_numeric(df_p_calc["アウト数"], errors='coerce').fillna(0)
+        # --- 結果列からアウト数を正確に自動判定するロジック ---
+        def calc_outs_from_result(val):
+            res = str(val).strip()
+            if "併殺" in res:
+                return 2
+            if "振り逃げ" in res:
+                return 0
+            if any(k in res for k in ["凡退", "三振", "犠打", "犠飛", "走塁死", "盗塁死"]):
+                return 1
+            return 0
+
+        df_p_calc["アウト数"] = df_p_calc["結果"].apply(calc_outs_from_result)
 
         valid_p_inn = ~df_p_calc["イニング"].astype(str).str.strip().isin(["", "nan", "None", "ー", "まとめ入力"]) if "イニング" in df_p_calc.columns else pd.Series(True, index=df_p_calc.index)
         is_p_2024_2025 = df_p_calc["Year"].astype(str).isin(["2024", "2025"])
