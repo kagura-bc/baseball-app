@@ -425,7 +425,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     # ★ ここに挿入します（選択肢用リストの定義）
     # --------------------------------------------------
     pos_options = [p for p in ALL_POSITIONS if p != ""]
-    for extra_pos in ["打", "走"]:
+    for extra_pos in ["DH", "打", "走"]:
         if extra_pos not in pos_options:
             pos_options.append(extra_pos)
 
@@ -438,7 +438,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     ws_pitching = "投手成績"
     
     # 試合設定（先攻/後攻）に応じた自チーム攻撃イニングの表裏判定
-    b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
+    is_kagura_top = "先攻" in str(kagura_order)
+    b_inning_suffix = "表" if is_kagura_top else "裏"
     target_default_inn = f"1回{b_inning_suffix}"
 
     # ★ ここを追加（1回〜12回までのイニングリストを生成）

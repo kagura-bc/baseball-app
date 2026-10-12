@@ -464,57 +464,17 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         st.stop()
 
     ws_pitching = "投手成績"
-    is_kagura_top = (kagura_order == "先攻 (表)")
-    pos_options = [p for p in ALL_POSITIONS if p != ""] + ["未選択"]
+    conn = get_connection()
 
-    conn = st.connection("gsheets", type=GSheetsConnection)
+    pos_options = ["未選択", "DH", "投", "捕", "一", "二", "三", "遊", "左", "中", "右", "打", "走"]
 
-    cache_key = f"cache_pitching_{selected_date_str}_{opp_team}_{match_type}"
-    if cache_key in st.session_state:
-        df_pitching = st.session_state[cache_key]
+    # ★ ここを追加（本日のデータを絞り込んで定義）
+    today_batting_df = filter_today_df(df_batting, selected_date_str, opp_team)
+    today_pitching_df = filter_today_df(df_pitching, selected_date_str, opp_team)
 
-    today_batting_df = filter_today_df(df_batting, selected_date_str)
-    today_pitching_df = filter_today_df(df_pitching, selected_date_str)
-
-    scoreboard_df = (
-        today_batting_df[today_batting_df["イニング"] != "まとめ入力"]
-        if not today_batting_df.empty and "イニング" in today_batting_df.columns
-        else df_batting
-    )
-    render_scoreboard(scoreboard_df, today_pitching_df, selected_date_str, match_type, ground_name, opp_team, is_kagura_top)
-
-    render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL)
-
-    with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", use_container_width=True):
-        st.markdown(f"##### 🤝 対戦相手【{opp_team}】へのデータ共有")
-        st.caption("ホストチームとして記録したこの試合のスコア（打撃・投手データ）を反転させ、相手チームのスプレッドシートへ自動登録します。")
-        st.warning("※ 相手チーム側に同じ日付・同じ対戦相手のデータが既に存在する場合は、最新データで上書き更新されます。")
-        
-        if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", use_container_width=True, key=f"share_btn_pitching_{selected_date_str}_{opp_team}"):
-            with st.spinner("相手チームのデータベースへ送信中..."):
-                conn_db = get_connection()
-                success, msg = share_match_data_to_opponent(
-                    conn=conn_db,
-                    host_team_name=MY_TEAM,
-                    target_opp=opp_team,
-                    match_date_str=selected_date_str,
-                    match_type=match_type,
-                    match_bat=today_batting_df,
-                    match_pit=today_pitching_df
-                )
-                if success:
-                    st.success(msg)
-                    st.balloons()
-                else:
-                    st.error(msg)
-
-    st.divider()
-
-    if "p_clear_counter" not in st.session_state:
-        st.session_state["p_clear_counter"] = 0
-
-    curr_counter = st.session_state.get("p_clear_counter", 0)
-
+    # 自チームが先攻かどうかの判定（表記揺れに対応）
+    is_kagura_top = "先攻" in str(kagura_order)
+    
     # 自チーム守備イニング（攻撃が先攻(表)なら投手成績は「裏」、後攻(裏)なら「表」）
     p_inning_suffix = "裏" if is_kagura_top else "表"
     target_default_p_inn = f"1回{p_inning_suffix}"
@@ -577,25 +537,60 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             
         st.session_state[sync_key] = True
 
-    inn_options = []
-    for i in range(1, 10):
-        inn_options.extend([f"{i}回表", f"{i}回裏"])
-    inn_options.extend(["延長表", "延長裏"])
+    # 自チームの守備イニングのみ（1回〜12回）を生成
+    inn_options = [f"{i}回{p_inning_suffix}" for i in range(1, 13)]
 
     current_inn_val = st.session_state.get("p_det_inn", f"1回{p_inning_suffix}")
 
-    # 3アウト検知によるイニング自動更新
     if not today_pitching_df.empty and "イニング" in today_pitching_df.columns:
         p_inn_df_check = today_pitching_df[today_pitching_df["イニング"] == current_inn_val]
         existing_outs = calculate_outs(p_inn_df_check)
         if existing_outs >= 3:
             try:
                 curr_idx = inn_options.index(current_inn_val)
-                if curr_idx < len(inn_options) - 2:
-                    current_inn_val = inn_options[curr_idx + 2]
+                # ★ +2 を +1 に変更
+                if curr_idx < len(inn_options) - 1:
+                    current_inn_val = inn_options[curr_idx + 1]
                     st.session_state["p_det_inn"] = current_inn_val
             except ValueError:
                 pass
+
+    # ==================================================
+    # ★ ここから追加：スコアボード・責任投手設定・データ共有の描画
+    # ==================================================
+    scoreboard_df = today_batting_df[today_batting_df["イニング"] != "まとめ入力"] if not today_batting_df.empty else today_batting_df
+
+    # 1. スコアボードの描画
+    render_scoreboard(scoreboard_df, today_pitching_df, selected_date_str, match_type, ground_name, opp_team, is_kagura_top)
+    
+    # 2. 責任投手（勝・敗・S・H）を一括設定
+    render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL, key_prefix="pitching")
+
+    # 3. 相手チームへのデータ共有・送信
+    with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", use_container_width=True):
+        st.markdown(f"##### 🤝 対戦相手【{opp_team}】へのデータ共有")
+        st.caption("ホストチームとして記録したこの試合のスコア（打撃・投手データ）を反転させ、相手チームのスプレッドシートへ自動登録します。")
+        st.warning("※ 相手チーム側に同じ日付・同じ対戦相手のデータが既に存在する場合は、最新データで上書き更新されます。")
+        
+        if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", use_container_width=True, key=f"share_btn_pitching_{selected_date_str}_{opp_team}"):
+            with st.spinner("相手チームのデータベースへ送信中..."):
+                conn_db = get_connection()
+                success, msg = share_match_data_to_opponent(
+                    conn=conn_db,
+                    host_team_name=MY_TEAM,
+                    target_opp=opp_team,
+                    match_date_str=selected_date_str,
+                    match_type=match_type,
+                    match_bat=today_batting_df,
+                    match_pit=today_pitching_df
+                )
+                if success:
+                    st.success(msg)
+                    st.balloons()
+                else:
+                    st.error(msg)
+    
+    st.divider()
 
     if "opp_batter_offset" not in st.session_state:
         st.session_state["opp_batter_offset"] = 0
@@ -770,8 +765,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     st.session_state[f"p_f_count_{curr_counter}"] = 0
                     st.session_state[f"p_pitch_count_{curr_counter}"] = 0
                     st.rerun()
-
-        st.divider()
 
         # 3. 打順・打者名 & 投球結果選択部
         PA_RESULTS_PITCHING = [
@@ -1262,6 +1255,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 "中": ["中", "中堅", "中堅手", "センター", "CF", "8"],
                 "右": ["右", "右翼", "右翼手", "ライト", "RF", "9"],
                 "指": ["指", "DH", "指名打者", "10"],
+                "打": ["打", "代打", "PH"],
+                "走": ["走", "代走", "PR"],
             }
 
             def is_same_pos(p1, p2):
@@ -1606,8 +1601,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     st.session_state["p_persistent_runners"] = {"1b": None, "2b": None, "3b": None}
                     try:
                         curr_idx = inn_options.index(current_inn)
-                        if curr_idx < len(inn_options) - 2:
-                            st.session_state["p_det_inn"] = inn_options[curr_idx + 2]
+                        # ★ +2 を +1 に変更
+                        if curr_idx < len(inn_options) - 1:
+                            st.session_state["p_det_inn"] = inn_options[curr_idx + 1]
                     except ValueError:
                         pass
                 else:
