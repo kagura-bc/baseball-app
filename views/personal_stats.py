@@ -18,14 +18,15 @@ def show_personal_stats(df_batting, df_pitching):
 
     allowed_names = STATS_PLAYERS + ["チーム記録"]
 
+    # --- 選手名の空白除去（データ正規化） ---
     if not df_batting.empty:
         b_p_col = "打者名" if "打者名" in df_batting.columns else "選手名"
-        df_batting["選手名_表示"] = df_batting[b_p_col]
+        df_batting["選手名_表示"] = df_batting[b_p_col].astype(str).str.strip()
         df_batting = df_batting[df_batting["選手名_表示"].isin(allowed_names)].copy()
 
     if not df_pitching.empty:
         p_p_col = "投手名" if "投手名" in df_pitching.columns else "選手名"
-        df_pitching["選手名_表示"] = df_pitching[p_p_col]
+        df_pitching["選手名_表示"] = df_pitching[p_p_col].astype(str).str.strip()
         df_pitching = df_pitching[df_pitching["選手名_表示"].isin(allowed_names)].copy()
 
     # --- 打撃データ ---
@@ -34,11 +35,12 @@ def show_personal_stats(df_batting, df_pitching):
 
         df_b_calc = df_batting[df_batting["選手名_表示"] != "チーム記録"].copy()
         df_b_calc["選手名"] = df_b_calc["選手名_表示"]
-        df_b_calc["結果"] = df_b_calc["結果"].astype(str).str.replace(r"\s+", "", regex=True)
+        df_b_calc["結果"] = df_b_calc["結果"].astype(str).str.strip()
 
         df_b_calc["is_hit"] = df_b_calc["結果"].str.contains("単打|二塁打|三塁打|本塁打", na=False).astype(int)
 
-        non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+        # 💡 除外パターンに「スタメン」「ベンチ」「ー」を追加
+        non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代|スタメン|ベンチ|ー"
         is_valid = ~df_b_calc["結果"].isin(["", "nan", "None", "-"])
         is_not_excluded = ~df_b_calc["結果"].str.contains(non_ab_pattern, na=False)
         df_b_calc["is_ab"] = (is_valid & is_not_excluded).astype(int)
@@ -71,6 +73,7 @@ def show_personal_stats(df_batting, df_pitching):
                 df_b_calc[c] = 0
             df_b_calc[c] = pd.to_numeric(df_b_calc[c], errors='coerce').fillna(0)
 
+        # 💡 盗塁判定の精密化
         res_str = df_b_calc["結果"].astype(str)
         steal_mask = (res_str == "盗塁") | (res_str.str.contains("盗塁") & ~res_str.str.contains("盗塁死"))
         df_b_calc["盗塁"] = df_b_calc["盗塁"] + steal_mask.astype(int)
