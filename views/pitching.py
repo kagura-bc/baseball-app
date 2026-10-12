@@ -515,10 +515,12 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
     curr_counter = st.session_state.get("p_clear_counter", 0)
 
-    # ★ 自チームの守備イニング（攻撃が先攻(表)なら投手成績は「裏」、後攻(裏)なら「表」）
+    # 自チーム守備イニング（攻撃が先攻(表)なら投手成績は「裏」、後攻(裏)なら「表」）
     p_inning_suffix = "裏" if is_kagura_top else "表"
+    target_default_p_inn = f"1回{p_inning_suffix}"
 
     current_match_id = f"{selected_date_str}_{opp_team}_{match_type}_{kagura_order}"
+    
     if st.session_state.get("last_p_match_id") != current_match_id:
         keys_to_reset = [
             "p_det_inn", "opp_batter_index", "p_persistent_runners", "opp_sn_dh_pitcher", "opp_lineup_states"
@@ -528,30 +530,14 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 del st.session_state[k]
         st.session_state["last_p_match_id"] = current_match_id
         st.session_state["p_clear_counter"] = 0
-        st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
+        st.session_state["p_det_inn"] = target_default_p_inn
         curr_counter = 0
 
-    if "p_persistent_runners" not in st.session_state:
-        st.session_state["p_persistent_runners"] = {"1b": None, "2b": None, "3b": None}
-
-    if "opp_batter_index" not in st.session_state:
-        st.session_state["opp_batter_index"] = 1
-    if "opp_batter_count" not in st.session_state:
-        st.session_state["opp_batter_count"] = 9
-    target_default_p_inn = f"1回{p_inning_suffix}"
     if "p_det_inn" not in st.session_state or not st.session_state["p_det_inn"].endswith(p_inning_suffix):
         st.session_state["p_det_inn"] = target_default_p_inn
 
-    if "opp_lineup_states" not in st.session_state:
-        st.session_state["opp_lineup_states"] = {}
-
-    for i in range(20):
-        sn_k = f"opp_sn_{i}"
-        default_val = f"選手{i + 1}"
-        if st.session_state.get(sn_k) in [None, "", "選手", "未選択", "nan", "None", "相手投手"]:
-            st.session_state[sn_k] = default_val
-
-    sync_key = f"sync_{selected_date_str}"
+    # 同期キーに current_match_id を含めるよう修正
+    sync_key = f"sync_pitching_{current_match_id}"
     if sync_key not in st.session_state:
         if not today_pitching_df.empty:
             if "種別" in today_pitching_df.columns:
@@ -568,7 +554,12 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
         if not history_details.empty:
             last_rec = history_details.iloc[-1]
-            st.session_state["p_det_inn"] = last_rec.get("イニング", f"1回{p_inning_suffix}")
+            last_inn = str(last_rec.get("イニング", ""))
+            # 保存データが存在する場合も攻守の表裏に適合しているか確認
+            if last_inn and last_inn.endswith(p_inning_suffix):
+                st.session_state["p_det_inn"] = last_inn
+            else:
+                st.session_state["p_det_inn"] = target_default_p_inn
             try:
                 last_order = last_rec.get("打順")
                 if pd.notna(last_order) and str(last_order).strip() not in ["", "nan"]:
@@ -580,25 +571,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 st.session_state["opp_batter_index"] = (last_idx % st.session_state.get("opp_batter_count", 9)) + 1
             except (IndexError, ValueError):
                 pass
-
-            if not st.session_state.get("scorer_name"):
-                valid_scorer_df = (
-                    today_pitching_df[
-                        (today_pitching_df["スコアラー"].astype(str).str.strip() != "") &
-                        (today_pitching_df["スコアラー"].astype(str).str.strip() != "0") &
-                        (today_pitching_df["スコアラー"].astype(str).str.strip() != "nan")
-                    ]
-                    if not today_pitching_df.empty and "スコアラー" in today_pitching_df.columns
-                    else pd.DataFrame()
-                )
-                if not valid_scorer_df.empty:
-                    st.session_state["scorer_name"] = valid_scorer_df.iloc[-1]["スコアラー"]
-
-            st.session_state[sync_key] = True
         else:
-            st.session_state["p_det_inn"] = f"1回{p_inning_suffix}"
+            st.session_state["p_det_inn"] = target_default_p_inn
             st.session_state["opp_batter_index"] = 1
-            st.session_state[sync_key] = True
+            
+        st.session_state[sync_key] = True
 
     inn_options = []
     for i in range(1, 10):
