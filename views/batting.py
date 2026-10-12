@@ -629,8 +629,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     player_history_dict = {}
     if not today_batting_df.empty:
-        valid_history_df = today_batting_df[~today_batting_df["結果"].isin(["スタメン", "守備変更", "交代", "ベンチ"])]
+        valid_history_df = today_batting_df[~today_batting_df["結果"].isin(["スタメン", "守備変更", "交代", "ベンチ"])].copy()
         if not valid_history_df.empty and b_col_name in valid_history_df.columns:
+            # groupby の前に打者名の前後の空白を除去して統一する
+            valid_history_df[b_col_name] = valid_history_df[b_col_name].astype(str).str.strip()  # ★ この行を追加
             for clean_name, group in valid_history_df.groupby(b_col_name):
                 history_html = []
                 count = 0
