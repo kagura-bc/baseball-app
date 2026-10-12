@@ -441,6 +441,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     b_inning_suffix = "表" if kagura_order == "先攻 (表)" else "裏"
     target_default_inn = f"1回{b_inning_suffix}"
 
+    # ★ ここを追加（1回〜12回までのイニングリストを生成）
+    inn_list = [f"{i}回{b_inning_suffix}" for i in range(1, 13)]
+
     current_match_id = f"{selected_date_str}_{opp_team}_{match_type}_{kagura_order}"
     
     if "last_match_id" not in st.session_state:
