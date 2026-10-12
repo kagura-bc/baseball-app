@@ -78,7 +78,7 @@ def show_login_screen():
     with st.form("login_form_v5"):
       input_team_id = st.text_input("👤 チームID (例: kagura, wish)")
       input_password = st.text_input("🔑 パスワード", type="password")
-      submitted = st.form_submit_button("ログイン", use_container_width=True)
+      submitted = st.form_submit_button("ログイン", width="stretch")
 
       if submitted:
         conn = st.connection("gsheets", type=GSheetsConnection)
@@ -428,7 +428,7 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
 
         st.write("")
         st.markdown(f"##### 📋 {'自チーム' if is_my_team else '相手チーム'} 登板投手サマリー")
-        st.dataframe(df_summary, use_container_width=True, hide_index=True)
+        st.dataframe(df_summary, width="stretch", hide_index=True)
 
     with tab_my:
         display_pitcher_group(my_team_pitchers, is_my_team=True)
@@ -444,7 +444,7 @@ col_title, col_space, col_logout = st.columns([3, 1, 1])
 with col_title:
     st.markdown(f"### ⚾️ {st.session_state.get('my_team_name', 'KAGUSTA')}")
 with col_logout:
-    if st.button("🚪 ログアウト", key="logout_btn", use_container_width=True):
+    if st.button("🚪 ログアウト", key="logout_btn", width="stretch"):
         st.session_state["is_logged_in"] = False
         st.rerun()
 
@@ -619,7 +619,7 @@ if page == "試合データ入力":
           if saved_scorer
           else "スコアラー選択 🔽"
       )
-      with st.popover(scorer_label, use_container_width=True):
+      with st.popover(scorer_label, width="stretch"):
         st.markdown("##### 👥 スコアラーを選択")
         st.pills(
             "スコアラー選択",
@@ -639,7 +639,7 @@ if page == "試合データ入力":
       )
       cur_match = st.session_state.get(match_key)
       match_label = f"🟢 {cur_match} 🔽" if cur_match else "試合区分選択 🔽"
-      with st.popover(match_label, use_container_width=True):
+      with st.popover(match_label, width="stretch"):
         st.markdown("##### ⚾ 試合区分を選択")
         st.pills(
             "試合区分選択",
@@ -656,7 +656,7 @@ if page == "試合データ入力":
       )
       cur_ground = st.session_state.get(ground_key)
       ground_label = f"🟢 {cur_ground} 🔽" if cur_ground else "グラウンド選択 🔽"
-      with st.popover(ground_label, use_container_width=True):
+      with st.popover(ground_label, width="stretch"):
         st.markdown("##### 🏟️ グラウンドを選択")
         st.pills(
             "グラウンド選択",
@@ -682,7 +682,7 @@ if page == "試合データ入力":
       )
       cur_opp = st.session_state.get(opp_key)
       opp_label = f"🟢 {cur_opp} 🔽" if cur_opp else "相手チーム選択 🔽"
-      with st.popover(opp_label, use_container_width=True):
+      with st.popover(opp_label, width="stretch"):
         st.markdown("##### 🆚 相手チームを選択")
         st.pills(
             "相手チーム選択",
@@ -708,7 +708,7 @@ if page == "試合データ入力":
       )
       cur_order = st.session_state.get(order_key)
       order_label = f"🟢 {cur_order} 🔽" if cur_order else "攻守選択 🔽"
-      with st.popover(order_label, use_container_width=True):
+      with st.popover(order_label, width="stretch"):
         st.markdown("##### 🔄 攻守を選択")
         st.pills(
             "攻守選択", order_list, key=order_key, label_visibility="collapsed"
@@ -718,7 +718,7 @@ if page == "試合データ入力":
     match_type_input = st.session_state.get(match_key, "")
 
     st.write("")
-    if st.button("⚙️ 試合設定を決定", use_container_width=True):
+    if st.button("⚙️ 試合設定を決定", width="stretch"):
       st.query_params["date"] = selected_date_str
       st.query_params["opp"] = opp_team_input
       st.query_params["match"] = match_type_input

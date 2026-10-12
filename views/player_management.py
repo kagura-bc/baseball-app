@@ -66,7 +66,7 @@ def show_player_management():
             "<div style='height: 28px;'></div>", unsafe_allow_html=True
         )
         add_submitted = st.form_submit_button(
-            "追加する", type="secondary", use_container_width=True
+            "追加する", type="secondary", width="stretch"
         )
 
       if add_submitted:
@@ -122,7 +122,7 @@ def show_player_management():
                 help="チェックを入れると試合入力のプルダウンから消えます",
             ),
         },
-        use_container_width=True,
+        width="stretch",
         key="player_editor",
     )
 
@@ -172,7 +172,7 @@ def show_player_management():
             "<div style='height: 28px;'></div>", unsafe_allow_html=True
         )
         opp_submitted = st.form_submit_button(
-            "追加する", type="secondary", use_container_width=True
+            "追加する", type="secondary", width="stretch"
         )
 
       if opp_submitted:
@@ -224,7 +224,7 @@ def show_player_management():
             ),
         },
         column_order=["チーム名"],
-        use_container_width=True,
+        width="stretch",
         key="opponent_editor",
     )
 
@@ -278,7 +278,7 @@ def show_player_management():
             "<div style='height: 28px;'></div>", unsafe_allow_html=True
         )
         ground_submitted = st.form_submit_button(
-            "追加する", type="secondary", use_container_width=True
+            "追加する", type="secondary", width="stretch"
         )
 
       if ground_submitted:
@@ -328,7 +328,7 @@ def show_player_management():
                 "グラウンド名", required=True
             ),
         },
-        use_container_width=True,
+        width="stretch",
         key="ground_editor",
     )
 

@@ -244,7 +244,7 @@ def show_league_stats():
                         "勝率": "{:.3f}",
                         "得失点差": "{:+d}"
                     }).background_gradient(subset=["勝率"], cmap="Reds"),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
 
@@ -253,7 +253,7 @@ def show_league_stats():
                     with st.expander(f"⚠️ 規定試合数（{min_games}試合）未満のチーム（参考記録）"):
                         st.dataframe(
                             df_under.style.format({"勝率": "{:.3f}"}),
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True
                         )
             else:
@@ -373,7 +373,7 @@ def show_league_stats():
                         "出塁率": "{:.3f}",
                         "長打率": "{:.3f}"
                     }).background_gradient(subset=[target_col], cmap="Reds"),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
         else:
@@ -494,7 +494,7 @@ def show_league_stats():
                         "防御率": "{:.2f}",
                         "WHIP": "{:.2f}"
                     }).background_gradient(subset=[target_p_col], cmap="Blues"),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
         else:

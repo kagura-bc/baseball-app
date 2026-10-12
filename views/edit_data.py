@@ -225,9 +225,9 @@ def show_edit_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, is_test_
 
                     btn_col1, btn_col2 = st.columns([2, 1])
                     with btn_col1:
-                        submit_update = st.form_submit_button("💾 変更を保存する", type="primary", use_container_width=True)
+                        submit_update = st.form_submit_button("💾 変更を保存する", type="primary", width="stretch")
                     with btn_col2:
-                        submit_delete = st.form_submit_button("🗑 この行を削除する", use_container_width=True)
+                        submit_delete = st.form_submit_button("🗑 この行を削除する", width="stretch")
 
                 if submit_update:
                     with st.spinner("更新中..."):
@@ -302,12 +302,12 @@ def show_edit_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, is_test_
             edited_b = st.data_editor(
                 df_b_work,
                 column_config=common_column_config_b,
-                use_container_width=True,
+                width="stretch",
                 key="bat_editor_final",
                 hide_index=True
             )
 
-            if st.button("チェックした行を削除 ＆ 修正内容を保存", type="primary", use_container_width=True, key="del_bat_btn"):
+            if st.button("チェックした行を削除 ＆ 修正内容を保存", type="primary", width="stretch", key="del_bat_btn"):
                 with st.spinner("スプレッドシートを更新中..."):
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     edited_valid = edited_b[edited_b["削除選択"] == False].drop(columns=["削除選択"])
@@ -405,9 +405,9 @@ def show_edit_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, is_test_
 
                     btn_c1, btn_c2 = st.columns([2, 1])
                     with btn_c1:
-                        submit_update_p = st.form_submit_button("💾 変更を保存する", type="primary", use_container_width=True)
+                        submit_update_p = st.form_submit_button("💾 変更を保存する", type="primary", width="stretch")
                     with btn_c2:
-                        submit_delete_p = st.form_submit_button("🗑 この行を削除する", use_container_width=True)
+                        submit_delete_p = st.form_submit_button("🗑 この行を削除する", width="stretch")
 
                 if submit_update_p:
                     with st.spinner("更新中..."):
@@ -476,12 +476,12 @@ def show_edit_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, is_test_
             edited_p = st.data_editor(
                 df_p_work,
                 column_config=common_column_config_p,
-                use_container_width=True,
+                width="stretch",
                 key="pitch_editor_final",
                 hide_index=True
             )
 
-            if st.button("チェックした行を削除 ＆ 修正内容を保存", type="primary", use_container_width=True, key="del_pitch_btn"):
+            if st.button("チェックした行を削除 ＆ 修正内容を保存", type="primary", width="stretch", key="del_pitch_btn"):
                 with st.spinner("スプレッドシートを更新中..."):
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     edited_valid = edited_p[edited_p["削除選択"] == False].drop(columns=["削除選択"])

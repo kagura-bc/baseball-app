@@ -201,27 +201,27 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
             with c1:
                 cur_win = st.session_state.get(k_win, init_win if init_win in w_opts else "なし")
                 lbl_win = f"🟢 勝: {local_fmt(cur_win).split(' (')[0]} 🔽" if cur_win != "なし" else "勝利投手 (W) 選択 🔽"
-                with st.popover(lbl_win, use_container_width=True):
+                with st.popover(lbl_win, width="stretch"):
                     st.markdown("##### 勝利投手 (W) を選択")
                     st.pills("勝利投手", w_opts, default=init_win if init_win in w_opts else "なし", format_func=local_fmt, key=k_win, label_visibility="collapsed")
 
                 cur_save = st.session_state.get(k_save, init_save if init_save in w_opts else "なし")
                 lbl_save = f"🟢 S: {local_fmt(cur_save).split(' (')[0]} 🔽" if cur_save != "なし" else "セーブ投手 (S) 選択 🔽"
-                with st.popover(lbl_save, use_container_width=True):
+                with st.popover(lbl_save, width="stretch"):
                     st.markdown("##### セーブ投手 (S) を選択")
                     st.pills("セーブ投手", w_opts, default=init_save if init_save in w_opts else "なし", format_func=local_fmt, key=k_save, label_visibility="collapsed")
 
             with c2:
                 cur_lose = st.session_state.get(k_lose, init_lose if init_lose in w_opts else "なし")
                 lbl_lose = f"🟢 敗: {local_fmt(cur_lose).split(' (')[0]} 🔽" if cur_lose != "なし" else "敗戦投手 (L) 選択 🔽"
-                with st.popover(lbl_lose, use_container_width=True):
+                with st.popover(lbl_lose, width="stretch"):
                     st.markdown("##### 敗戦投手 (L) を選択")
                     st.pills("敗戦投手", w_opts, default=init_lose if init_lose in w_opts else "なし", format_func=local_fmt, key=k_lose, label_visibility="collapsed")
 
                 cur_holds = st.session_state.get(k_holds, [h for h in init_holds if h in ALL_PLAYERS])
                 holds_str = ", ".join([local_fmt(h).split(" (")[0] for h in cur_holds]) if cur_holds else ""
                 lbl_holds = f"🟢 H: {holds_str} 🔽" if cur_holds else "ホールド投手 (H) 選択 🔽"
-                with st.popover(lbl_holds, use_container_width=True):
+                with st.popover(lbl_holds, width="stretch"):
                     st.markdown("##### ホールド投手 (H) を選択（複数可）")
                     st.pills("ホールド投手", ALL_PLAYERS, selection_mode="multi", default=[h for h in init_holds if h in ALL_PLAYERS], format_func=local_fmt, key=k_holds, label_visibility="collapsed")
 
@@ -232,32 +232,32 @@ def render_game_result_popover(df_pitching, selected_date_str, match_type, groun
             with c1:
                 cur_opp_win = st.session_state.get(k_opp_win, init_opp_win if init_opp_win in ow_opts else "なし")
                 lbl_opp_win = f"🟢 勝: {cur_opp_win} 🔽" if cur_opp_win != "なし" else "相手勝利投手 (W) 選択 🔽"
-                with st.popover(lbl_opp_win, use_container_width=True):
+                with st.popover(lbl_opp_win, width="stretch"):
                     st.markdown("##### 相手 勝利投手 (W) を選択")
                     st.pills("相手 勝利投手", ow_opts, default=init_opp_win if init_opp_win in ow_opts else "なし", key=k_opp_win, label_visibility="collapsed")
 
                 cur_opp_save = st.session_state.get(k_opp_save, init_opp_save if init_opp_save in ow_opts else "なし")
                 lbl_opp_save = f"🟢 S: {cur_opp_save} 🔽" if cur_opp_save != "なし" else "相手セーブ投手 (S) 選択 🔽"
-                with st.popover(lbl_opp_save, use_container_width=True):
+                with st.popover(lbl_opp_save, width="stretch"):
                     st.markdown("##### 相手 セーブ投手 (S) を選択")
                     st.pills("相手 セーブ投手", ow_opts, default=init_opp_save if init_opp_save in ow_opts else "なし", key=k_opp_save, label_visibility="collapsed")
 
             with c2:
                 cur_opp_lose = st.session_state.get(k_opp_lose, init_opp_lose if init_opp_lose in ow_opts else "なし")
                 lbl_opp_lose = f"🟢 敗: {cur_opp_lose} 🔽" if cur_opp_lose != "なし" else "相手敗戦投手 (L) 選択 🔽"
-                with st.popover(lbl_opp_lose, use_container_width=True):
+                with st.popover(lbl_opp_lose, width="stretch"):
                     st.markdown("##### 相手 敗戦投手 (L) を選択")
                     st.pills("相手 敗戦投手", ow_opts, default=init_opp_lose if init_opp_lose in ow_opts else "なし", key=k_opp_lose, label_visibility="collapsed")
 
                 cur_opp_holds = st.session_state.get(k_opp_holds, [h for h in init_opp_holds if h in opp_pitcher_options])
                 opp_holds_str = ", ".join(cur_opp_holds) if cur_opp_holds else ""
                 lbl_opp_holds = f"🟢 H: {opp_holds_str} 🔽" if cur_opp_holds else "相手ホールド投手 (H) 選択 🔽"
-                with st.popover(lbl_opp_holds, use_container_width=True):
+                with st.popover(lbl_opp_holds, width="stretch"):
                     st.markdown("##### 相手 ホールド投手 (H) を選択（複数可）")
                     st.pills("相手 ホールド投手", opp_pitcher_options, selection_mode="multi", default=[h for h in init_opp_holds if h in opp_pitcher_options], key=k_opp_holds, label_visibility="collapsed")
 
         st.markdown("---")
-        if st.button("💾 責任投手を一括保存", type="primary", use_container_width=True, key=k_btn_save):
+        if st.button("💾 責任投手を一括保存", type="primary", width="stretch", key=k_btn_save):
             p_col = "投手名" if "投手名" in df_pitching.columns else "選手名"
 
             sel_win_val = st.session_state.get(k_win, "なし")
@@ -602,12 +602,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     
     render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL, key_prefix="batting")
 
-    with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", use_container_width=True):
+    with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", width="stretch"):
         st.markdown(f"##### 🤝 対戦相手【{opp_team}】へのデータ共有")
         st.caption("ホストチームとして記録したこの試合のスコア（打撃・投手データ）を反転させ、相手チームのスプレッドシートへ自動登録します。")
         st.warning("※ 相手チーム側に同じ日付・同じ対戦相手のデータが既に存在する場合は、最新データで上書き更新されます。")
         
-        if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", use_container_width=True, key=f"share_btn_batting_{selected_date_str}_{opp_team}"):
+        if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", width="stretch", key=f"share_btn_batting_{selected_date_str}_{opp_team}"):
             with st.spinner("相手チームのデータベースへ送信中..."):
                 conn_db = get_connection()
                 success, msg = share_match_data_to_opponent(
@@ -1276,15 +1276,15 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     with col_adj1:
         st.markdown(f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>📍 打順調整 (オフセット: {st.session_state.get('batter_offset', 0)})</div>", unsafe_allow_html=True)
     with col_adj2:
-        if st.button("◀ 前へ", use_container_width=True):
+        if st.button("◀ 前へ", width="stretch"):
             st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) - 1
             st.rerun()
     with col_adj3:
-        if st.button("リセット", use_container_width=True):
+        if st.button("リセット", width="stretch"):
             st.session_state["batter_offset"] = 0
             st.rerun()
     with col_adj4:
-        if st.button("次へ ▶", use_container_width=True):
+        if st.button("次へ ▶", width="stretch"):
             st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) + 1
             st.rerun()
 
@@ -1296,9 +1296,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         
         c_sub1, c_sub2 = st.columns([3, 2])
         with c_sub1:
-            submitted = st.button("スコア登録実行", type="primary", use_container_width=True, key="submit_batting_action")
+            submitted = st.button("スコア登録実行", type="primary", width="stretch", key="submit_batting_action")
         with c_sub2:
-            undo_submitted = st.button("↺ 直近の登録を取り消す", type="secondary", use_container_width=True, key="undo_batting_action", help="直前に登録した打撃スコアデータを取り消して登録前の状態に戻します")
+            undo_submitted = st.button("↺ 直近の登録を取り消す", type="secondary", width="stretch", key="undo_batting_action", help="直前に登録した打撃スコアデータを取り消して登録前の状態に戻します")
 
         if st.session_state.get("batting_error_msg"):
             st.error(st.session_state["batting_error_msg"])
@@ -1342,12 +1342,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#22c55e;'>🟢 ボール</div>", unsafe_allow_html=True)
                 bc1, bc2 = st.columns(2)
                 with bc1:
-                    if st.button("➖", key=f"btn_b_sub_{curr_counter}", use_container_width=True, disabled=(b_cnt <= 0)):
+                    if st.button("➖", key=f"btn_b_sub_{curr_counter}", width="stretch", disabled=(b_cnt <= 0)):
                         st.session_state[f"pitch_count_{curr_counter}"] = max(0, p_cnt - 1)
                         st.session_state[f"b_count_{curr_counter}"] = max(0, b_cnt - 1)
                         st.rerun()
                 with bc2:
-                    if st.button("➕", key=f"btn_b_add_{curr_counter}", use_container_width=True, disabled=(b_cnt >= 3)):
+                    if st.button("➕", key=f"btn_b_add_{curr_counter}", width="stretch", disabled=(b_cnt >= 3)):
                         if b_cnt < 3:
                             st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
                             st.session_state[f"b_count_{curr_counter}"] = b_cnt + 1
@@ -1357,12 +1357,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#eab308;'>🟡 ストライク</div>", unsafe_allow_html=True)
                 sc1, sc2 = st.columns(2)
                 with sc1:
-                    if st.button("➖", key=f"btn_s_sub_{curr_counter}", use_container_width=True, disabled=(s_cnt <= 0)):
+                    if st.button("➖", key=f"btn_s_sub_{curr_counter}", width="stretch", disabled=(s_cnt <= 0)):
                         st.session_state[f"pitch_count_{curr_counter}"] = max(0, p_cnt - 1)
                         st.session_state[f"s_count_{curr_counter}"] = max(0, s_cnt - 1)
                         st.rerun()
                 with sc2:
-                    if st.button("➕", key=f"btn_s_add_{curr_counter}", use_container_width=True, disabled=(s_cnt >= 2)):
+                    if st.button("➕", key=f"btn_s_add_{curr_counter}", width="stretch", disabled=(s_cnt >= 2)):
                         if s_cnt < 2:
                             st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
                             st.session_state[f"s_count_{curr_counter}"] = s_cnt + 1
@@ -1374,12 +1374,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#6b7280;'>⚪ ファール</div>", unsafe_allow_html=True)
                 fc1, fc2 = st.columns(2)
                 with fc1:
-                    if st.button("➖", key=f"btn_f_sub_{curr_counter}", use_container_width=True, disabled=(f_cnt <= 0)):
+                    if st.button("➖", key=f"btn_f_sub_{curr_counter}", width="stretch", disabled=(f_cnt <= 0)):
                         st.session_state[f"pitch_count_{curr_counter}"] = max(0, p_cnt - 1)
                         st.session_state[f"f_count_{curr_counter}"] = max(0, f_cnt - 1)
                         st.rerun()
                 with fc2:
-                    if st.button("➕", key=f"btn_f_add_{curr_counter}", use_container_width=True):
+                    if st.button("➕", key=f"btn_f_add_{curr_counter}", width="stretch"):
                         st.session_state[f"pitch_count_{curr_counter}"] = p_cnt + 1
                         st.session_state[f"f_count_{curr_counter}"] = f_cnt + 1
                         if s_cnt < 2:
@@ -1388,7 +1388,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             with b_col4:
                 st.markdown("<div style='font-size:12px; font-weight:bold; text-align:center; color:#374151;'>リセット</div>", unsafe_allow_html=True)
-                if st.button("🔄", key=f"btn_reset_bso_{curr_counter}", use_container_width=True):
+                if st.button("🔄", key=f"btn_reset_bso_{curr_counter}", width="stretch"):
                     st.session_state[f"b_count_{curr_counter}"] = 0
                     st.session_state[f"s_count_{curr_counter}"] = 0
                     st.session_state[f"f_count_{curr_counter}"] = 0
@@ -1427,12 +1427,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             """, unsafe_allow_html=True)
 
         with qc[1]:
-            curr_counter = st.session_state.get("quick_clear_counter", 0)
-            current_res = st.session_state.get(f"quick_sr_{curr_counter}")
-            current_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
-            current_ef = st.session_state.get(f"quick_ef_{curr_counter}")
-            current_rbi = st.session_state.get(f"quick_si_{curr_counter}")
-            current_er = st.session_state.get(f"quick_er_{curr_counter}")
+            # 固定のキーで session_state を直接参照
+            current_res = st.session_state.get("quick_sr")
+            current_dirs = st.session_state.get("quick_sd", [])
+            current_ef = st.session_state.get("quick_ef")
+            current_rbi = st.session_state.get("quick_si")
+            current_er = st.session_state.get("quick_er")
             
             res_label = f" 🟢 {current_res}" if current_res else ""
             dir_label = f" ({''.join(current_dirs)})" if current_dirs else ""
@@ -1442,34 +1442,40 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             summary_btn_label = f"打席結果{res_label}{dir_label}{ef_label}{rbi_label}{er_label} 🔽"
             
-            with st.popover(summary_btn_label, use_container_width=True):
+            with st.popover(summary_btn_label, width="stretch"):
 
                 st.markdown("##### ⚾ 打席結果を選択")
-                st.pills("打席結果", batting_results, key=f"quick_sr_{curr_counter}", label_visibility="collapsed")
+                # ⭕ key から curr_counter を除去し、固定キーにする
+                st.pills("打席結果", batting_results, key="quick_sr", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 打球方向・送球経路を選択（複数選択可）")
                 dir_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                st.pills("打球方向", dir_options, selection_mode="multi", key=f"quick_sd_{curr_counter}", label_visibility="collapsed")
+                st.pills("打球方向", dir_options, selection_mode="multi", key="quick_sd", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚠️ エラー野手を選択（エラー発生時）")
                 ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                st.pills("エラー野手", ef_options, key=f"quick_ef_{curr_counter}", label_visibility="collapsed")
+                st.pills("エラー野手", ef_options, key="quick_ef", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
                 rbi_options = [0, 1, 2, 3, 4]
-                st.pills("打点", rbi_options, key=f"quick_si_{curr_counter}", label_visibility="collapsed")
+                st.pills("打点", rbi_options, key="quick_si", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 自責点がある場合は選択 (0〜4)")
                 er_options = [0, 1, 2, 3, 4]
-                st.pills("自責点", er_options, key=f"quick_er_{curr_counter}", label_visibility="collapsed")
+                st.pills("自責点", er_options, key="quick_er", label_visibility="collapsed")
 
                 st.markdown("---")
-                if st.button("🔄 入力をすべてクリア", use_container_width=True, key=f"clear_btn_{curr_counter}"):
-                    st.session_state["quick_clear_counter"] = st.session_state.get("quick_clear_counter", 0) + 1
+                # ⭕ クリア処理時はキーの値を直接初期化する
+                if st.button("🔄 入力をすべてクリア", width="stretch", key="clear_btn_batting_quick"):
+                    st.session_state["quick_sr"] = None
+                    st.session_state["quick_sd"] = []
+                    st.session_state["quick_ef"] = None
+                    st.session_state["quick_si"] = None
+                    st.session_state["quick_er"] = None
                     st.rerun()
 
         st.divider()
@@ -1477,46 +1483,55 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         p_runners = st.session_state.get("persistent_runners", {"1b": None, "2b": None, "3b": None})
 
         for b_key in ["1b", "2b", "3b"]:
-            curr_r_key = f"runner_{b_key}_{curr_counter}"
+            curr_r_key = f"runner_{b_key}"
+            if curr_r_key not in st.session_state:
+                st.session_state[curr_r_key] = p_runners.get(b_key)
+
+        # 🏃 走者状況
+        p_runners = st.session_state.get("persistent_runners", {"1b": None, "2b": None, "3b": None})
+
+        for b_key in ["1b", "2b", "3b"]:
+            curr_r_key = f"runner_{b_key}"
             if curr_r_key not in st.session_state:
                 st.session_state[curr_r_key] = p_runners.get(b_key)
 
         st.markdown("##### 🏃 走者状況")
-        
-        r3_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "残塁"]
-        r2_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "残塁"]
-        r1_res_options = ["得点", "盗塁", "盗塁死", "走塁死", "併殺死", "牽制死", "進塁1", "進塁2", "残塁"]
-        out_fielder_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-        
+
+        # 以下の5行を追加（... を置き換えます）
         r_cols = st.columns(3)
-        
+        r3_res_options = ["得点", "走塁死", "盗塁死", "牽制死", "併殺死", "残塁"]
+        r2_res_options = ["進塁1", "得点", "走塁死", "盗塁死", "牽制死", "併殺死", "残塁"]
+        r1_res_options = ["进塁1", "進塁2", "得点", "走塁死", "盗塁死", "牽制死", "併殺死", "残塁"]
+        out_fielder_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+
+        # 3塁走者
         with r_cols[0]:
             st.markdown("<div style='text-align:center; font-weight:bold; background:#e0ebff; padding:2px; border-radius:4px;'>3塁</div>", unsafe_allow_html=True)
             
-            r3_name_raw = st.session_state.get(f"runner_3b_{curr_counter}", "")
+            r3_name_raw = st.session_state.get("runner_3b", "")
             r3_label = f"🟢 {local_fmt(r3_name_raw)} 🔽" if r3_name_raw else "選手選択 🔽"
-            with st.popover(r3_label, use_container_width=True):
+            with st.popover(r3_label, width="stretch"):
                 st.markdown("##### 3塁走者を選択")
-                st.pills("3塁選手", player_options, format_func=local_fmt, key=f"runner_3b_{curr_counter}", label_visibility="collapsed")
+                st.pills("3塁選手", player_options, format_func=local_fmt, key="runner_3b", label_visibility="collapsed")
                 
-            r3_res = st.session_state.get(f"runner_3b_res_{curr_counter}")
-            r3_f = st.session_state.get(f"runner_3b_fielder_{curr_counter}")
+            r3_res = st.session_state.get("runner_3b_res")
+            r3_f = st.session_state.get("runner_3b_fielder")
             r3_btn = f"🟢 {r3_res}({r3_f}) 🔽" if (r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r3_f) else (f"🟢 {r3_res} 🔽" if r3_res else "走塁結果 🔽")
             
-            with st.popover(r3_btn, use_container_width=True):
+            with st.popover(r3_btn, width="stretch"):
                 st.markdown("##### 3塁 走塁結果を選択")
-                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key=f"runner_3b_res_{curr_counter}", label_visibility="collapsed")
+                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key="runner_3b_res", label_visibility="collapsed")
                 if cur_r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
-                    st.pills("3塁処理野手ピル", out_fielder_options, key=f"runner_3b_fielder_{curr_counter}", label_visibility="collapsed")
+                    st.pills("3塁処理野手ピル", out_fielder_options, key="runner_3b_fielder", label_visibility="collapsed")
 
         with r_cols[1]:
             st.markdown("<div style='text-align:center; font-weight:bold; background:#e0ebff; padding:2px; border-radius:4px;'>2塁</div>", unsafe_allow_html=True)
             
             r2_name_raw = st.session_state.get(f"runner_2b_{curr_counter}", "")
             r2_label = f"🟢 {local_fmt(r2_name_raw)} 🔽" if r2_name_raw else "選手選択 🔽"
-            with st.popover(r2_label, use_container_width=True):
+            with st.popover(r2_label, width="stretch"):
                 st.markdown("##### 2塁走者を選択")
                 st.pills("2塁選手", player_options, format_func=local_fmt, key=f"runner_2b_{curr_counter}", label_visibility="collapsed")
                 
@@ -1524,7 +1539,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             r2_f = st.session_state.get(f"runner_2b_fielder_{curr_counter}")
             r2_btn = f"🟢 {r2_res}({r2_f}) 🔽" if (r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r2_f) else (f"🟢 {r2_res} 🔽" if r2_res else "走塁結果 🔽")
             
-            with st.popover(r2_btn, use_container_width=True):
+            with st.popover(r2_btn, width="stretch"):
                 st.markdown("##### 2塁 走塁結果を選択")
                 cur_r2_res = st.pills("2塁結果ピル", r2_res_options, key=f"runner_2b_res_{curr_counter}", label_visibility="collapsed")
                 if cur_r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
@@ -1537,7 +1552,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             
             r1_name_raw = st.session_state.get(f"runner_1b_{curr_counter}", "")
             r1_label = f"🟢 {local_fmt(r1_name_raw)} 🔽" if r1_name_raw else "選手選択 🔽"
-            with st.popover(r1_label, use_container_width=True):
+            with st.popover(r1_label, width="stretch"):
                 st.markdown("##### 1塁走者を選択")
                 st.pills("1塁選手", player_options, format_func=local_fmt, key=f"runner_1b_{curr_counter}", label_visibility="collapsed")
                 
@@ -1545,7 +1560,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             r1_f = st.session_state.get(f"runner_1b_fielder_{curr_counter}")
             r1_btn = f"🟢 {r1_res}({r1_f}) 🔽" if (r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r1_f) else (f"🟢 {r1_res} 🔽" if r1_res else "走塁結果 🔽")
             
-            with st.popover(r1_btn, use_container_width=True):
+            with st.popover(r1_btn, width="stretch"):
                 st.markdown("##### 1塁 走塁結果を選択")
                 cur_r1_res = st.pills("1塁結果ピル", r1_res_options, key=f"runner_1b_res_{curr_counter}", label_visibility="collapsed")
                 if cur_r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
@@ -1569,14 +1584,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 with c_row[1]:
                     cur_pos = st.session_state.get(pos_key, "")
                     pos_btn_label = f"🟢 {cur_pos} 🔽" if cur_pos and cur_pos != "－" else "守備選択 🔽"
-                    with st.popover(pos_btn_label, use_container_width=True):
+                    with st.popover(pos_btn_label, width="stretch"):
                         st.markdown(f"##### {i+1}番 守備位置を選択")
                         st.pills(f"守備ピル {i}", pos_options, key=pos_key, label_visibility="collapsed")
                 
                 with c_row[2]:
                     cur_name_raw = st.session_state.get(name_key, "")
                     formatted_cur_name = f"🟢 {local_fmt(cur_name_raw)} 🔽" if cur_name_raw else "選手選択 🔽"
-                    with st.popover(formatted_cur_name, use_container_width=True):
+                    with st.popover(formatted_cur_name, width="stretch"):
                         st.markdown(f"##### {i+1}番 選手を選択")
                         st.pills(f"選手ピル {i}", player_options, format_func=local_fmt, key=name_key, label_visibility="collapsed")
                 
@@ -1598,7 +1613,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             with c_dh_row[2]:
                 cur_dh_p_raw = st.session_state.get("sn_dh_pitcher", "")
                 formatted_dh_p = f"🟢 {local_fmt(cur_dh_p_raw)} 🔽" if cur_dh_p_raw else "投手選択 (DH時) 🔽"
-                with st.popover(formatted_dh_p, use_container_width=True):
+                with st.popover(formatted_dh_p, width="stretch"):
                     st.markdown("##### ⚾ DH時の投手を選択")
                     st.pills("DH投手ピル", player_options, format_func=local_fmt, key="sn_dh_pitcher", label_visibility="collapsed")
             with c_dh_row[3]:
@@ -1709,7 +1724,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
     with col_disp1:
         st.markdown(f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>👥 打順の表示人数: {st.session_state.get('display_order_count', 9)}人</div>", unsafe_allow_html=True)
     with col_disp2:
-        if st.button("➖ 減らす", use_container_width=True):
+        if st.button("➖ 減らす", width="stretch"):
             if st.session_state["display_order_count"] > 9:
                 st.session_state["display_order_count"] -= 1
                 idx = st.session_state["display_order_count"]
@@ -1717,7 +1732,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     st.session_state.pop(k, None)
                 st.rerun()
     with col_disp3:
-        if st.button("➕ 追加 (最大20)", use_container_width=True):
+        if st.button("➕ 追加 (最大20)", width="stretch"):
             if st.session_state["display_order_count"] < 20:
                 st.session_state["display_order_count"] += 1
                 st.rerun()

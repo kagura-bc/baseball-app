@@ -416,7 +416,7 @@ def show_analysis_page(df_batting, df_pitching):
                 height=350
             )
 
-            st.altair_chart(combo_chart, use_container_width=True)
+            st.altair_chart(combo_chart, width="stretch")
 
             magic_num = 0
             for index, row in score_win_rate.iterrows():
@@ -459,7 +459,7 @@ def show_analysis_page(df_batting, df_pitching):
                                             "#e11d48", "#1e40af", "#94a3b8"]), legend=None),
                             tooltip=["Result", "Count"]
                         ).properties(title=f"先制時 ({len(games_first)}試合: 勝率{rate:.2f})")
-                        c_f1.altair_chart(pie_f, use_container_width=True)
+                        c_f1.altair_chart(pie_f, width="stretch")
                     else:
                         c_f1.info("先制試合データなし")
                 else:
@@ -482,7 +482,7 @@ def show_analysis_page(df_batting, df_pitching):
                                             "#e11d48", "#1e40af", "#94a3b8"]), legend=None),
                             tooltip=["Result", "Count"]
                         ).properties(title=f"被先制時 ({len(games_opp_first)}試合: 勝率{rate2:.2f})")
-                        c_f2.altair_chart(pie_f_opp, use_container_width=True)
+                        c_f2.altair_chart(pie_f_opp, width="stretch")
                     else:
                         c_f2.info("被先制試合データなし")
                 else:
@@ -508,7 +508,7 @@ def show_analysis_page(df_batting, df_pitching):
                                             "#e11d48", "#1e40af", "#94a3b8"]), legend=None),
                             tooltip=["Result", "Count"]
                         ).properties(title=f"先攻時 ({len(games_first_bat)}試合: 勝率{rate_b1:.2f})")
-                        c_o1.altair_chart(pie_b1, use_container_width=True)
+                        c_o1.altair_chart(pie_b1, width="stretch")
                     else:
                         c_o1.info("先攻試合データなし")
                 else:
@@ -530,7 +530,7 @@ def show_analysis_page(df_batting, df_pitching):
                                             "#e11d48", "#1e40af", "#94a3b8"]), legend=None),
                             tooltip=["Result", "Count"]
                         ).properties(title=f"後攻時 ({len(games_second_bat)}試合: 勝率{rate_b2:.2f})")
-                        c_o2.altair_chart(pie_b2, use_container_width=True)
+                        c_o2.altair_chart(pie_b2, width="stretch")
                     else:
                         c_o2.info("後攻試合データなし")
                 else:
@@ -620,7 +620,7 @@ def show_analysis_page(df_batting, df_pitching):
                     pd.DataFrame(df_order_stats).style.format({
                         "勝率": "{:.3f}", "平均得点": "{:.1f}", "平均失点": "{:.1f}"
                     }).background_gradient(subset=["勝率"], cmap="Reds"),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True
                 )
             else:
@@ -665,7 +665,7 @@ def show_analysis_page(df_batting, df_pitching):
                 opp_stats.style.format(
                     {"平均得点": "{:.1f}", "平均失点": "{:.1f}", "勝率": "{:.3f}"})
                 .background_gradient(subset=["勝率"], cmap="Reds"),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True
             )
 
@@ -703,7 +703,7 @@ def show_analysis_page(df_batting, df_pitching):
                 )
                 .properties(height=max(350, len(opp_stats) * 22))
             )
-            st.altair_chart(bar_diff, use_container_width=True)
+            st.altair_chart(bar_diff, width="stretch")
 
     # =========================================================
     # Tab 3: 詳細投打データ分析（2026年以降）
@@ -831,7 +831,7 @@ def show_analysis_page(df_batting, df_pitching):
                     pie_t_out = alt.Chart(df_t_out).mark_arc(innerRadius=40).encode(
                         theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロアウト", "フライアウト", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
                     ).properties(height=300)
-                    st.altair_chart(pie_t_out, use_container_width=True)
+                    st.altair_chart(pie_t_out, width="stretch")
                 else:
                     st.caption("データがありません")
             else:
@@ -856,7 +856,7 @@ def show_analysis_page(df_batting, df_pitching):
                     pie_p_out = alt.Chart(df_p_out).mark_arc(innerRadius=40).encode(
                         theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロアウト", "フライアウト", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
                     ).properties(height=300)
-                    st.altair_chart(pie_p_out, use_container_width=True)
+                    st.altair_chart(pie_p_out, width="stretch")
                 else:
                     st.caption("詳細な投手データがありません")
             else:
@@ -888,7 +888,7 @@ def show_analysis_page(df_batting, df_pitching):
                             color=alt.Color("打球種類:N", scale=hit_type_color_scale),
                             tooltip=["方向", "打球種類", "数"]
                         ).properties(height=280)
-                        st.altair_chart(bar_b_dir, use_container_width=True)
+                        st.altair_chart(bar_b_dir, width="stretch")
                     else:
                         st.caption("データがありません")
                 else:
@@ -915,7 +915,7 @@ def show_analysis_page(df_batting, df_pitching):
                             color=alt.Color("打球種類:N", scale=hit_type_color_scale),
                             tooltip=["方向", "打球種類", "数"]
                         ).properties(height=280)
-                        st.altair_chart(bar_p_dir, use_container_width=True)
+                        st.altair_chart(bar_p_dir, width="stretch")
                     else:
                         st.caption("データがありません")
                 else:
@@ -960,7 +960,7 @@ def show_analysis_page(df_batting, df_pitching):
                             st.dataframe(
                                 tc_stats.style.format({"打率": "{:.3f}"})
                                 .background_gradient(subset=["打率"], cmap="Reds"),
-                                use_container_width=True,
+                                width="stretch",
                                 hide_index=True
                             )
                         else:
@@ -1003,7 +1003,7 @@ def show_analysis_page(df_batting, df_pitching):
                             st.dataframe(
                                 tpc_stats.style.format({"被打率": "{:.3f}"})
                                 .background_gradient(subset=["被打率"], cmap="Blues"),
-                                use_container_width=True,
+                                width="stretch",
                                 hide_index=True
                             )
                         else:
@@ -1025,7 +1025,7 @@ def show_analysis_page(df_batting, df_pitching):
                     current_bat_player = st.session_state.get("ana_bat_player")
                     popover_label_bat = f"👤 打者選択: {fmt_player_name(current_bat_player, STATS_NUMBERS)} 🔽" if current_bat_player else "👤 打者選択: 未選択 🔽"
 
-                    with st.popover(popover_label_bat, use_container_width=True):
+                    with st.popover(popover_label_bat, width="stretch"):
                         st.markdown("##### 👤 分析する打者をタップして選択")
                         st.pills(
                             "分析する打者を選択",
@@ -1109,7 +1109,7 @@ def show_analysis_page(df_batting, df_pitching):
                                         color=alt.Color("打球種類:N", scale=hit_type_color_scale),
                                         tooltip=["方向", "打球種類", "数"]
                                     ).properties(height=250)
-                                    st.altair_chart(bar_dir, use_container_width=True)
+                                    st.altair_chart(bar_dir, width="stretch")
                                 else:
                                     st.caption(f"（{title_label} の方向データはありません）")
 
@@ -1160,7 +1160,7 @@ def show_analysis_page(df_batting, df_pitching):
                                     st.dataframe(
                                         r_stats.style.format({"打率": "{:.3f}"})
                                         .background_gradient(subset=["打率"], cmap="Reds"),
-                                        use_container_width=True,
+                                        width="stretch",
                                         hide_index=True
                                     )
                                 else:
@@ -1200,7 +1200,7 @@ def show_analysis_page(df_batting, df_pitching):
                                     st.dataframe(
                                         c_stats.style.format({"打率": "{:.3f}"})
                                         .background_gradient(subset=["打率"], cmap="Reds"),
-                                        use_container_width=True,
+                                        width="stretch",
                                         hide_index=True
                                     )
                                 else:
@@ -1230,7 +1230,7 @@ def show_analysis_page(df_batting, df_pitching):
                     current_pit_player = st.session_state.get("ana_pit_player")
                     popover_label_pit = f"👤 投手選択: {fmt_player_name(current_pit_player, STATS_NUMBERS)} 🔽" if current_pit_player else "👤 投手選択: 未選択 🔽"
 
-                    with st.popover(popover_label_pit, use_container_width=True):
+                    with st.popover(popover_label_pit, width="stretch"):
                         st.markdown("##### 👤 分析する投手をタップして選択")
                         st.pills(
                             "分析する投手を選択",
@@ -1327,7 +1327,7 @@ def show_analysis_page(df_batting, df_pitching):
                                 pie_my_p = alt.Chart(df_my_p_out).mark_arc(innerRadius=50).encode(
                                     theta="数", color=alt.Color("種類", scale=alt.Scale(domain=["ゴロ", "フライ", "三振"], range=["#eab308", "#3b82f6", "#ef4444"])), tooltip=["種類", "数"]
                                 ).properties(height=300)
-                                st.altair_chart(pie_my_p, use_container_width=True)
+                                st.altair_chart(pie_my_p, width="stretch")
                             else:
                                 st.info("詳細なアウトデータがありません。")
 
@@ -1379,7 +1379,7 @@ def show_analysis_page(df_batting, df_pitching):
                                             )),
                                             tooltip=["方向", "打球種類", "数"]
                                         ).properties(height=250)
-                                        st.altair_chart(bar_p_dir_indiv, use_container_width=True)
+                                        st.altair_chart(bar_p_dir_indiv, width="stretch")
                                     else:
                                         st.caption("有効な打球方向のデータがありません。")
                                 else:
@@ -1404,7 +1404,7 @@ def show_analysis_page(df_batting, df_pitching):
                                     bar_my_p = alt.Chart(df_my_p_hit).mark_bar().encode(
                                         x=alt.X("結果:N", sort=["単打", "長打(二・三塁打)", "本塁打", "四死球"]), y="数:Q", color=alt.Color("結果:N", legend=None), tooltip=["結果", "数"]
                                     ).properties(height=300)
-                                    st.altair_chart(bar_my_p, use_container_width=True)
+                                    st.altair_chart(bar_my_p, width="stretch")
                                 else:
                                     st.info("被安打・四死球の詳細データがありません。")
                             else:
@@ -1431,7 +1431,7 @@ def show_analysis_page(df_batting, df_pitching):
                                     st.dataframe(
                                         pr_stats.style.format({"被打率": "{:.3f}"})
                                         .background_gradient(subset=["被打率"], cmap="Blues"),
-                                        use_container_width=True,
+                                        width="stretch",
                                         hide_index=True
                                     )
                                 else:
@@ -1471,7 +1471,7 @@ def show_analysis_page(df_batting, df_pitching):
                                     st.dataframe(
                                         pc_stats.style.format({"被打率": "{:.3f}"})
                                         .background_gradient(subset=["被打率"], cmap="Blues"),
-                                        use_container_width=True,
+                                        width="stretch",
                                         hide_index=True
                                     )
                                 else:
@@ -1870,7 +1870,7 @@ def show_analysis_page(df_batting, df_pitching):
                                 "本塁打": "{:.0f}",
                                 "打点": "{:.0f}"
                             }).background_gradient(subset=["OPS"], cmap="Oranges"),
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True
                         )
 
@@ -1884,7 +1884,7 @@ def show_analysis_page(df_batting, df_pitching):
                             y=alt.Y("OPS:Q", title="OPS", scale=alt.Scale(domain=[0, order_stats["OPS"].max() * 1.2]))
                         )
                         
-                        st.altair_chart((bar + line).resolve_scale(y="independent"), use_container_width=True)
+                        st.altair_chart((bar + line).resolve_scale(y="independent"), width="stretch")
                     else:
                         st.info("9番までだった有効な試合データがありません。")
                 else:

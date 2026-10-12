@@ -157,7 +157,7 @@ def show_team_sharing_tab():
             st.write("")
             submitted = st.form_submit_button(
                 "💾 オーダー（スタメン＋控え）を「次戦オーダー」に保存する",
-                use_container_width=True,
+                width="stretch",
             )
 
             if submitted:
@@ -220,7 +220,7 @@ def show_team_sharing_tab():
                     with c_btn1:
                         if st.button(
                             "📥 相手の「次戦オーダー」を取得",
-                            use_container_width=True,
+                            width="stretch",
                             key="btn_get_order",
                         ):
                             try:
@@ -243,7 +243,7 @@ def show_team_sharing_tab():
                     with c_btn2:
                         if st.button(
                             "📋 相手の「全選手登録」を取得",
-                            use_container_width=True,
+                            width="stretch",
                             key="btn_get_players",
                         ):
                             try:
@@ -269,12 +269,12 @@ def show_team_sharing_tab():
 
                         st.write("---")
                         st.markdown(f"#### 📋 {selected_opp} の「次戦オーダー」")
-                        st.dataframe(df_fetched, use_container_width=True)
+                        st.dataframe(df_fetched, width="stretch")
 
                         if st.button(
                             "⚾️ このオーダー（スタメン＋控え）を試合成績入力画面（相手打順・ベンチ）に反映する",
                             type="primary",
-                            use_container_width=True,
+                            width="stretch",
                             key="btn_apply_opp_order",
                         ):
                             valid_positions = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右", "指"]
@@ -318,7 +318,7 @@ def show_team_sharing_tab():
                         st.markdown(f"#### 👥 {selected_opp} の「全選手登録」")
                         st.dataframe(
                             st.session_state["fetched_opp_players"],
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                 else:

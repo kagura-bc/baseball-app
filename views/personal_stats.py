@@ -434,7 +434,7 @@ def show_personal_stats(df_batting, df_pitching):
                 disp_mvp["OPS"] = disp_mvp["OPS"].map(lambda x: f"{x:.3f}")
                 disp_mvp["投球回"] = disp_mvp["投球回"].map(lambda x: f"{x:.1f}")
 
-                st.dataframe(disp_mvp, use_container_width=True, hide_index=True)
+                st.dataframe(disp_mvp, width="stretch", hide_index=True)
 
                 with st.expander("ℹ️ 総合ポイントの算出モデル解説"):
                     st.markdown("""
@@ -490,7 +490,7 @@ def show_personal_stats(df_batting, df_pitching):
                 
                 st.dataframe(
                     disp[["順位", "選手名", "Batting_Score", "打率", "OPS", "長打率", "出塁率", "RC", "打数", "安打", "本塁打", "打点", "得点", "四球", "死球", "四死球", "三振", "併殺打", "BB/K", "三振率", "盗塁", "盗塁成功率"]].rename(columns={"Batting_Score": "打撃P"}),
-                    use_container_width=True, hide_index=True
+                    width="stretch", hide_index=True
                 )
             else:
                 st.info("データなし")
@@ -531,7 +531,7 @@ def show_personal_stats(df_batting, df_pitching):
                 disp_p["K/BB"] = disp_p["K/BB"].map(lambda x: f"{x:.2f}")
                 disp_p["K/7"] = disp_p["K/7"].map(lambda x: f"{x:.2f}")
                 disp_p["BB/7"] = disp_p["BB/7"].map(lambda x: f"{x:.2f}")
-                st.dataframe(disp_p, use_container_width=True, hide_index=True)
+                st.dataframe(disp_p, width="stretch", hide_index=True)
             else:
                 st.info("データなし")
 
@@ -548,7 +548,7 @@ def show_personal_stats(df_batting, df_pitching):
                 disp_df = disp_df[disp_df["選手名"] != ""].reset_index(drop=True)
                 disp_df.insert(0, "順位", range(1, len(disp_df) + 1))
 
-                st.dataframe(disp_df, use_container_width=True, hide_index=True)
+                st.dataframe(disp_df, width="stretch", hide_index=True)
             else:
                 st.info("守備記録がありません")
 
@@ -620,7 +620,7 @@ def show_personal_stats(df_batting, df_pitching):
                             disp_game.insert(0, "順位", range(1, len(disp_game) + 1))
 
                             st.markdown(f"**対象期間のチーム総試合数**: 全 {total_games} 試合 (公式戦: {official_games} / 練習試合: {practice_games} / その他: {other_games})")
-                            st.dataframe(disp_game, use_container_width=True, hide_index=True)
+                            st.dataframe(disp_game, width="stretch", hide_index=True)
                         else:
                             st.info("参加記録がありません")
                     else:
@@ -640,7 +640,7 @@ def show_personal_stats(df_batting, df_pitching):
         current_sel_player = st.session_state.get("personal_stats_selected_player")
         popover_label = f"👤 選手選択: {current_sel_player} 🔽" if current_sel_player else "👤 選手選択: 未選択 🔽"
 
-        with st.popover(popover_label, use_container_width=True):
+        with st.popover(popover_label, width="stretch"):
             st.markdown("##### 👤 表示する選手をタップして選択")
             st.pills(
                 "選手選択",

@@ -381,16 +381,16 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
     sel_count = len(st.session_state.get("ideal_order_selected_players", []))
     popover_label = f"👥 本日参加するメンバーを選択 (選択中: {sel_count}人) 🔽"
 
-    with st.popover(popover_label, use_container_width=True):
+    with st.popover(popover_label, width="stretch"):
         st.markdown("##### 👥 参加メンバーをタップして選択（複数選択可）")
         
         col_c1, col_c2 = st.columns(2)
         with col_c1:
-            if st.button("全選択", use_container_width=True, key="select_all_ideal"):
+            if st.button("全選択", width="stretch", key="select_all_ideal"):
                 st.session_state["ideal_order_selected_players"] = list(ALL_PLAYERS)
                 st.rerun()
         with col_c2:
-            if st.button("クリア", use_container_width=True, key="clear_ideal"):
+            if st.button("クリア", width="stretch", key="clear_ideal"):
                 st.session_state["ideal_order_selected_players"] = []
                 st.rerun()
 

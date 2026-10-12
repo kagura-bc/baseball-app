@@ -380,7 +380,7 @@ def show_team_stats(df_batting, df_pitching):
         df_disp_show = df_display.copy()
         df_disp_show["日付"] = pd.to_datetime(df_disp_show["日付"], errors='coerce').dt.strftime('%Y-%m-%d')
         cols = ["日付", "対戦相手", "先攻後攻", "得点", "失点", "失策", "勝敗", "試合種別", "グラウンド"]
-        st.dataframe(df_disp_show[cols], use_container_width=True, hide_index=True)
+        st.dataframe(df_disp_show[cols], width="stretch", hide_index=True)
     else:
         st.write("履歴データがありません")
 
@@ -394,7 +394,7 @@ def show_team_stats(df_batting, df_pitching):
         current_selected = st.session_state.get("detail_selector_pill", viewer_options[0])
         viewer_btn_label = f"🟢 {current_selected} 🔽" if current_selected else "詳細を確認したい試合を選択 🔽"
 
-        with st.popover(viewer_btn_label, use_container_width=True):
+        with st.popover(viewer_btn_label, width="stretch"):
             st.markdown("##### 📝 詳細を確認したい試合を選択")
             st.pills(
                 "試合選択",

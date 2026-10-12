@@ -40,7 +40,7 @@ def show_login_screen():
 
         with st.form("login_form_v3"):
             password = st.text_input("🔑 パスワード", type="password")
-            submitted = st.form_submit_button("ログイン", use_container_width=True)
+            submitted = st.form_submit_button("ログイン", width="stretch")
             if submitted:
                 if password == "kagura":
                     st.session_state["is_logged_in"] = True
@@ -65,7 +65,7 @@ with col_logo:
     st.image(ICON_URL, width=350) 
 with col_logout:
     st.write("") 
-    if st.button("ログアウト", key="logout_btn", use_container_width=True):
+    if st.button("ログアウト", key="logout_btn", width="stretch"):
         st.session_state["is_logged_in"] = False
         st.rerun()
 
