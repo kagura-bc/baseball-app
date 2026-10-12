@@ -785,12 +785,23 @@ def show_team_stats(df_batting, df_pitching):
                         personal_pit = personal_pit.sort_values("pit_sort_order")
 
                     summary_list = []
+                    # ★ 全角数字・全角スペースを判定・半角数値変換するヘルパー関数
+                    def clean_num(val):
+                        if pd.isna(val): return 0
+                        s = str(val).strip().translate(str.maketrans('０１２３４５６７８９ ', '0123456789 '))
+                        try:
+                            return float(s) if '.' in s else int(s)
+                        except ValueError:
+                            return 0
+
                     for p_name_val, group in personal_pit.groupby("投手名", sort=False):
                         clean_p_val = re.sub(r'[\s ]+', '', str(p_name_val)).split("(")[0].strip()
 
-                        balls = pd.to_numeric(group.get("球数", 0), errors='coerce').fillna(0).sum()
-                        s_cnt = pd.to_numeric(group.get("ストライク", 0), errors='coerce').fillna(0).sum()
-                        b_cnt = pd.to_numeric(group.get("ボール", 0), errors='coerce').fillna(0).sum()
+                        # 🟢 全角数字対応の数値変換 + ファールボールの集計を追加
+                        balls = sum(clean_num(x) for x in group.get("球数", []))
+                        s_cnt = sum(clean_num(x) for x in group.get("ストライク", []))
+                        f_cnt = sum(clean_num(x) for x in group.get("ファールボール", []))
+                        b_cnt = sum(clean_num(x) for x in group.get("ボール", []))
 
                         if not match_bat.empty and "投手名" in match_bat.columns:
                             match_bat_copy = match_bat.copy()
@@ -800,21 +811,26 @@ def show_team_stats(df_batting, df_pitching):
                             b_sub = pd.DataFrame()
 
                         if not b_sub.empty:
-                            b_pitches = pd.to_numeric(b_sub.get("球数", 0), errors='coerce').fillna(0).sum()
-                            b_strikes = pd.to_numeric(b_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
-                            b_balls = pd.to_numeric(b_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
+                            b_pitches = sum(clean_num(x) for x in b_sub.get("球数", []))
+                            b_strikes = sum(clean_num(x) for x in b_sub.get("ストライク", []))
+                            b_fouls = sum(clean_num(x) for x in b_sub.get("ファールボール", []))
+                            b_balls = sum(clean_num(x) for x in b_sub.get("ボール", []))
 
                             if balls == 0 and b_pitches > 0:
                                 balls = b_pitches
                             if s_cnt == 0 and b_strikes > 0:
                                 s_cnt = b_strikes
+                            if f_cnt == 0 and b_fouls > 0:
+                                f_cnt = b_fouls
                             if b_cnt == 0 and b_balls > 0:
                                 b_cnt = b_balls
 
                         if balls == 0:
-                            balls = s_cnt + b_cnt
+                            balls = s_cnt + f_cnt + b_cnt
 
-                        strike_rate = (s_cnt / balls * 100) if balls > 0 else 0.0
+                        # 🟢 (ストライク + ファール) ÷ 総球数 で正確なストライク率(S%)を計算
+                        total_strikes = s_cnt + f_cnt
+                        strike_rate = (total_strikes / balls * 100) if balls > 0 else 0.0
                         strike_rate_str = f"{strike_rate:.1f}%"
 
                         match_date = pd.to_datetime(target_date_str, errors='coerce')

@@ -36,10 +36,12 @@ def local_fmt(name):
 
 
 def get_clean_runner(val):
-    """投手成績ページと同等の走者名クリーニング関数"""
+    """走者名から背番号やカッコ表記を取り除き、純粋な氏名のみを取得"""
     if not val or str(val).strip() in ["なし", "None", "nan", "", "選手選択"]:
         return None
-    return str(val).strip()
+    # "10 田中太郎 (10)" や "田中太郎 (10)" から氏名部分のみ抽出
+    clean_val = str(val).split(" (")[0].strip()
+    return clean_val
 
 
 # ★ 打席としてカウントする（打順を進める）結果のリスト
@@ -1071,7 +1073,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     is_score = (r_res == "得点") or is_home_steal
 
                     res_val = "得点" if is_score else r_res
-                    dir_val = r_fielder if r_fielder and r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] else "---"
+                    # 処理野手の守備位置から相手選手名（氏名）を取得
+                    fielder_player_name = get_opp_player_by_position(r_fielder) if r_fielder else ""
+                    dir_val = fielder_player_name if (fielder_player_name and r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]) else (r_fielder if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] else "---")
                     
                     rows_to_add.append({
                         "日付": current_date_formatted,

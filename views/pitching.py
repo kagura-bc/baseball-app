@@ -480,7 +480,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
     target_default_p_inn = f"1回{p_inning_suffix}"
 
     current_match_id = f"{selected_date_str}_{opp_team}_{match_type}_{kagura_order}"
-    
+
+    # セッション状態のデフォルト値を安全に初期化
+    if "opp_batter_count" not in st.session_state:
+        st.session_state["opp_batter_count"] = 9
+    if "opp_batter_index" not in st.session_state:
+        st.session_state["opp_batter_index"] = 1
+
     if st.session_state.get("last_p_match_id") != current_match_id:
         keys_to_reset = [
             "p_det_inn", "opp_batter_index", "p_persistent_runners", "opp_sn_dh_pitcher", "opp_lineup_states"
@@ -659,6 +665,11 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
     # ==================================================
     @st.fragment
     def pitching_input_fragment():
+        # Fragment単独実行時のキー欠損を完全に防ぐ安全策
+        if "opp_batter_count" not in st.session_state:
+            st.session_state["opp_batter_count"] = 9
+        if "opp_batter_index" not in st.session_state:
+            st.session_state["opp_batter_index"] = 1
         curr_counter = st.session_state.get("p_clear_counter", 0)
 
         # 1. スコア登録実行 & 取り消しボタン
@@ -1346,9 +1357,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             p_ef = st.session_state.get(f"pitching_quick_ef_{curr_counter}", "") or ""
 
             def get_clean_runner(val):
+                """走者名から背番号やカッコ表記を取り除き、純粋な氏名のみを取得"""
                 if not val or str(val).strip() in ["なし", "None", "nan", ""]:
                     return None
-                return str(val).strip()
+                return str(val).split(" (")[0].strip()
 
             cur_1b_runner_name = get_clean_runner(st.session_state.get(f"p_runner_1b_{curr_counter}"))
             cur_2b_runner_name = get_clean_runner(st.session_state.get(f"p_runner_2b_{curr_counter}"))
@@ -1525,9 +1537,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         fielder_disp = ""
                         if r_f:
                             found_f_name = get_player_by_position(r_f)
-                            fielder_disp = found_f_name if found_f_name else f"({r_f})"
+                            fielder_disp = found_f_name if found_f_name else r_f
 
-                        r_runner_name = clean_player_name(r_name_raw) if (r_name_raw and r_name_raw not in ["なし", "None", "nan", ""]) else current_batter_name
+                        # ★ 走者名と打順（r_runner_name, r_order_num）を取得・計算する処理を追加
+                        r_runner_name = r_name_raw if (r_name_raw and r_name_raw not in ["なし", "None", "nan", ""]) else current_batter_name
                         r_order_num = batter_idx_int
                         if r_name_raw and r_name_raw not in ["なし", "None", "nan", ""]:
                             clean_r = clean_player_name(r_name_raw)
@@ -1545,9 +1558,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             "イニング": current_inn,
                             "投手名": target_pitcher_name,
                             "打順": r_order_num,
-                            "打者名": r_runner_name,
+                            "打者名": clean_player_name(r_runner_name),
                             "守備位置": r_f if r_f else "ー",
-                            "打球方向": r_f if r_f else "ー",
+                            "打球方向": fielder_disp if fielder_disp else (r_f if r_f else "ー"),
                             "処理野手": fielder_disp,
                             "エラー野手": "",
                             "結果": r_res,
@@ -1587,9 +1600,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     st.session_state["last_added_ids_pitching"] = added_p_ids
 
                 if p_res and p_res in PA_RESULTS_PITCHING and p_res not in ["盗塁", "盗塁死", "牽制死", "暴投", "捕逸", "ボーク", "走塁死"]:
-                    st.session_state["opp_batter_index"] = (
-                        st.session_state["opp_batter_index"] % st.session_state["opp_batter_count"]
-                    ) + 1
+                    curr_idx = st.session_state.get("opp_batter_index", 1)
+                    curr_count = st.session_state.get("opp_batter_count", 9)
+                    st.session_state["opp_batter_index"] = (curr_idx % curr_count) + 1
 
                 p_inn_df = (
                     today_pitching_df[today_pitching_df["イニング"] == current_inn]
