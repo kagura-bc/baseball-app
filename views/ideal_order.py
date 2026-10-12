@@ -428,7 +428,7 @@ def show_ideal_order_tab(df_batting, df_pitching=None):
 
     hit_pattern = "単打|二塁打|三塁打|本塁打"
     df_calc["is_hit"] = df_calc["結果"].str.contains(hit_pattern, na=False).astype(int)
-    non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+    non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代|スタメン|ベンチ|ー"
     df_calc["is_ab"] = (~df_calc["結果"].isin(["", "nan", "None", "-"]) & ~df_calc["結果"].str.contains(non_ab_pattern, na=False)).astype(int)
     
     df_calc["is_bb"] = df_calc["結果"].str.contains("四球|死球|四死球", na=False).astype(int)

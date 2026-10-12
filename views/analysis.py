@@ -105,7 +105,7 @@ def show_analysis_page(df_batting, df_pitching):
         df_b_all["is_hit"] = df_b_all["結果"].str.contains(
             "単打|二塁打|三塁打|本塁打", na=False).astype(int)
 
-        non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代"
+        non_ab_pattern = "四球|死球|四死球|犠打|犠飛|打撃妨害|得点|盗塁|牽制|代走|走塁|暴投|捕逸|ボーク|守備|交代|スタメン|ベンチ|ー"
         is_valid = ~df_b_all["結果"].isin(["", "nan", "None", "-"])
         is_not_excluded = ~df_b_all["結果"].str.contains(non_ab_pattern, na=False)
         df_b_all["is_ab"] = (is_valid & is_not_excluded).astype(int)
@@ -1615,18 +1615,20 @@ def show_analysis_page(df_batting, df_pitching):
                         if not df_p_total_base.empty:
                             df_p_calc = df_p_total_base[df_p_total_base["選手名"] != "チーム記録"].copy()
                             if not df_p_calc.empty:
-                                for c in ["自責点", "失点", "アウト数", "is_so", "奪三振"]:
-                                    if c not in df_p_calc.columns:
-                                        df_p_calc[c] = 0
-                                    df_p_calc[c] = pd.to_numeric(df_p_calc[c], errors='coerce').fillna(0)
+                                # 結果列からのアウト数・奪三振・自責点の自動算出ロジック
+                                res_str = df_p_calc["結果"].astype(str) if "結果" in df_p_calc.columns else pd.Series([""] * len(df_p_calc))
+                                p_outs = pd.Series(0, index=df_p_calc.index)
+                                p_outs[res_str.str.contains("併殺", na=False)] = 2
+                                p_outs[res_str.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) & ~res_str.str.contains("失策|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)] = 1
                                 
-                                temp_so = df_p_calc["結果"].isin(["三振", "振り逃げ三振"]).astype(int) if "結果" in df_p_calc.columns else 0
-                                df_p_calc["total_so"] = df_p_calc[["奪三振", "is_so"]].max(axis=1) if "奪三振" in df_p_calc.columns else temp_so
+                                df_p_calc["outs_calc"] = pd.to_numeric(df_p_calc["アウト数"], errors='coerce').fillna(p_outs) if "アウト数" in df_p_calc.columns and df_p_calc["アウト数"].sum() > 0 else p_outs
+                                df_p_calc["so_calc"] = res_str.isin(["三振", "振り逃げ三振"]).astype(int)
+                                df_p_calc["er_calc"] = pd.to_numeric(df_p_calc["自責点"], errors='coerce').fillna(0) if "自責点" in df_p_calc.columns else 0
 
                                 p_agg = df_p_calc.groupby("選手名").agg(
-                                    outs=("アウト数", "sum"),
-                                    er=("自責点", "sum"),
-                                    so=("total_so", "sum")
+                                    outs=("outs_calc", "sum"),
+                                    er=("er_calc", "sum"),
+                                    so=("so_calc", "sum")
                                 ).reset_index()
 
                                 p_agg["投球回"] = p_agg["outs"] / 3
@@ -1746,14 +1748,19 @@ def show_analysis_page(df_batting, df_pitching):
                                 if assigned_pos == "投" and not df_p_total_base.empty:
                                     p_rows = df_p_total_base[(df_p_total_base["選手名"] == player_name) & (df_p_total_base["選手名"] != "チーム記録")]
                                     if not p_rows.empty:
-                                        outs_sum = pd.to_numeric(p_rows["アウト数"], errors='coerce').fillna(0).sum() if "アウト数" in p_rows.columns else len(p_rows) * 3
+                                        res_s = p_rows["結果"].astype(str) if "結果" in p_rows.columns else pd.Series([""] * len(p_rows))
+                                        p_outs = pd.Series(0, index=p_rows.index)
+                                        p_outs[res_s.str.contains("併殺", na=False)] = 2
+                                        p_outs[res_s.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) & ~res_s.str.contains("失策|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)] = 1
+                                        
+                                        outs_sum = pd.to_numeric(p_rows["アウト数"], errors='coerce').fillna(p_outs).sum() if "アウト数" in p_rows.columns and p_rows["アウト数"].sum() > 0 else p_outs.sum()
                                         ip_val = outs_sum / 3.0
+                                        
                                         run_col = "自責点" if "自責点" in p_rows.columns else ("失点" if "失点" in p_rows.columns else None)
                                         er_sum = pd.to_numeric(p_rows[run_col], errors='coerce').fillna(0).sum() if run_col and run_col in p_rows.columns else 0
                                         era = (er_sum * 7) / ip_val if ip_val > 0 else 0.0
                                         
-                                        so_col = "is_so" if "is_so" in p_rows.columns else ("三振" if "三振" in p_rows.columns else None)
-                                        so_val = pd.to_numeric(p_rows[so_col], errors='coerce').fillna(0).sum() if so_col and so_col in p_rows.columns else 0
+                                        so_val = res_s.isin(["三振", "振り逃げ三振"]).sum()
                                         if "奪三振" in p_rows.columns:
                                             so_val = max(so_val, pd.to_numeric(p_rows["奪三振"], errors='coerce').fillna(0).sum())
                                         

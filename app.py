@@ -362,30 +362,47 @@ def render_today_pitching_analysis(df_batting, df_pitching, target_date_str, mat
             else:
                 er = 0
 
+            def clean_num(val):
+                if pd.isna(val):
+                    return 0
+                s = str(val).strip().translate(str.maketrans('０１２３４５６７８９ ', '0123456789 '))
+                try:
+                    return float(s) if '.' in s else int(s)
+                except ValueError:
+                    return 0
+
             pitches = 0
-            strikes = 0
+            s_only = 0
+            fouls = 0
             balls = 0
 
             if not b_sub.empty:
-                pitches += pd.to_numeric(b_sub.get("球数", 0), errors='coerce').fillna(0).sum()
-                strikes += pd.to_numeric(b_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
-                balls += pd.to_numeric(b_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
+                pitches += sum(clean_num(x) for x in b_sub.get("球数", []))
+                s_only += sum(clean_num(x) for x in b_sub.get("ストライク", []))
+                fouls += sum(clean_num(x) for x in b_sub.get("ファールボール", []))
+                balls += sum(clean_num(x) for x in b_sub.get("ボール", []))
 
             if pitches == 0 and not p_sub.empty:
-                pitches += pd.to_numeric(p_sub.get("球数", 0), errors='coerce').fillna(0).sum()
-                strikes += pd.to_numeric(p_sub.get("ストライク", 0), errors='coerce').fillna(0).sum()
-                balls += pd.to_numeric(p_sub.get("ボール", 0), errors='coerce').fillna(0).sum()
+                pitches += sum(clean_num(x) for x in p_sub.get("球数", []))
+                s_only += sum(clean_num(x) for x in p_sub.get("ストライク", []))
+                fouls += sum(clean_num(x) for x in p_sub.get("ファールボール", []))
+                balls += sum(clean_num(x) for x in p_sub.get("ボール", []))
+
+            # 🟢 見逃し・空振り(S) ＋ ファール(F) を合算して合計ストライク数を算出
+            total_strikes = s_only + fouls
 
             inn_full = int(outs // 3)
             inn_rem = int(outs % 3)
             inn_str = f"{inn_full}" if inn_rem == 0 else f"{inn_full}.{inn_rem}"
-            strike_rate = (strikes / pitches * 100) if pitches > 0 else 0.0
+
+            # 🟢 正確なストライク率(S%)を算出
+            strike_rate = (total_strikes / pitches * 100) if pitches > 0 else 0.0
 
             summary_rows.append({
                 "投手名": local_fmt(p_name) if is_my_team else p_name,
                 "投球回": f"{inn_str} 回",
                 "総球数": int(pitches),
-                "ストライク": int(strikes),
+                "ストライク": int(total_strikes), # 🟢 合算後のストライク数
                 "ボール": int(balls),
                 "ストライク率": f"{strike_rate:.1f}%",
                 "被安打": int(hits),
@@ -520,27 +537,32 @@ if page == "試合データ入力":
             if pd.notna(latest_r.get("スコアラー", ""))
             else ""
         )
+        # 「攻守」列があれば取得し、無ければイニング（例: 1回表 / 1回裏）から自動判定
         auto_order = (
             str(latest_r.get("攻守", ""))
             if pd.notna(latest_r.get("攻守", ""))
             else ""
         )
+        if not auto_order and "イニング" in latest_r:
+          latest_inn = str(latest_r.get("イニング", ""))
+          if latest_inn.endswith("表"):
+            auto_order = "先攻 (表)"
+          elif latest_inn.endswith("裏"):
+            auto_order = "後攻 (裏)"
 
     if has_data_for_date:
-      res_opp = auto_opp
-      res_match = auto_match
-      res_ground = auto_ground
-      res_scorer = auto_scorer
-      res_order = auto_order
+      res_opp = auto_opp if auto_opp else query_opp
+      res_match = auto_match if auto_match else query_match
+      res_ground = auto_ground if auto_ground else query_ground
+      res_scorer = auto_scorer if auto_scorer else query_scorer
+      res_order = auto_order if auto_order else query_order
     else:
-      res_opp = ""
-      res_match = ""
-      res_ground = ""
-      res_scorer = ""
-      res_order = ""
-      for q_key in ["opp", "match", "ground", "order", "scorer"]:
-        if q_key in st.query_params:
-          del st.query_params[q_key]
+      # URLクエリパラメータから復元・維持
+      res_opp = query_opp
+      res_match = query_match
+      res_ground = query_ground
+      res_scorer = query_scorer
+      res_order = query_order
 
     p_list = ALL_PLAYERS
     scorer_key = "scorer_name_ui"

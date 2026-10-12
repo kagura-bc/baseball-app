@@ -1004,6 +1004,17 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             ef_player_name = get_opp_player_by_position(quick_ef) if quick_ef else ""
             error_fielder_disp = ef_player_name if ef_player_name else quick_ef
 
+            # ★ カウント・球数の計算（投手成績と同一仕様）
+            final_strike_count = strike_count_val + foul_count_val
+            final_ball_count = ball_count_val
+
+            if quick_res in ["四球", "死球"]:
+                final_ball_count += 1
+            elif quick_res:
+                final_strike_count += 1
+
+            final_pitch_count = final_ball_count + final_strike_count
+
             rows_to_add.append({
                 "日付": current_date_formatted,
                 "対戦相手": final_opp,
@@ -1018,6 +1029,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 "エラー野手": error_fielder_disp,
                 "打点": rbi_val,
                 "自責点": er_val,
+                "球数": final_pitch_count,        # ★ 追加
+                "ストライク": final_strike_count,  # ★ 追加
+                "ファールボール": foul_count_val,  # ★ 追加
+                "ボール": final_ball_count,        # ★ 追加
                 "スコアラー": scorer,
                 "グラウンド": final_ground
             })
@@ -1099,11 +1114,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         # --------------------------------------------------
         if is_change:
             st.session_state["persistent_runners"] = {"1b": None, "2b": None, "3b": None}
-            # ★ 3アウト時に自動的に自チームの次攻撃イニングに繰り上げる
+            # ★ 3アウト時に自動的に自チームの次攻撃イニングに繰り上げる (1イニングずつ進める)
             try:
                 curr_idx = inn_list.index(inn_val)
-                if curr_idx < len(inn_list) - 2:
-                    st.session_state["persistent_inn"] = inn_list[curr_idx + 2]
+                if curr_idx < len(inn_list) - 1:
+                    st.session_state["persistent_inn"] = inn_list[curr_idx + 1]
             except ValueError:
                 pass
         else:
@@ -1251,8 +1266,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         if total_outs >= 3:
             try:
                 curr_idx = inn_list.index(current_inn_val)
-                if curr_idx < len(inn_list) - 2:
-                    current_inn_val = inn_list[curr_idx + 2]
+                if curr_idx < len(inn_list) - 1:
+                    current_inn_val = inn_list[curr_idx + 1]
                     st.session_state["persistent_inn"] = current_inn_val
             except ValueError:
                 pass
