@@ -968,7 +968,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         curr_counter = st.session_state.get("quick_clear_counter", 0)
         quick_res = st.session_state.get(f"quick_sr_{curr_counter}")
         quick_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
-        quick_ef = st.session_state.get(f"quick_ef_{curr_counter}", "") or ""
+        quick_ef = st.session_state.get(f"quick_ef_{curr_counter}")
         quick_rbi = st.session_state.get(f"quick_si_{curr_counter}")
         quick_er = st.session_state.get(f"quick_er_{curr_counter}")
         
@@ -1229,6 +1229,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.session_state[cache_key] = updated_full_df
                 st.session_state["last_added_ids_batting"] = added_ids
                 
+                # ⭕ 直接の代入を削除し、カウンターを加算して更新
                 next_counter = curr_counter + 1
                 st.session_state["quick_clear_counter"] = next_counter
 
@@ -1429,12 +1430,12 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             """, unsafe_allow_html=True)
 
         with qc[1]:
-            # 固定のキーで session_state を直接参照
-            current_res = st.session_state.get("quick_sr")
-            current_dirs = st.session_state.get("quick_sd", [])
-            current_ef = st.session_state.get("quick_ef")
-            current_rbi = st.session_state.get("quick_si")
-            current_er = st.session_state.get("quick_er")
+            # ⭕ カウンター付きキーから安全に値を取得
+            current_res = st.session_state.get(f"quick_sr_{curr_counter}")
+            current_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
+            current_ef = st.session_state.get(f"quick_ef_{curr_counter}")
+            current_rbi = st.session_state.get(f"quick_si_{curr_counter}")
+            current_er = st.session_state.get(f"quick_er_{curr_counter}")
             
             res_label = f" 🟢 {current_res}" if current_res else ""
             dir_label = f" ({''.join(current_dirs)})" if current_dirs else ""
@@ -1447,87 +1448,90 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             with st.popover(summary_btn_label, width="stretch"):
 
                 st.markdown("##### ⚾ 打席結果を選択")
-                # ⭕ key から curr_counter を除去し、固定キーにする
-                st.pills("打席結果", batting_results, key="quick_sr", label_visibility="collapsed")
+                # ⭕ key に _{curr_counter} を組み合わせる
+                st.pills("打席結果", batting_results, key=f"quick_sr_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 打球方向・送球経路を選択（複数選択可）")
                 dir_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                st.pills("打球方向", dir_options, selection_mode="multi", key="quick_sd", label_visibility="collapsed")
+                st.pills("打球方向", dir_options, selection_mode="multi", key=f"quick_sd_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚠️ エラー野手を選択（エラー発生時）")
                 ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                st.pills("エラー野手", ef_options, key="quick_ef", label_visibility="collapsed")
+                st.pills("エラー野手", ef_options, key=f"quick_ef_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
                 rbi_options = [0, 1, 2, 3, 4]
-                st.pills("打点", rbi_options, key="quick_si", label_visibility="collapsed")
+                st.pills("打点", rbi_options, key=f"quick_si_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
                 st.markdown("##### ⚾ 自責点がある場合は選択 (0〜4)")
                 er_options = [0, 1, 2, 3, 4]
-                st.pills("自責点", er_options, key="quick_er", label_visibility="collapsed")
+                st.pills("自責点", er_options, key=f"quick_er_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
-                # ⭕ クリア処理時はキーの値を直接初期化する
-                if st.button("🔄 入力をすべてクリア", width="stretch", key="clear_btn_batting_quick"):
-                    st.session_state["quick_sr"] = None
-                    st.session_state["quick_sd"] = []
-                    st.session_state["quick_ef"] = None
-                    st.session_state["quick_si"] = None
-                    st.session_state["quick_er"] = None
+                # ⭕ 直接の代入を避け、カウンターを加算して新しいキーを呼び出すことで安全に初期化
+                if st.button("🔄 入力をすべてクリア", width="stretch", key=f"clear_btn_batting_quick_{curr_counter}"):
+                    st.session_state["quick_clear_counter"] = curr_counter + 1
+                    st.session_state["persistent_runners"] = {"1b": None, "2b": None, "3b": None}
                     st.rerun()
 
         st.divider()
 
         p_runners = st.session_state.get("persistent_runners", {"1b": None, "2b": None, "3b": None})
 
+        # ◯ カウンター付きキーで初期化
         for b_key in ["1b", "2b", "3b"]:
-            curr_r_key = f"runner_{b_key}"
+            curr_r_key = f"runner_{b_key}_{curr_counter}"
             if curr_r_key not in st.session_state:
                 st.session_state[curr_r_key] = p_runners.get(b_key)
 
-        # 🏃 走者状況
-        p_runners = st.session_state.get("persistent_runners", {"1b": None, "2b": None, "3b": None})
-
-        for b_key in ["1b", "2b", "3b"]:
-            curr_r_key = f"runner_{b_key}"
-            if curr_r_key not in st.session_state:
-                st.session_state[curr_r_key] = p_runners.get(b_key)
-
+        # 4. 🏃 走者状況
         st.markdown("##### 🏃 走者状況")
 
-        # 以下の5行を追加（... を置き換えます）
-        r_cols = st.columns(3)
-        r3_res_options = ["得点", "走塁死", "盗塁死", "牽制死", "併殺死", "残塁"]
-        r2_res_options = ["進塁1", "得点", "走塁死", "盗塁死", "牽制死", "併殺死", "残塁"]
-        r1_res_options = ["进塁1", "進塁2", "得点", "走塁死", "盗塁死", "牽制死", "併殺死", "残塁"]
+        # 走塁結果・処理野手の選択肢オプションを定義
+        r1_res_options = ["進塁1", "進塁2", "得点", "走塁死", "盗塁", "盗塁死", "牽制死", "併殺死", "残塁"]
+        r2_res_options = ["進塁1", "進塁2", "得点", "走塁死", "盗塁", "盗塁死", "牽制死", "併殺死", "残塁"]
+        r3_res_options = ["得点", "走塁死", "盗塁", "盗塁死", "牽制死", "併殺死", "残塁"]
         out_fielder_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+
+        # 🛡️ session_state に保持されている走者名が player_options に無ければ安全に追加
+        active_player_options = list(player_options) if 'player_options' in locals() else ["なし"]
+        for b_key in ["1b", "2b", "3b"]:
+            r_val = st.session_state.get(f"runner_{b_key}_{curr_counter}")
+            if r_val and r_val not in active_player_options and r_val not in ["なし", "None", "nan", ""]:
+                active_player_options.append(r_val)
+
+        r_cols = st.columns(3)
 
         # 3塁走者
         with r_cols[0]:
             st.markdown("<div style='text-align:center; font-weight:bold; background:#e0ebff; padding:2px; border-radius:4px;'>3塁</div>", unsafe_allow_html=True)
             
-            r3_name_raw = st.session_state.get("runner_3b", "")
+            r3_name_raw = st.session_state.get(f"runner_3b_{curr_counter}", "")
             r3_label = f"🟢 {local_fmt(r3_name_raw)} 🔽" if r3_name_raw else "選手選択 🔽"
             with st.popover(r3_label, width="stretch"):
                 st.markdown("##### 3塁走者を選択")
-                st.pills("3塁選手", player_options, format_func=local_fmt, key="runner_3b", label_visibility="collapsed")
+                st.pills("3塁選手", active_player_options, format_func=local_fmt, key=f"runner_3b_{curr_counter}", label_visibility="collapsed")
                 
-            r3_res = st.session_state.get("runner_3b_res")
-            r3_f = st.session_state.get("runner_3b_fielder")
-            r3_btn = f"🟢 {r3_res}({r3_f}) 🔽" if (r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r3_f) else (f"🟢 {r3_res} 🔽" if r3_res else "走塁結果 🔽")
+            r3_res = st.session_state.get(f"runner_3b_res_{curr_counter}")
+            r3_f = st.session_state.get(f"runner_3b_fielder_{curr_counter}")
+            r3_btn = (
+                f"🟢 {r3_res}({r3_f}) 🔽" if (r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r3_f)
+                else (f"🟢 {r3_res} 🔽" if r3_res else "走塁結果 🔽")
+            )
             
             with st.popover(r3_btn, width="stretch"):
                 st.markdown("##### 3塁 走塁結果を選択")
-                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key="runner_3b_res", label_visibility="collapsed")
+                cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key=f"runner_3b_res_{curr_counter}", label_visibility="collapsed")
                 if cur_r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
-                    st.pills("3塁処理野手ピル", out_fielder_options, key="runner_3b_fielder", label_visibility="collapsed")
+                    st.pills("3塁処理野手ピル", out_fielder_options, key=f"runner_3b_fielder_{curr_counter}", label_visibility="collapsed")
 
+        # 2塁走者
         with r_cols[1]:
             st.markdown("<div style='text-align:center; font-weight:bold; background:#e0ebff; padding:2px; border-radius:4px;'>2塁</div>", unsafe_allow_html=True)
             
@@ -1535,11 +1539,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             r2_label = f"🟢 {local_fmt(r2_name_raw)} 🔽" if r2_name_raw else "選手選択 🔽"
             with st.popover(r2_label, width="stretch"):
                 st.markdown("##### 2塁走者を選択")
-                st.pills("2塁選手", player_options, format_func=local_fmt, key=f"runner_2b_{curr_counter}", label_visibility="collapsed")
+                st.pills("2塁選手", active_player_options, format_func=local_fmt, key=f"runner_2b_{curr_counter}", label_visibility="collapsed")
                 
             r2_res = st.session_state.get(f"runner_2b_res_{curr_counter}")
             r2_f = st.session_state.get(f"runner_2b_fielder_{curr_counter}")
-            r2_btn = f"🟢 {r2_res}({r2_f}) 🔽" if (r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r2_f) else (f"🟢 {r2_res} 🔽" if r2_res else "走塁結果 🔽")
+            r2_btn = (
+                f"🟢 {r2_res}({r2_f}) 🔽" if (r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r2_f)
+                else (f"🟢 {r2_res} 🔽" if r2_res else "走塁結果 🔽")
+            )
             
             with st.popover(r2_btn, width="stretch"):
                 st.markdown("##### 2塁 走塁結果を選択")
@@ -1549,6 +1556,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("2塁処理野手ピル", out_fielder_options, key=f"runner_2b_fielder_{curr_counter}", label_visibility="collapsed")
 
+        # 1塁走者
         with r_cols[2]:
             st.markdown("<div style='text-align:center; font-weight:bold; background:#e0ebff; padding:2px; border-radius:4px;'>1塁</div>", unsafe_allow_html=True)
             
@@ -1556,11 +1564,14 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             r1_label = f"🟢 {local_fmt(r1_name_raw)} 🔽" if r1_name_raw else "選手選択 🔽"
             with st.popover(r1_label, width="stretch"):
                 st.markdown("##### 1塁走者を選択")
-                st.pills("1塁選手", player_options, format_func=local_fmt, key=f"runner_1b_{curr_counter}", label_visibility="collapsed")
+                st.pills("1塁選手", active_player_options, format_func=local_fmt, key=f"runner_1b_{curr_counter}", label_visibility="collapsed")
                 
             r1_res = st.session_state.get(f"runner_1b_res_{curr_counter}")
             r1_f = st.session_state.get(f"runner_1b_fielder_{curr_counter}")
-            r1_btn = f"🟢 {r1_res}({r1_f}) 🔽" if (r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r1_f) else (f"🟢 {r1_res} 🔽" if r1_res else "走塁結果 🔽")
+            r1_btn = (
+                f"🟢 {r1_res}({r1_f}) 🔽" if (r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r1_f)
+                else (f"🟢 {r1_res} 🔽" if r1_res else "走塁結果 🔽")
+            )
             
             with st.popover(r1_btn, width="stretch"):
                 st.markdown("##### 1塁 走塁結果を選択")
@@ -1625,6 +1636,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         if submitted:
             st.session_state["batting_error_msg"] = None
             
+            # ⭕ カウンター付きキーを参照するように変更
             quick_res = st.session_state.get(f"quick_sr_{curr_counter}")
             quick_dirs = st.session_state.get(f"quick_sd_{curr_counter}", [])
             quick_ef = st.session_state.get(f"quick_ef_{curr_counter}")
