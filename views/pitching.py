@@ -884,14 +884,12 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
             if p_val and p_val not in runner_options and p_val not in ["なし", "None", "nan", ""]:
                 runner_options.append(p_val)
 
-        # ◯ カウンター付きキーで同期
         for b_key in ["1b", "2b", "3b"]:
             sel_key = f"p_runner_{b_key}_{curr_counter}"
             if sel_key not in st.session_state:
                 val = p_runners.get(b_key)
                 st.session_state[sel_key] = val if (val and val in runner_options) else "なし"
 
-        # 走塁結果・処理野手の選択肢オプションを定義（★波線解消に必要な記述）
         r1_res_options = ["進塁1", "進塁2", "得点", "走塁死", "盗塁", "盗塁死", "牽制死", "併殺死", "残塁"]
         r2_res_options = ["進塁1", "進塁2", "得点", "走塁死", "盗塁", "盗塁死", "牽制死", "併殺死", "残塁"]
         r3_res_options = ["得点", "走塁死", "盗塁", "盗塁死", "牽制死", "併殺死", "残塁"]
@@ -902,19 +900,26 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
         # 3塁走者
         with r_cols[0]:
             st.markdown("<div style='text-align:center; font-weight:bold; background:#e0ebff; padding:2px; border-radius:4px;'>3塁</div>", unsafe_allow_html=True)
-
+            
             r3_val = st.session_state.get(f"p_runner_3b_{curr_counter}", "なし")
             r3_label = f"🟢 {r3_val} 🔽" if r3_val and r3_val != "なし" else "走者選択 🔽"
             with st.popover(r3_label, width="stretch"):
                 st.markdown("##### 3塁走者を選択")
                 st.pills("3塁走者", runner_options, key=f"p_runner_3b_{curr_counter}", label_visibility="collapsed")
-
+                
             r3_res = st.session_state.get(f"p_runner_3b_res_{curr_counter}")
             r3_f = st.session_state.get(f"p_runner_3b_fielder_{curr_counter}")
-            r3_btn = (
-                f"🟢 {r3_res}({r3_f}) 🔽" if (r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r3_f)
-                else (f"🟢 {r3_res} 🔽" if r3_res else "走塁結果 🔽")
-            )
+            r3_reason = st.session_state.get(f"p_runner_3b_reason_{curr_counter}")
+            
+            if r3_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r3_f:
+                r3_btn = f"🟢 {r3_res}({r3_f}) 🔽"
+            elif r3_res in ["進塁1", "進塁2", "得点", "進塁"] and r3_reason:
+                r3_btn = f"🟢 {r3_res}({r3_reason}) 🔽"
+            elif r3_res:
+                r3_btn = f"🟢 {r3_res} 🔽"
+            else:
+                r3_btn = "走塁結果 🔽"
+            
             with st.popover(r3_btn, width="stretch"):
                 st.markdown("##### 3塁 走塁結果を選択")
                 cur_r3_res = st.pills("3塁結果ピル", r3_res_options, key=f"p_runner_3b_res_{curr_counter}", label_visibility="collapsed")
@@ -922,6 +927,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("3塁処理野手ピル", out_fielder_options, key=f"p_runner_3b_fielder_{curr_counter}", label_visibility="collapsed")
+                elif cur_r3_res in ["進塁1", "進塁2", "得点", "進塁"]:
+                    st.markdown("---")
+                    st.markdown("##### ⚾ 理由（暴投・捕逸）を選択（任意）")
+                    st.pills("3塁理由ピル", ["暴投", "捕逸"], key=f"p_runner_3b_reason_{curr_counter}", label_visibility="collapsed")
 
         # 2塁走者
         with r_cols[1]:
@@ -935,10 +944,17 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
             r2_res = st.session_state.get(f"p_runner_2b_res_{curr_counter}")
             r2_f = st.session_state.get(f"p_runner_2b_fielder_{curr_counter}")
-            r2_btn = (
-                f"🟢 {r2_res}({r2_f}) 🔽" if (r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r2_f)
-                else (f"🟢 {r2_res} 🔽" if r2_res else "走塁結果 🔽")
-            )
+            r2_reason = st.session_state.get(f"p_runner_2b_reason_{curr_counter}")
+
+            if r2_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r2_f:
+                r2_btn = f"🟢 {r2_res}({r2_f}) 🔽"
+            elif r2_res in ["進塁1", "進塁2", "得点", "進塁"] and r2_reason:
+                r2_btn = f"🟢 {r2_res}({r2_reason}) 🔽"
+            elif r2_res:
+                r2_btn = f"🟢 {r2_res} 🔽"
+            else:
+                r2_btn = "走塁結果 🔽"
+
             with st.popover(r2_btn, width="stretch"):
                 st.markdown("##### 2塁 走塁結果を選択")
                 cur_r2_res = st.pills("2塁結果ピル", r2_res_options, key=f"p_runner_2b_res_{curr_counter}", label_visibility="collapsed")
@@ -946,6 +962,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("2塁処理野手ピル", out_fielder_options, key=f"p_runner_2b_fielder_{curr_counter}", label_visibility="collapsed")
+                elif cur_r2_res in ["進塁1", "進塁2", "得点", "進塁"]:
+                    st.markdown("---")
+                    st.markdown("##### ⚾ 理由（暴投・捕逸）を選択（任意）")
+                    st.pills("2塁理由ピル", ["暴投", "捕逸"], key=f"p_runner_2b_reason_{curr_counter}", label_visibility="collapsed")
 
         # 1塁走者
         with r_cols[2]:
@@ -959,10 +979,17 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
 
             r1_res = st.session_state.get(f"p_runner_1b_res_{curr_counter}")
             r1_f = st.session_state.get(f"p_runner_1b_fielder_{curr_counter}")
-            r1_btn = (
-                f"🟢 {r1_res}({r1_f}) 🔽" if (r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r1_f)
-                else (f"🟢 {r1_res} 🔽" if r1_res else "走塁結果 🔽")
-            )
+            r1_reason = st.session_state.get(f"p_runner_1b_reason_{curr_counter}")
+
+            if r1_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] and r1_f:
+                r1_btn = f"🟢 {r1_res}({r1_f}) 🔽"
+            elif r1_res in ["進塁1", "進塁2", "得点", "進塁"] and r1_reason:
+                r1_btn = f"🟢 {r1_res}({r1_reason}) 🔽"
+            elif r1_res:
+                r1_btn = f"🟢 {r1_res} 🔽"
+            else:
+                r1_btn = "走塁結果 🔽"
+
             with st.popover(r1_btn, width="stretch"):
                 st.markdown("##### 1塁 走塁結果を選択")
                 cur_r1_res = st.pills("1塁結果ピル", r1_res_options, key=f"p_runner_1b_res_{curr_counter}", label_visibility="collapsed")
@@ -970,6 +997,10 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     st.markdown("---")
                     st.markdown("##### 🎯 処理野手（補殺）を選択")
                     st.pills("1塁処理野手ピル", out_fielder_options, key=f"p_runner_1b_fielder_{curr_counter}", label_visibility="collapsed")
+                elif cur_r1_res in ["進塁1", "進塁2", "得点", "進塁"]:
+                    st.markdown("---")
+                    st.markdown("##### ⚾ 理由（暴投・捕逸）を選択（任意）")
+                    st.pills("1塁理由ピル", ["暴投", "捕逸"], key=f"p_runner_1b_reason_{curr_counter}", label_visibility="collapsed")
 
         st.divider()
 
@@ -1537,6 +1568,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     r_name_raw = st.session_state.get(f"p_runner_{b_key}_{curr_counter}")
                     r_res = st.session_state.get(f"p_runner_{b_key}_res_{curr_counter}")
                     r_f = st.session_state.get(f"p_runner_{b_key}_fielder_{curr_counter}", "")
+                    r_reason = st.session_state.get(f"p_runner_{b_key}_reason_{curr_counter}", "")
 
                     if p_res == "本塁打" and r_name_raw not in [None, "なし", ""] and not r_res:
                         r_res = "得点"
@@ -1549,7 +1581,16 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             found_f_name = get_player_by_position(r_f)
                             fielder_disp = found_f_name if found_f_name else r_f
 
-                        # ★ 走者名と打順（r_runner_name, r_order_num）を取得・計算する処理を追加
+                        # 暴投・捕逸が選択されている場合の経緯（打球方向/処理野手）指定
+                        if r_reason:
+                            dir_val = r_reason
+                        elif fielder_disp:
+                            dir_val = fielder_disp
+                        elif r_f:
+                            dir_val = r_f
+                        else:
+                            dir_val = "ー"
+
                         r_runner_name = r_name_raw if (r_name_raw and r_name_raw not in ["なし", "None", "nan", ""]) else current_batter_name
                         r_order_num = batter_idx_int
                         if r_name_raw and r_name_raw not in ["なし", "None", "nan", ""]:
@@ -1570,8 +1611,8 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             "打順": r_order_num,
                             "打者名": clean_player_name(r_runner_name),
                             "守備位置": r_f if r_f else "ー",
-                            "打球方向": fielder_disp if fielder_disp else (r_f if r_f else "ー"),
-                            "処理野手": fielder_disp,
+                            "打球方向": dir_val,
+                            "処理野手": fielder_disp if not r_reason else "",
                             "エラー野手": "",
                             "結果": r_res,
                             "打点": 0,
