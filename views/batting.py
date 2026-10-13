@@ -1017,6 +1017,16 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             final_pitch_count = final_ball_count + final_strike_count
 
+            # ランナー状況のコード生成 (0, 1, 2, 3, 12, 13, 23, 123)
+            runners_on = []
+            if cur_1b_name:
+                runners_on.append("1")
+            if cur_2b_name:
+                runners_on.append("2")
+            if cur_3b_name:
+                runners_on.append("3")
+            runner_status = "".join(runners_on) if runners_on else "0"
+
             rows_to_add.append({
                 "日付": current_date_formatted,
                 "対戦相手": final_opp,
@@ -1031,10 +1041,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 "エラー野手": error_fielder_disp,
                 "打点": rbi_val,
                 "自責点": er_val,
-                "球数": final_pitch_count,        # ★ 追加
-                "ストライク": final_strike_count,  # ★ 追加
-                "ファールボール": foul_count_val,  # ★ 追加
-                "ボール": final_ball_count,        # ★ 追加
+                "球数": final_pitch_count,
+                "ストライク": final_strike_count,
+                "ファールボール": foul_count_val,
+                "ボール": final_ball_count,
+                "ランナー状況": runner_status,  # ★ 追加
                 "スコアラー": scorer,
                 "グラウンド": final_ground
             })
@@ -1090,18 +1101,34 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     is_home_steal = (base == "3b" and r_res == "盗塁")
                     is_score = (r_res == "得点") or is_home_steal
 
-                    res_val = "得点" if is_score else r_res
-                    fielder_player_name = get_opp_player_by_position(r_fielder) if r_fielder else ""
-                    
-                    # 🌟 暴投・捕逸が選択されている場合は経緯/打球方向列に記録（未選択時はそのまま"---"等）
-                    if r_reason:
-                        dir_val = r_reason
-                    elif fielder_player_name and r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
-                        dir_val = fielder_player_name
-                    elif r_fielder and r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
-                        dir_val = r_fielder
+                    if r_reason == "暴投":
+                        auto_f = "投"
+                    elif r_reason == "捕逸":
+                        auto_f = "捕"
                     else:
+                        auto_f = r_fielder
+
+                    fielder_player_name = get_opp_player_by_position(auto_f) if auto_f else ""
+                    f_disp = fielder_player_name if fielder_player_name else auto_f
+
+                    if r_reason:
+                        res_val = r_reason                        # 結果列：暴投 / 捕逸 / 悪送球 / 落球
+                        proc_fielder = f_disp                     # 処理野手欄：選手名（またはポジション）
+                        pos_val = auto_f if auto_f else "－"      # 守備位置
                         dir_val = "---"
+                        # 悪送球・落球の場合はエラー野手欄にも記録
+                        err_fielder = f_disp if r_reason in ["悪送球", "落球"] else ""
+                    else:
+                        res_val = "得点" if is_score else r_res
+                        proc_fielder = f_disp if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] else ""
+                        pos_val = "－"
+                        err_fielder = ""
+                        if fielder_player_name and r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
+                            dir_val = fielder_player_name
+                        elif r_fielder and r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
+                            dir_val = r_fielder
+                        else:
+                            dir_val = "---"
                     
                     rows_to_add.append({
                         "日付": current_date_formatted,
@@ -1111,10 +1138,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "打順": order_num,
                         "打者名": clean_r_name,
                         "投手名": opp_pitcher_name,
-                        "守備位置": "－",
+                        "守備位置": pos_val,
                         "結果": res_val,
                         "打球方向": dir_val,
-                        "エラー野手": "",
+                        "処理野手": proc_fielder,
+                        "エラー野手": err_fielder,
                         "打点": 0,
                         "スコアラー": scorer,
                         "グラウンド": final_ground
@@ -1546,8 +1574,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     st.pills("3塁処理野手ピル", out_fielder_options, key=f"runner_3b_fielder_{curr_counter}", label_visibility="collapsed")
                 elif cur_r3_res in ["進塁1", "進塁2", "得点", "進塁"]:
                     st.markdown("---")
-                    st.markdown("##### ⚾ 理由（暴投・捕逸）を選択（任意）")
-                    st.pills("3塁理由ピル", ["暴投", "捕逸"], key=f"runner_3b_reason_{curr_counter}", label_visibility="collapsed")
+                    st.markdown("##### ⚾ 理由（任意）を選択")
+                    cur_r3_reason = st.pills("3塁理由ピル", ["暴投", "捕逸", "悪送球", "落球"], key=f"runner_3b_reason_{curr_counter}", label_visibility="collapsed")
+                    
+                    if cur_r3_reason in ["悪送球", "落球"]:
+                        st.markdown("---")
+                        st.markdown(f"##### 🎯 対象野手（{cur_r3_reason}）を選択")
+                        st.pills("3塁処理野手ピル", out_fielder_options, key=f"runner_3b_fielder_{curr_counter}", label_visibility="collapsed")
 
         # 2塁走者
         with r_cols[1]:
@@ -1581,8 +1614,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     st.pills("2塁処理野手ピル", out_fielder_options, key=f"runner_2b_fielder_{curr_counter}", label_visibility="collapsed")
                 elif cur_r2_res in ["進塁1", "進塁2", "得点", "進塁"]:
                     st.markdown("---")
-                    st.markdown("##### ⚾ 理由（暴投・捕逸）を選択（任意）")
-                    st.pills("2塁理由ピル", ["暴投", "捕逸"], key=f"runner_2b_reason_{curr_counter}", label_visibility="collapsed")
+                    st.markdown("##### ⚾ 理由（任意）を選択")
+                    cur_r2_reason = st.pills("2塁理由ピル", ["暴投", "捕逸", "悪送球", "落球"], key=f"runner_2b_reason_{curr_counter}", label_visibility="collapsed")
+                    
+                    if cur_r2_reason in ["悪送球", "落球"]:
+                        st.markdown("---")
+                        st.markdown(f"##### 🎯 対象野手（{cur_r2_reason}）を選択")
+                        st.pills("2塁処理野手ピル", out_fielder_options, key=f"runner_2b_fielder_{curr_counter}", label_visibility="collapsed")
 
         # 1塁走者
         with r_cols[2]:
@@ -1616,8 +1654,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     st.pills("1塁処理野手ピル", out_fielder_options, key=f"runner_1b_fielder_{curr_counter}", label_visibility="collapsed")
                 elif cur_r1_res in ["進塁1", "進塁2", "得点", "進塁"]:
                     st.markdown("---")
-                    st.markdown("##### ⚾ 理由（暴投・捕逸）を選択（任意）")
-                    st.pills("1塁理由ピル", ["暴投", "捕逸"], key=f"runner_1b_reason_{curr_counter}", label_visibility="collapsed")
+                    st.markdown("##### ⚾ 理由（任意）を選択")
+                    cur_r1_reason = st.pills("1塁理由ピル", ["暴投", "捕逸", "悪送球", "落球"], key=f"runner_1b_reason_{curr_counter}", label_visibility="collapsed")
+                    
+                    if cur_r1_reason in ["悪送球", "落球"]:
+                        st.markdown("---")
+                        st.markdown(f"##### 🎯 対象野手（{cur_r1_reason}）を選択")
+                        st.pills("1塁処理野手ピル", out_fielder_options, key=f"runner_1b_fielder_{curr_counter}", label_visibility="collapsed")
 
         st.divider()
 

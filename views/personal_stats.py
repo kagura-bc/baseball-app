@@ -296,7 +296,7 @@ def show_personal_stats(df_batting, df_pitching):
                     # 失策・暴投・捕逸の個別の判定関数
                     def check_fld_events(row):
                         res_str = str(row["結果"])
-                        has_err = "失策" in res_str
+                        has_err = any(x in res_str for x in ["失策", "悪送球", "落球"])
                         has_wp = "暴投" in res_str
                         has_pb = "捕逸" in res_str
                         
@@ -813,7 +813,7 @@ def show_personal_stats(df_batting, df_pitching):
                             if not my_f.empty:
                                 def check_fld_events_my(row):
                                     res_str = str(row["結果"])
-                                    has_err = "失策" in res_str
+                                    has_err = any(x in res_str for x in ["失策", "悪送球", "落球"])
                                     has_wp = "暴投" in res_str
                                     has_pb = "捕逸" in res_str
                                     err_player = str(row.get("エラー野手", "")).strip() if "エラー野手" in row.index else ""

@@ -841,7 +841,7 @@ def show_analysis_page(df_batting, df_pitching):
             st.markdown("##### チーム投球傾向 (アウトの内訳)")
             if not df_p_detail.empty and "結果" in df_p_detail.columns:
                 df_p_out_only = df_p_detail[~df_p_detail["結果"].astype(
-                    str).str.contains("失策|振り逃げ", na=False)]
+                    str).str.contains("失策|悪送球|落球|振り逃げ", na=False)]
 
                 p_goro = len(
                     df_p_out_only[df_p_out_only["結果"].astype(str).str.contains("ゴロ|併殺打")])
@@ -1117,7 +1117,7 @@ def show_analysis_page(df_batting, df_pitching):
                             show_player_direction_chart(my_b, "全体")
 
                             hit_results = ["単打", "二塁打", "三塁打", "本塁打"]
-                            out_results = ["凡退(ゴロ)", "凡退(フライ)", "併殺打", "野選", "失策"]
+                            out_results = ["凡退(ゴロ)", "凡退(フライ)", "併殺打", "野選", "失策", "失策(ゴロ)", "失策(フライ)", "悪送球", "落球"]
                             st.markdown("**■ 安打時**")
                             show_player_direction_chart(
                                 my_b[my_b["結果"].isin(hit_results)], "安打時")
@@ -1143,23 +1143,38 @@ def show_analysis_page(df_batting, df_pitching):
                             st.divider()
                             st.markdown(f"#### 🏃 {fmt_player_name(target_b_player, STATS_NUMBERS)} の走者状況別打率")
                             
-                            r_col = "ランナー状況" if "ランナー状況" in my_b.columns else ("走者状況" if "走者状況" in my_b.columns else None)
-                            if r_col and not my_b[r_col].dropna().empty:
-                                my_b_valid_r = my_b[my_b[r_col].notna() & (my_b[r_col] != "") & (my_b[r_col] != "nan")].copy()
-                                if not my_b_valid_r.empty:
-                                    r_stats = my_b_valid_r.groupby(r_col).agg(
+                            r_col_p = "ランナー状況" if "ランナー状況" in my_p.columns else ("走者状況" if "走者状況" in my_p.columns else None)
+                            if r_col_p and not my_p[r_col_p].dropna().empty:
+                                my_p_valid_r = my_p[my_p[r_col_p].notna() & (my_p[r_col_p] != "") & (my_p[r_col_p] != "nan")].copy()
+                                if not my_p_valid_r.empty:
+                                    runner_map = {
+                                        "0": "ランナーなし", "０": "ランナーなし", "なし": "ランナーなし",
+                                        "1": "ランナー1塁", "１": "ランナー1塁",
+                                        "2": "ランナー2塁", "２": "ランナー2塁",
+                                        "3": "ランナー3塁", "３": "ランナー3塁",
+                                        "12": "ランナー1・2塁", "１２": "ランナー1・2塁", "1,2": "ランナー1・2塁",
+                                        "23": "ランナー2・3塁", "２３": "ランナー2・3塁", "2,3": "ランナー2・3塁",
+                                        "13": "ランナー1・3塁", "１３": "ランナー1・3塁", "1,3": "ランナー1・3塁",
+                                        "123": "満塁", "１２３": "満塁"
+                                    }
+                                    my_p_valid_r[r_col_p] = my_p_valid_r[r_col_p].astype(str).str.strip().replace(runner_map)
+
+                                    pr_stats = my_p_valid_r.groupby(r_col_p).agg(
                                         打数=("is_ab", "sum"),
-                                        安打=("is_hit", "sum")
+                                        被安打=("is_hit", "sum")
                                     ).reset_index()
-                                    r_stats["打率"] = r_stats.apply(lambda x: x["安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+                                    pr_stats["被打率"] = pr_stats.apply(lambda x: x["被安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
                                     
-                                    r_order = ["ランナーなし", "ランナー1塁", "得点圏", "満塁"]
-                                    r_stats[r_col] = pd.Categorical(r_stats[r_col], categories=r_order, ordered=True)
-                                    r_stats = r_stats.sort_values(r_col).dropna(subset=[r_col])
+                                    r_order = [
+                                        "ランナーなし", "ランナー1塁", "ランナー2塁", "ランナー3塁",
+                                        "ランナー1・2塁", "ランナー2・3塁", "ランナー1・3塁", "満塁", "得点圏"
+                                    ]
+                                    pr_stats[r_col_p] = pd.Categorical(pr_stats[r_col_p], categories=r_order, ordered=True)
+                                    pr_stats = pr_stats.sort_values(r_col_p).dropna(subset=[r_col_p])
 
                                     st.dataframe(
-                                        r_stats.style.format({"打率": "{:.3f}"})
-                                        .background_gradient(subset=["打率"], cmap="Reds"),
+                                        pr_stats.style.format({"被打率": "{:.3f}"})
+                                        .background_gradient(subset=["被打率"], cmap="Blues"),
                                         width="stretch",
                                         hide_index=True
                                     )
@@ -1316,7 +1331,7 @@ def show_analysis_page(df_batting, df_pitching):
                             st.divider()
 
                             st.markdown(f"#### {fmt_player_name(target_p_player, STATS_NUMBERS)} のアウトの取り方")
-                            my_p_out_only = my_p[~my_p["結果"].astype(str).str.contains("失策", na=False)] if "結果" in my_p.columns else my_p
+                            my_p_out_only = my_p[~my_p["結果"].astype(str).str.contains("失策|悪送球|落球", na=False)] if "結果" in my_p.columns else my_p
                             
                             out_goro = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("ゴロ|併殺打")]) if "結果" in my_p_out_only.columns else 0
                             out_fly = len(my_p_out_only[my_p_out_only["結果"].astype(str).str.contains("フライ")]) if "結果" in my_p_out_only.columns else 0
@@ -1424,7 +1439,12 @@ def show_analysis_page(df_batting, df_pitching):
                                     ).reset_index()
                                     pr_stats["被打率"] = pr_stats.apply(lambda x: x["被安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
                                     
-                                    r_order = ["ランナーなし", "ランナー1塁", "得点圏", "満塁"]
+                                    # 数字（全角・半角）と従来の文字列の両方を許容するカテゴリ定義
+                                    r_order = [
+                                        "0", "1", "2", "3",
+                                        "０", "１", "２", "３",
+                                        "ランナーなし", "ランナー1塁", "得点圏", "満塁"
+                                    ]
                                     pr_stats[r_col_p] = pd.Categorical(pr_stats[r_col_p], categories=r_order, ordered=True)
                                     pr_stats = pr_stats.sort_values(r_col_p).dropna(subset=[r_col_p])
 
@@ -1619,7 +1639,7 @@ def show_analysis_page(df_batting, df_pitching):
                                 res_str = df_p_calc["結果"].astype(str) if "結果" in df_p_calc.columns else pd.Series([""] * len(df_p_calc))
                                 p_outs = pd.Series(0, index=df_p_calc.index)
                                 p_outs[res_str.str.contains("併殺", na=False)] = 2
-                                p_outs[res_str.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) & ~res_str.str.contains("失策|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)] = 1
+                                p_outs[res_str.str.contains("凡退|三振|犠打|犠飛|走塁死|盗塁死", na=False) & ~res_str.str.contains("失策|悪送球|落球|得点|進塁|盗塁|安打|単打|二塁打|三塁打|本塁打|四球|死球|暴投|捕逸|ボーク", na=False)] = 1
                                 
                                 df_p_calc["outs_calc"] = pd.to_numeric(df_p_calc["アウト数"], errors='coerce').fillna(p_outs) if "アウト数" in df_p_calc.columns and df_p_calc["アウト数"].sum() > 0 else p_outs
                                 df_p_calc["so_calc"] = res_str.isin(["三振", "振り逃げ三振"]).astype(int)
