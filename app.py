@@ -84,7 +84,7 @@ def show_login_screen():
         conn = st.connection("gsheets", type=GSheetsConnection)
         try:
           df_teams = conn.read(
-              spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録"
+              spreadsheet=SPREADSHEET_URL, worksheet="相手チーム登録", ttl="10m"
           )
 
           matched = (
@@ -190,34 +190,28 @@ def local_fmt(name):
 
 @st.cache_data(ttl=600, show_spinner=False)
 def get_cached_grounds(target_url):
-  conn = st.connection("gsheets", type=GSheetsConnection)
-  try:
-    df_ground = conn.read(
-        spreadsheet=target_url, worksheet="グラウンド登録"
-    )
-    return (
-        df_ground["グラウンド名"].dropna().tolist()
-        if "グラウンド名" in df_ground.columns
-        else ["その他"]
-    )
-  except Exception:
-    return ["その他"]
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        # ⭕ ttl="10m" を追加
+        df_ground = conn.read(
+            spreadsheet=target_url, worksheet="グラウンド登録", ttl="10m"
+        )
+        return df_ground["グラウンド名"].dropna().tolist() if "グラウンド名" in df_ground.columns else ["その他"]
+    except Exception:
+        return ["その他"]
 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def get_cached_opponents(target_url):
-  conn = st.connection("gsheets", type=GSheetsConnection)
-  try:
-    df_opp = conn.read(
-        spreadsheet=target_url, worksheet="相手チーム登録"
-    )
-    return (
-        df_opp["チーム名"].dropna().tolist()
-        if "チーム名" in df_opp.columns
-        else ["その他"]
-    )
-  except Exception:
-    return ["その他"]
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        # ⭕ ttl="10m" を追加
+        df_opp = conn.read(
+            spreadsheet=target_url, worksheet="相手チーム登録", ttl="10m"
+        )
+        return df_opp["チーム名"].dropna().tolist() if "チーム名" in df_opp.columns else ["その他"]
+    except Exception:
+        return ["その他"]
 
 
 GROUND_LIST = get_cached_grounds(MY_DB_URL)

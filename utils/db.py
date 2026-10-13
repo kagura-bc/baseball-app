@@ -12,8 +12,8 @@ def load_batting_data(spreadsheet_url=SPREADSHEET_URL):
     target_worksheet = "打撃成績"
     try:
         conn = get_connection()
-        # ttl=0 を削除してコネクション側のキャッシュも有効化
-        data = conn.read(spreadsheet=spreadsheet_url, worksheet=target_worksheet)
+        # ⭕ ttl="10m" を追加し、GSheetsConnectionのキャッシュを有効化
+        data = conn.read(spreadsheet=spreadsheet_url, worksheet=target_worksheet, ttl="10m")
         if data is None or data.empty:
             return st.session_state.get("cached_df_batting", pd.DataFrame(columns=TARGET_COLUMNS + ["Year"]))
 
@@ -42,7 +42,8 @@ def load_pitching_data(spreadsheet_url=SPREADSHEET_URL):
     target_worksheet = "投手成績"
     try:
         conn = get_connection()
-        data = conn.read(spreadsheet=spreadsheet_url, worksheet=target_worksheet)
+        # ⭕ ttl="10m" を追加
+        data = conn.read(spreadsheet=spreadsheet_url, worksheet=target_worksheet, ttl="10m")
         if data is None or data.empty:
             return st.session_state.get("cached_df_pitching", pd.DataFrame(columns=TARGET_COLUMNS + ["Year"]))
 
