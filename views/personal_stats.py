@@ -1082,9 +1082,13 @@ def show_personal_stats(df_batting, df_pitching):
                     df_bat_res["OBP"] = 0.0
                     df_bat_res["SLG"] = 0.0
 
+                # 打席数（PA）を算出
+                df_bat_res["PA"] = df_bat_res["is_ab"] + df_bat_res["is_bb"] + df_bat_res["is_sf"] + df_bat_res["is_sh"]
+
+                # 打数(is_ab)ではなく打席数(PA)で判定するように修正
                 df_bat_rate_target = df_bat_res[
-                    (df_bat_res["is_ab"] >= df_bat_res["Req_Quota"]) &
-                    (df_bat_res["is_ab"] >= MIN_AB)
+                    (df_bat_res["PA"] >= df_bat_res["Req_Quota"]) &
+                    (df_bat_res["PA"] >= MIN_AB)
                 ].copy()
 
                 df_pit_res = get_ranking_df(df_p_target, ["Year", "選手名"], agg_rules_p)
