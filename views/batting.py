@@ -24,6 +24,25 @@ button:active, div[role="button"]:active {
     transform: scale(0.96);
     transition: transform 0.05s ease;
 }
+
+/* 📍 expander（責任投手設定アコーディオン）のタイトル文言を中央揃えにする */
+div[data-testid="stExpander"] summary {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* summary 内部の全テキスト・コンテナ要素を中央寄せ & 通常の文字の太さに変更 */
+div[data-testid="stExpander"] summary > div,
+div[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"],
+div[data-testid="stExpander"] summary p {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    text-align: center !important;
+    font-weight: normal !important;  /* ← 通常の太さに変更 */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -598,34 +617,38 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
     scoreboard_df = today_batting_df[today_batting_df["イニング"] != "まとめ入力"] if not today_batting_df.empty else today_batting_df
 
+    # スコアボード描画
     render_scoreboard(scoreboard_df, today_pitching_df, selected_date_str, match_type, ground_name, opp_team, is_kagura_top)
     
-    render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL, key_prefix="batting")
+    # 📍 責任投手設定 と データ共有ボタンを横並び (1 : 1) に配置
+    col_top_act1, col_top_act2 = st.columns([1, 1])
 
-    with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", width="stretch"):
-        st.markdown(f"##### 🤝 対戦相手【{opp_team}】へのデータ共有")
-        st.caption("ホストチームとして記録したこの試合のスコア（打撃・投手データ）を反転させ、相手チームのスプレッドシートへ自動登録します。")
-        st.warning("※ 相手チーム側に同じ日付・同じ対戦相手のデータが既に存在する場合は、最新データで上書き更新されます。")
-        
-        if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", width="stretch", key=f"share_btn_batting_{selected_date_str}_{opp_team}"):
-            with st.spinner("相手チームのデータベースへ送信中..."):
-                conn_db = get_connection()
-                success, msg = share_match_data_to_opponent(
-                    conn=conn_db,
-                    host_team_name=MY_TEAM,
-                    target_opp=opp_team,
-                    match_date_str=selected_date_str,
-                    match_type=match_type,
-                    match_bat=today_batting_df,
-                    match_pit=today_pitching_df
-                )
-                if success:
-                    st.success(msg)
-                    st.balloons()
-                else:
-                    st.error(msg)
-    
-    st.divider()
+    with col_top_act1:
+        render_game_result_popover(df_pitching, selected_date_str, match_type, ground_name, opp_team, ALL_PLAYERS, conn, ws_pitching, SPREADSHEET_URL, key_prefix="batting")
+
+    with col_top_act2:
+        with st.popover(f"📤 この試合データを対戦相手【{opp_team}】に共有・送信する", width="stretch"):
+            st.markdown(f"##### 🤝 対戦相手【{opp_team}】へのデータ共有")
+            st.caption("ホストチームとして記録したこの試合のスコア（打撃・投手データ）を反転させ、相手チームのスプレッドシートへ自動登録します。")
+            st.warning("※ 相手チーム側に同じ日付・同じ対戦相手のデータが既に存在する場合は、最新データで上書き更新されます。")
+            
+            if st.button(f"🚀 【{opp_team}】のスプレッドシートに送信する", type="primary", width="stretch", key=f"share_btn_batting_{selected_date_str}_{opp_team}"):
+                with st.spinner("相手チームのデータベースへ送信中..."):
+                    conn_db = get_connection()
+                    success, msg = share_match_data_to_opponent(
+                        conn=conn_db,
+                        host_team_name=MY_TEAM,
+                        target_opp=opp_team,
+                        match_date_str=selected_date_str,
+                        match_type=match_type,
+                        match_bat=today_batting_df,
+                        match_pit=today_pitching_df
+                    )
+                    if success:
+                        st.success(msg)
+                        st.balloons()
+                    else:
+                        st.error(msg)
 
     player_history_dict = {}
     if not today_batting_df.empty:
@@ -1312,24 +1335,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             except ValueError:
                 pass
 
-    col_adj1, col_adj2, col_adj3, col_adj4 = st.columns([2.5, 1.0, 1.0, 1.0])
-    with col_adj1:
-        st.markdown(f"<div style='font-weight:bold; font-size:16px; line-height:2.4;'>📍 打順調整 (オフセット: {st.session_state.get('batter_offset', 0)})</div>", unsafe_allow_html=True)
-    with col_adj2:
-        if st.button("◀ 前へ", width="stretch"):
-            st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) - 1
-            st.rerun()
-    with col_adj3:
-        if st.button("リセット", width="stretch"):
-            st.session_state["batter_offset"] = 0
-            st.rerun()
-    with col_adj4:
-        if st.button("次へ ▶", width="stretch"):
-            st.session_state["batter_offset"] = st.session_state.get("batter_offset", 0) + 1
-            st.rerun()
-
-    st.divider()
-
     @st.fragment
     def batting_input_fragment():
         curr_counter = st.session_state.get("quick_clear_counter", 0)
@@ -1347,7 +1352,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         if undo_submitted:
             undo_last_batting_entry(df_batting, selected_date_str, opp_team, match_type, ws_batting, conn, cache_key)
 
-        c_inn, c_outs = st.columns([1.2, 3.8])
+        # イニング選択とBSO・球数インジケーターのカラム比率を微調整 (1.3 : 3.7)
+        c_inn, c_outs = st.columns([1.3, 3.7])
 
         with c_inn:
             try:
@@ -1363,6 +1369,28 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 label_visibility="collapsed",
             )
             st.session_state["persistent_inn"] = curr_inn
+
+            # 📍 打順調整（オフセット）をイニング選択の下（空スペース）にコンパクト埋め込み
+            offset_val = st.session_state.get('batter_offset', 0)
+            st.markdown(
+                f"<div style='font-size:12px; font-weight:bold; color:#555; margin-top:6px; margin-bottom:2px; text-align:center;'>"
+                f"📍 打順調整 ({offset_val})</div>", 
+                unsafe_allow_html=True
+            )
+            
+            adj_c1, adj_c2, adj_c3 = st.columns([1, 1, 1])
+            with adj_c1:
+                if st.button("◀", key=f"btn_adj_prev_{curr_counter}", width="stretch", help="打順を1つ戻す"):
+                    st.session_state["batter_offset"] = offset_val - 1
+                    st.rerun()
+            with adj_c2:
+                if st.button("🔄", key=f"btn_adj_reset_{curr_counter}", width="stretch", help="打順オフセットをリセット"):
+                    st.session_state["batter_offset"] = 0
+                    st.rerun()
+            with adj_c3:
+                if st.button("▶", key=f"btn_adj_next_{curr_counter}", width="stretch", help="打順を1つ進める"):
+                    st.session_state["batter_offset"] = offset_val + 1
+                    st.rerun()
         
         with c_outs:
             disp_outs = 0
@@ -1489,24 +1517,28 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 st.pills("打席結果", batting_results, key=f"quick_sr_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
-                st.markdown("##### ⚾ 打球方向・送球経路を選択（複数選択可）")
-                dir_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                st.pills("打球方向", dir_options, selection_mode="multi", key=f"quick_sd_{curr_counter}", label_visibility="collapsed")
+                # 📍 打球方向 と エラー野手 を横並び（2列）配置
+                c_dir, c_ef = st.columns(2)
+                with c_dir:
+                    st.markdown("##### ⚾ 打球方向・送球経路（複数可）")
+                    dir_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                    st.pills("打球方向", dir_options, selection_mode="multi", key=f"quick_sd_{curr_counter}", label_visibility="collapsed")
+
+                with c_ef:
+                    st.markdown("##### ⚠️ エラー野手（エラー時）")
+                    ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
+                    st.pills("エラー野手", ef_options, key=f"quick_ef_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
-                st.markdown("##### ⚠️ エラー野手を選択（エラー発生時）")
-                ef_options = ["投", "捕", "一", "二", "三", "遊", "左", "中", "右"]
-                st.pills("エラー野手", ef_options, key=f"quick_ef_{curr_counter}", label_visibility="collapsed")
-
-                st.markdown("---")
-                st.markdown("##### ⚾ 打点がある場合は選択 (1〜4)")
-                rbi_options = [0, 1, 2, 3, 4]
-                st.pills("打点", rbi_options, key=f"quick_si_{curr_counter}", label_visibility="collapsed")
-
-                st.markdown("---")
-                st.markdown("##### ⚾ 自責点がある場合は選択 (0〜4)")
-                er_options = [0, 1, 2, 3, 4]
-                st.pills("自責点", er_options, key=f"quick_er_{curr_counter}", label_visibility="collapsed")
+                c_rbi, c_er = st.columns(2)
+                with c_rbi:
+                    st.markdown("##### ⚾ 打点 (0〜4)")
+                    rbi_options = [0, 1, 2, 3, 4]
+                    st.pills("打点", rbi_options, key=f"quick_si_{curr_counter}", label_visibility="collapsed")
+                with c_er:
+                    st.markdown("##### ⚾ 自責点 (0〜4)")
+                    er_options = [0, 1, 2, 3, 4]
+                    st.pills("自責点", er_options, key=f"quick_er_{curr_counter}", label_visibility="collapsed")
 
                 st.markdown("---")
                 # ⭕ 直接の代入を避け、カウンターを加算して新しいキーを呼び出すことで安全に初期化

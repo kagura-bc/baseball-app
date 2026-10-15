@@ -325,7 +325,15 @@ def show_personal_stats(df_batting, df_pitching):
 
                         return pd.Series([is_error, is_wp, is_pb], index=["is_error", "is_wp", "is_pb"])
 
-                    fld_expanded[["is_error", "is_wp", "is_pb"]] = fld_expanded.apply(check_fld_events, axis=1)
+                    if not fld_expanded.empty:
+                        fld_expanded[["is_error", "is_wp", "is_pb"]] = fld_expanded.apply(
+                            check_fld_events, axis=1, result_type="expand"
+                        )
+                    else:
+                        # データが空の場合のデフォルト列を作成
+                        fld_expanded["is_error"] = 0
+                        fld_expanded["is_wp"] = 0
+                        fld_expanded["is_pb"] = 0
 
                     fld_unique = fld_expanded.groupby(["Original_Idx", "FielderName", "FielderPos"]).agg(
                         is_error=("is_error", "max"),
