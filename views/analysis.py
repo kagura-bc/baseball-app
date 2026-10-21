@@ -69,11 +69,15 @@ def show_analysis_page(df_batting, df_pitching):
             if "投手名" in df_pitching.columns:
                 df_pitching["選手名"] = df_pitching["選手名"].replace("", pd.NA).fillna(df_pitching["投手名"])
 
-    # 💡 フィルタリングを行う【前】に、選手名の全角・半角スペースを確実に除去する（\u3000は全角スペース）
+    # 💡 PyArrowのエラーを避けるため、正規表現を使わずに半角・全角スペースを除去する安全な処理
     if not df_batting.empty and "選手名" in df_batting.columns:
-        df_batting["選手名"] = df_batting["選手名"].astype(str).str.replace(r'[\s\u3000]+', '', regex=True).str.strip()
+        df_batting["選手名"] = df_batting["選手名"].astype(str).apply(
+            lambda x: "".join(x.split()) if pd.notna(x) else x
+        )
     if not df_pitching.empty and "選手名" in df_pitching.columns:
-        df_pitching["選手名"] = df_pitching["選手名"].astype(str).str.replace(r'[\s\u3000]+', '', regex=True).str.strip()
+        df_pitching["選手名"] = df_pitching["選手名"].astype(str).apply(
+            lambda x: "".join(x.split()) if pd.notna(x) else x
+        )
 
     # 背番号表示用マップの取得 ＆ 非表示設定反映済み選手リストの取得
     STATS_PLAYERS, STATS_NUMBERS = get_stats_active_players()
