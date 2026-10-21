@@ -17,7 +17,8 @@ from views.ideal_order import show_ideal_order_tab
 
 def normalize_name(name):
     """名前からスペースを除去する"""
-    return str(name).replace(" ", "").replace(" ", "").strip()
+    # 💡 正規表現で半角・全角スペースやタブなどの空白文字をすべて確実に除去
+    return re.sub(r'[\s ]+', '', str(name)).strip()
 
 
 def get_exclude_set():
@@ -67,6 +68,12 @@ def show_analysis_page(df_batting, df_pitching):
         else:
             if "投手名" in df_pitching.columns:
                 df_pitching["選手名"] = df_pitching["選手名"].replace("", pd.NA).fillna(df_pitching["投手名"])
+
+    # 💡 フィルタリングを行う【前】に、選手名の全角・半角スペースを確実に除去する（\u3000は全角スペース）
+    if not df_batting.empty and "選手名" in df_batting.columns:
+        df_batting["選手名"] = df_batting["選手名"].astype(str).str.replace(r'[\s\u3000]+', '', regex=True).str.strip()
+    if not df_pitching.empty and "選手名" in df_pitching.columns:
+        df_pitching["選手名"] = df_pitching["選手名"].astype(str).str.replace(r'[\s\u3000]+', '', regex=True).str.strip()
 
     # 背番号表示用マップの取得 ＆ 非表示設定反映済み選手リストの取得
     STATS_PLAYERS, STATS_NUMBERS = get_stats_active_players()
@@ -141,7 +148,8 @@ def show_analysis_page(df_batting, df_pitching):
             df_b_all["盗塁"] = df_b_all["盗塁"] + sb_mask.astype(int)
 
     if "選手名" in df_b_all.columns:
-        df_b_all["選手名"] = df_b_all["選手名"].astype(str).str.replace(" ", "").str.replace(" ", "").str.strip()
+        # 💡 こちらも正規表現で半角・全角スペースを確実に除去する
+        df_b_all["選手名"] = df_b_all["選手名"].astype(str).str.replace(r'[\s ]+', '', regex=True).str.strip()
 
     if "日付" in df_b_all.columns:
         df_b_all["Date"] = pd.to_datetime(df_b_all["日付"], errors='coerce')
@@ -1535,7 +1543,7 @@ def show_analysis_page(df_batting, df_pitching):
                 df_calc = df_calc[~df_calc["_temp_norm"].isin(exclude_set)]
 
                 if df_calc.empty:
-                    st.warning("除外設定の結果、表示できるデータがなくなりました。")
+                        st.warning("除外設定の結果、表示できるデータがなくなりました。")
                 else:
                     agg_dict = {
                         "is_pa": "sum",
@@ -1553,6 +1561,8 @@ def show_analysis_page(df_batting, df_pitching):
                     elif "三振" in df_calc.columns:
                         agg_dict["三振"] = "sum"
 
+                    # 💡 修正箇所：事前に df_calc["選手名"] 自体を `normalize_name` で上書きしてから集計する
+                    df_calc["選手名"] = df_calc["選手名"].apply(normalize_name)
                     stats = df_calc.groupby("選手名").agg(agg_dict).reset_index()
 
                     rename_dict = {
