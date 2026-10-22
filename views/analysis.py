@@ -38,6 +38,39 @@ def filter_players(df, exclude_set):
 
     return df[mask]
 
+def normalize_runner(val):
+    """走者状況の表記揺れを吸収し、統一表記に変換する"""
+    if pd.isna(val):
+        return None
+    s = unicodedata.normalize('NFKC', str(val)).strip()
+    if s in ["", "nan", "None", "-", "―", "---", "0", "０", "なし", "走者なし"]:
+        return "ランナーなし"
+    if s == "満塁":
+        return "満塁"
+        
+    s = s.replace("一", "1").replace("二", "2").replace("三", "3")
+    
+    has_1 = "1" in s
+    has_2 = "2" in s
+    has_3 = "3" in s
+    
+    if has_1 and has_2 and has_3:
+        return "満塁"
+    elif has_1 and has_2:
+        return "ランナー1・2塁"
+    elif has_2 and has_3:
+        return "ランナー2・3塁"
+    elif has_1 and has_3:
+        return "ランナー1・3塁"
+    elif has_1:
+        return "ランナー1塁"
+    elif has_2:
+        return "ランナー2塁"
+    elif has_3:
+        return "ランナー3塁"
+    
+    return None
+
 # =========================================================
 # メインの表示関数
 # =========================================================
@@ -1159,37 +1192,45 @@ def show_analysis_page(df_batting, df_pitching):
                             if r_col and not my_b[r_col].dropna().empty:
                                 my_b_valid_r = my_b[my_b[r_col].notna() & (my_b[r_col] != "") & (my_b[r_col] != "nan")].copy()
                                 if not my_b_valid_r.empty:
-                                    runner_map = {
-                                        "0": "ランナーなし", "０": "ランナーなし", "なし": "ランナーなし",
-                                        "1": "ランナー1塁", "１": "ランナー1塁",
-                                        "2": "ランナー2塁", "２": "ランナー2塁",
-                                        "3": "ランナー3塁", "３": "ランナー3塁",
-                                        "12": "ランナー1・2塁", "１２": "ランナー1・2塁", "1,2": "ランナー1・2塁",
-                                        "23": "ランナー2・3塁", "２３": "ランナー2・3塁", "2,3": "ランナー2・3塁",
-                                        "13": "ランナー1・3塁", "１３": "ランナー1・3塁", "1,3": "ランナー1・3塁",
-                                        "123": "満塁", "１２３": "満塁"
-                                    }
-                                    my_b_valid_r[r_col] = my_b_valid_r[r_col].astype(str).str.strip().replace(runner_map)
+                                    my_b_valid_r["norm_runner"] = my_b_valid_r[r_col].apply(normalize_runner)
+                                    my_b_valid_r = my_b_valid_r[my_b_valid_r["norm_runner"].notna()]
 
-                                    r_stats = my_b_valid_r.groupby(r_col).agg(
-                                        打数=("is_ab", "sum"),
-                                        安打=("is_hit", "sum")
-                                    ).reset_index()
-                                    r_stats["打率"] = r_stats.apply(lambda x: x["安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
-                                    
-                                    r_order = [
-                                        "ランナーなし", "ランナー1塁", "ランナー2塁", "ランナー3塁",
-                                        "ランナー1・2塁", "ランナー2・3塁", "ランナー1・3塁", "満塁", "得点圏"
-                                    ]
-                                    r_stats[r_col] = pd.Categorical(r_stats[r_col], categories=r_order, ordered=True)
-                                    r_stats = r_stats.sort_values(r_col).dropna(subset=[r_col])
+                                    if not my_b_valid_r.empty:
+                                        r_stats = my_b_valid_r.groupby("norm_runner").agg(
+                                            打数=("is_ab", "sum"),
+                                            安打=("is_hit", "sum")
+                                        ).reset_index().rename(columns={"norm_runner": r_col})
 
-                                    st.dataframe(
-                                        r_stats.style.format({"打率": "{:.3f}"})
-                                        .background_gradient(subset=["打率"], cmap="Reds"),
-                                        width="stretch",
-                                        hide_index=True
-                                    )
+                                        RISP_RUNNERS = [
+                                            "ランナー2塁", "ランナー3塁",
+                                            "ランナー1・2塁", "ランナー2・3塁", "ランナー1・3塁", "満塁"
+                                        ]
+                                        risp_df = r_stats[r_stats[r_col].isin(RISP_RUNNERS)]
+                                        risp_ab = risp_df["打数"].sum() if not risp_df.empty else 0
+                                        risp_hit = risp_df["安打"].sum() if not risp_df.empty else 0
+
+                                        risp_row = pd.DataFrame([{
+                                            r_col: "得点圏 (トータル)",
+                                            "打数": risp_ab,
+                                            "安打": risp_hit
+                                        }])
+
+                                        r_stats = pd.concat([r_stats, risp_row], ignore_index=True)
+                                        r_stats["打率"] = r_stats.apply(lambda x: x["安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+
+                                        r_order = [
+                                            "ランナーなし", "ランナー1塁", "ランナー2塁", "ランナー3塁",
+                                            "ランナー1・2塁", "ランナー2・3塁", "ランナー1・3塁", "満塁", "得点圏 (トータル)"
+                                        ]
+                                        r_stats[r_col] = pd.Categorical(r_stats[r_col], categories=r_order, ordered=True)
+                                        r_stats = r_stats.sort_values(r_col).dropna(subset=[r_col])
+
+                                        st.dataframe(
+                                            r_stats.style.format({"打率": "{:.3f}"})
+                                            .background_gradient(subset=["打率"], cmap="Reds"),
+                                            width="stretch",
+                                            hide_index=True
+                                        )
                                 else:
                                     st.caption("走者状況のデータがありません。")
                             else:
@@ -1444,41 +1485,49 @@ def show_analysis_page(df_batting, df_pitching):
                             # my_p が定義されており、かつデータが存在することを確認
                             if 'my_p' in locals() and not my_p.empty:
                                 r_col_p = "ランナー状況" if "ランナー状況" in my_p.columns else ("走者状況" if "走者状況" in my_p.columns else None)
-                                
+
                                 if r_col_p and not my_p[r_col_p].dropna().empty:
                                     my_p_valid_r = my_p[my_p[r_col_p].notna() & (my_p[r_col_p] != "") & (my_p[r_col_p] != "nan")].copy()
                                     if not my_p_valid_r.empty:
-                                        runner_map = {
-                                            "0": "ランナーなし", "０": "ランナーなし", "なし": "ランナーなし",
-                                            "1": "ランナー1塁", "１": "ランナー1塁",
-                                            "2": "ランナー2塁", "２": "ランナー2塁",
-                                            "3": "ランナー3塁", "３": "ランナー3塁",
-                                            "12": "ランナー1・2塁", "１２": "ランナー1・2塁", "1,2": "ランナー1・2塁",
-                                            "23": "ランナー2・3塁", "２３": "ランナー2・3塁", "2,3": "ランナー2・3塁",
-                                            "13": "ランナー1・3塁", "１３": "ランナー1・3塁", "1,3": "ランナー1・3塁",
-                                            "123": "満塁", "１２３": "満塁"
-                                        }
-                                        my_p_valid_r[r_col_p] = my_p_valid_r[r_col_p].astype(str).str.strip().replace(runner_map)
+                                        my_p_valid_r["norm_runner"] = my_p_valid_r[r_col_p].apply(normalize_runner)
+                                        my_p_valid_r = my_p_valid_r[my_p_valid_r["norm_runner"].notna()]
 
-                                        pr_stats = my_p_valid_r.groupby(r_col_p).agg(
-                                            打数=("is_ab", "sum"),
-                                            被安打=("is_hit", "sum")
-                                        ).reset_index()
-                                        pr_stats["被打率"] = pr_stats.apply(lambda x: x["被安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
-                                        
-                                        r_order = [
-                                            "ランナーなし", "ランナー1塁", "ランナー2塁", "ランナー3塁",
-                                            "ランナー1・2塁", "ランナー2・3塁", "ランナー1・3塁", "満塁", "得点圏"
-                                        ]
-                                        pr_stats[r_col_p] = pd.Categorical(pr_stats[r_col_p], categories=r_order, ordered=True)
-                                        pr_stats = pr_stats.sort_values(r_col_p).dropna(subset=[r_col_p])
+                                        if not my_p_valid_r.empty:
+                                            pr_stats = my_p_valid_r.groupby("norm_runner").agg(
+                                                打数=("is_ab", "sum"),
+                                                被安打=("is_hit", "sum")
+                                            ).reset_index().rename(columns={"norm_runner": r_col_p})
 
-                                        st.dataframe(
-                                            pr_stats.style.format({"被打率": "{:.3f}"})
-                                            .background_gradient(subset=["被打率"], cmap="Blues"),
-                                            width="stretch",
-                                            hide_index=True
-                                        )
+                                            RISP_RUNNERS = [
+                                                "ランナー2塁", "ランナー3塁",
+                                                "ランナー1・2塁", "ランナー2・3塁", "ランナー1・3塁", "満塁"
+                                            ]
+                                            risp_p_df = pr_stats[pr_stats[r_col_p].isin(RISP_RUNNERS)]
+                                            risp_p_ab = risp_p_df["打数"].sum() if not risp_p_df.empty else 0
+                                            risp_p_hit = risp_p_df["被安打"].sum() if not risp_p_df.empty else 0
+
+                                            risp_p_row = pd.DataFrame([{
+                                                r_col_p: "得点圏 (トータル)",
+                                                "打数": risp_p_ab,
+                                                "被安打": risp_p_hit
+                                            }])
+
+                                            pr_stats = pd.concat([pr_stats, risp_p_row], ignore_index=True)
+                                            pr_stats["被打率"] = pr_stats.apply(lambda x: x["被安打"] / x["打数"] if x["打数"] > 0 else 0.0, axis=1)
+
+                                            r_order = [
+                                                "ランナーなし", "ランナー1塁", "ランナー2塁", "ランナー3塁",
+                                                "ランナー1・2塁", "ランナー2・3塁", "ランナー1・3塁", "満塁", "得点圏 (トータル)"
+                                            ]
+                                            pr_stats[r_col_p] = pd.Categorical(pr_stats[r_col_p], categories=r_order, ordered=True)
+                                            pr_stats = pr_stats.sort_values(r_col_p).dropna(subset=[r_col_p])
+
+                                            st.dataframe(
+                                                pr_stats.style.format({"被打率": "{:.3f}"})
+                                                .background_gradient(subset=["被打率"], cmap="Blues"),
+                                                width="stretch",
+                                                hide_index=True
+                                            )
                                     else:
                                         st.caption("走者状況のデータがありません。")
                                 else:

@@ -1279,6 +1279,103 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     if not valid_m.empty:
                         final_match_type = valid_m.iloc[-1]
 
+            # --------------------------------------------------
+            # ★ 登録投手名（自チーム登板投手）の検索・特定ロジック
+            # --------------------------------------------------
+            POS_ALIASES = {
+                "投": ["投", "投手", "P", "1"],
+                "捕": ["捕", "捕手", "C", "2"],
+                "一": ["一", "一塁", "一塁手", "ファースト", "1B", "3"],
+                "二": ["二", "二塁", "二塁手", "セカンド", "2B", "4"],
+                "三": ["三", "三塁", "三塁手", "サード", "3B", "5"],
+                "遊": ["遊", "遊撃", "遊撃手", "ショート", "SS", "6"],
+                "左": ["左", "左翼", "左翼手", "レフト", "LF", "7"],
+                "中": ["中", "中堅", "中堅手", "センター", "CF", "8"],
+                "右": ["右", "右翼", "右翼手", "ライト", "RF", "9"],
+                "指": ["指", "DH", "指名打者", "10"],
+                "打": ["打", "代打", "PH"],
+                "走": ["走", "代走", "PR"],
+            }
+
+            def is_same_pos(p1, p2):
+                s1, s2 = str(p1).strip(), str(p2).strip()
+                if not s1 or not s2:
+                    return False
+                if s1 == s2:
+                    return True
+                for aliases in POS_ALIASES.values():
+                    if s1 in aliases and s2 in aliases:
+                        return True
+                return False
+
+            def get_player_by_position(target_pos):
+                if not target_pos:
+                    return ""
+
+                for dict_key in ["shared_lineup", "lineup_states", "saved_lineup"]:
+                    data = st.session_state.get(dict_key, {})
+                    if isinstance(data, dict):
+                        for v in data.values():
+                            if isinstance(v, dict):
+                                p_pos = v.get("pos", "")
+                                p_name = v.get("name", "")
+                                if p_pos and p_name and is_same_pos(p_pos, target_pos):
+                                    clean_n = clean_player_name(p_name)
+                                    if clean_n and clean_n not in ["nan", "None", "", "－"]:
+                                        return clean_n
+                        for i in range(20):
+                            p_pos = data.get(f"pos_{i}", "")
+                            p_name = data.get(f"name_{i}", "")
+                            if p_pos and p_name and is_same_pos(p_pos, target_pos):
+                                clean_n = clean_player_name(p_name)
+                                if clean_n and clean_n not in ["nan", "None", "", "－"]:
+                                    return clean_n
+
+                display_count = st.session_state.get("display_order_count", 20)
+                for i in range(display_count):
+                    p_pos = st.session_state.get(f"sp{i}", "")
+                    p_name = st.session_state.get(f"sn{i}", "")
+                    if p_pos and p_name and is_same_pos(p_pos, target_pos):
+                        clean_n = clean_player_name(p_name)
+                        if clean_n and clean_n not in ["nan", "None", "", "－"]:
+                            return clean_n
+
+                if not today_batting_df.empty:
+                    b_col_p = "打者名" if "打者名" in today_batting_df.columns else "選手名"
+                    for col in ["守備位置", "位置"]:
+                        if col in today_batting_df.columns and b_col_p in today_batting_df.columns:
+                            matched = today_batting_df[
+                                today_batting_df[col].astype(str).apply(lambda x: is_same_pos(x, target_pos))
+                            ]
+                            if not matched.empty:
+                                for name_val in reversed(matched[b_col_p].dropna().tolist()):
+                                    clean_n = clean_player_name(name_val)
+                                    if clean_n and clean_n not in ["nan", "None", "", "－"]:
+                                        return clean_n
+
+                if is_same_pos(target_pos, "投"):
+                    dh_p = st.session_state.get("sn_dh_pitcher", "")
+                    if dh_p:
+                        clean_n = clean_player_name(dh_p)
+                        if clean_n and clean_n not in ["nan", "None", "", "－"]:
+                            return clean_n
+
+                return ""
+
+            def_pitcher = get_player_by_position("投")
+            if not def_pitcher:
+                def_pitcher = str(st.session_state.get("shared_starting_pitcher", ""))
+
+            matched_p = next(
+                (p for p in ALL_PLAYERS if clean_player_name(p) == def_pitcher.strip() or p == def_pitcher),
+                None,
+            )
+            input_name = matched_p if matched_p else (def_pitcher if def_pitcher else "不明")
+            target_pitcher_name = clean_player_name(input_name)
+
+            # --------------------------------------------------
+            # ★ スタメン未登録時のデータ自動追加処理
+            # --------------------------------------------------
             has_starter_records = False
             if not today_pitching_df.empty and "イニング" in today_pitching_df.columns and "結果" in today_pitching_df.columns:
                 starter_check = today_pitching_df[
@@ -1302,7 +1399,7 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             "対戦相手": final_opp,
                             "試合種別": final_match_type,
                             "イニング": "試合前",
-                            "投手名": "相手投手",
+                            "投手名": target_pitcher_name if target_pitcher_name else "不明",  # 👈 登録投手名を保存
                             "打順": o_num,
                             "打者名": s_name,
                             "守備位置": s_pos,
@@ -1529,10 +1626,55 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                 records_to_save = list(opp_rows_to_add)
                 add_outs_total = 0
 
+                # ★ カウント・球数の計算（投球結果の有無に関わらず事前に算出）
+                s_cnt_val = st.session_state.get(f"p_s_count_{curr_counter}", 0)
+                f_cnt_val = st.session_state.get(f"p_f_count_{curr_counter}", 0)
+                b_cnt_val = st.session_state.get(f"p_b_count_{curr_counter}", 0)
+
+                final_strike_count = s_cnt_val + f_cnt_val
+                final_ball_count = b_cnt_val
+
+                if p_res in ["四球", "死球"]:
+                    final_ball_count += 1
+                elif p_res:
+                    final_strike_count += 1
+
+                final_pitch_count = final_ball_count + final_strike_count
+
+                # ★ アウト数およびチェンジ（3アウト）判定の事前計算
                 dp_runner_outs = sum(
                     1 for b_key in ["1b", "2b", "3b"]
                     if st.session_state.get(f"p_runner_{b_key}_res_{curr_counter}") in ["併殺死", "走塁死"]
                 )
+
+                add_outs_total = 0
+                if p_res:
+                    if p_res == "併殺打":
+                        if dp_runner_outs < 2:
+                            add_outs_total += 1
+                    elif p_res == "三重殺":
+                        add_outs_total += 1
+                    elif p_res in [
+                        "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
+                        "犠飛", "牽制死", "盗塁死", "走塁死"
+                    ]:
+                        add_outs_total += 1
+
+                for b_key in ["1b", "2b", "3b"]:
+                    r_res_check = st.session_state.get(f"p_runner_{b_key}_res_{curr_counter}")
+                    if r_res_check in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
+                        add_outs_total += 1
+
+                p_inn_df = (
+                    today_pitching_df[today_pitching_df["イニング"] == current_inn]
+                    if not today_pitching_df.empty and "イニング" in today_pitching_df.columns
+                    else pd.DataFrame()
+                )
+                existing_outs = calculate_outs(p_inn_df)
+                total_outs_after = existing_outs + add_outs_total
+                is_change = total_outs_after >= 3
+
+                records_to_save = list(opp_rows_to_add)
 
                 if p_res:
                     target_fielder_pos_str = "-".join(target_fielder_pos_list)
@@ -1542,39 +1684,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         name_parts = [get_player_by_position(pos) or f"({pos})" for pos in target_fielder_pos_list]
                         fielder_display = "-".join(name_parts)
 
-                    add_outs = 0
-                    if p_res == "併殺打":
-                        if dp_runner_outs >= 2:
-                            add_outs = 0
-                        else:
-                            add_outs = 1
-                    elif p_res == "三重殺":
-                        add_outs = 1
-                    elif p_res in [
-                        "三振", "凡退(ゴロ)", "凡退(フライ)", "犠打(ゴロ)", "犠打(フライ)",
-                        "犠飛", "牽制死", "盗塁死", "走塁死"
-                    ]:
-                        add_outs = 1
-
-                    add_outs_total += add_outs
-
                     if p_res in ["盗塁", "盗塁死"]:
                         target_fielder_pos_str = "捕"
                         fielder_display = clean_player_name(target_catcher_disp) if target_catcher_disp else ""
-
-                    s_cnt_val = st.session_state.get(f"p_s_count_{curr_counter}", 0)
-                    f_cnt_val = st.session_state.get(f"p_f_count_{curr_counter}", 0)
-                    b_cnt_val = st.session_state.get(f"p_b_count_{curr_counter}", 0)
-
-                    final_strike_count = s_cnt_val + f_cnt_val
-                    final_ball_count = b_cnt_val
-
-                    if p_res in ["四球", "死球"]:
-                        final_ball_count += 1
-                    elif p_res:
-                        final_strike_count += 1
-
-                    final_pitch_count = final_ball_count + final_strike_count
 
                     ef_player_name = get_player_by_position(p_ef) if p_ef else ""
                     error_fielder_disp = ef_player_name if ef_player_name else p_ef
@@ -1614,8 +1726,6 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         r_res = "得点"
 
                     if r_res:
-                        r_outs = 1 if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] else 0
-
                         if r_reason == "暴投":
                             auto_f = "投"
                         elif r_reason == "捕逸":
@@ -1631,14 +1741,13 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                         if r_reason:
                             res_val = r_reason                        # 暴投 / 捕逸 / 悪送球 / 落球
                             proc_fielder = fielder_disp if fielder_disp else auto_f
-                            pos_val = auto_f if auto_f else "ー"
+                            pos_val = "ー"                            # 👈 相手守備を入れず "ー" に固定
                             dir_val = "ー"
-                            # 悪送球・落球の場合はエラー野手欄にも記録
                             err_fielder = proc_fielder if r_reason in ["悪送球", "落球"] else ""
                         else:
                             res_val = r_res
                             proc_fielder = fielder_disp if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] else ""
-                            pos_val = r_fielder if r_fielder else "ー"
+                            pos_val = "ー"                            # 👈 r_fielder ではなく "ー" に固定
                             err_fielder = ""
                             if fielder_disp:
                                 dir_val = fielder_disp
@@ -1657,6 +1766,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                                     r_order_num = i + 1
                                     break
 
+                        # 走塁アウトで3アウト目（チェンジ）となった場合のみ球数・カウント情報を保持
+                        is_runner_out_change = is_change and (res_val in ["走塁死", "盗塁死", "牽制死", "併殺死"])
+
                         runner_rec = {
                             "日付": selected_date_str,
                             "グラウンド": final_ground,
@@ -1674,11 +1786,12 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                             "打点": 0,
                             "自責点": 0,
                             "勝敗": "ー",
-                            "ストライク": 0,
-                            "ボール": 0,
+                            "球数": final_pitch_count if is_runner_out_change else 0,
+                            "ストライク": final_strike_count if is_runner_out_change else 0,
+                            "ファールボール": f_cnt_val if is_runner_out_change else 0,
+                            "ボール": final_ball_count if is_runner_out_change else 0,
                         }
                         records_to_save.append(runner_rec)
-                        add_outs_total += r_outs
 
                 if records_to_save:
                     current_max_id = int(pd.to_numeric(df_pitching["ID"], errors="coerce").fillna(0).max()) if not df_pitching.empty and "ID" in df_pitching.columns else 0
@@ -1810,8 +1923,9 @@ def show_pitching_page(df_batting: pd.DataFrame, df_pitching: pd.DataFrame, sele
                     "失策(ゴロ)", "失策(フライ)", "野選", "打撃妨害"
                 ]
                 is_pa_completed = bool(p_res and p_res in PA_RESULTS)
-                
-                if not is_pa_completed:
+
+                # 💡 打席未完了であっても、3アウト（チェンジ）になった場合はカウントを引き継がずにリセットする
+                if not is_pa_completed and total_outs_after < 3:
                     st.session_state[f"p_b_count_{next_counter}"] = st.session_state.get(f"p_b_count_{curr_counter}", 0)
                     st.session_state[f"p_s_count_{next_counter}"] = st.session_state.get(f"p_s_count_{curr_counter}", 0)
                     st.session_state[f"p_f_count_{next_counter}"] = st.session_state.get(f"p_f_count_{curr_counter}", 0)

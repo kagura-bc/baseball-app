@@ -1015,6 +1015,44 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
         cur_2b_name = get_clean_runner(st.session_state.get(f"runner_2b_{curr_counter}"))
         cur_3b_name = get_clean_runner(st.session_state.get(f"runner_3b_{curr_counter}"))
 
+        # ★ カウント・球数の計算（打席結果の有無に関わらず事前に算出）
+        final_strike_count = strike_count_val + foul_count_val
+        final_ball_count = ball_count_val
+
+        if quick_res in ["四球", "死球"]:
+            final_ball_count += 1
+        elif quick_res:
+            final_strike_count += 1
+
+        final_pitch_count = final_ball_count + final_strike_count
+
+        # ★ アウト数およびチェンジ（3アウト）判定の事前計算
+        dp_runner_outs = sum(
+            1 for base in ["1b", "2b", "3b"]
+            if st.session_state.get(f"runner_{base}_res_{curr_counter}") in ["併殺死", "走塁死"]
+        )
+
+        add_outs = 0
+        if quick_res == "併殺打":
+            if dp_runner_outs >= 2:
+                add_outs = 0
+            else:
+                add_outs = 1
+        elif quick_res == "三重殺":
+            add_outs = 1
+        elif quick_res in ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "牽制死", "盗塁死", "走塁死"]:
+            add_outs = 1
+
+        for base in ["1b", "2b", "3b"]:
+            r_res = st.session_state.get(f"runner_{base}_res_{curr_counter}")
+            if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
+                add_outs += 1
+
+        inn_df_check = today_batting_df[today_batting_df["イニング"] == inn_val] if not today_batting_df.empty else pd.DataFrame()
+        existing_outs = calculate_outs(inn_df_check)
+
+        is_change = (existing_outs + add_outs) >= 3
+
         if quick_res:
             dir_str = "-".join(quick_dirs) if quick_dirs else "---"
 
@@ -1028,17 +1066,6 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
 
             ef_player_name = get_opp_player_by_position(quick_ef) if quick_ef else ""
             error_fielder_disp = ef_player_name if ef_player_name else quick_ef
-
-            # ★ カウント・球数の計算（投手成績と同一仕様）
-            final_strike_count = strike_count_val + foul_count_val
-            final_ball_count = ball_count_val
-
-            if quick_res in ["四球", "死球"]:
-                final_ball_count += 1
-            elif quick_res:
-                final_strike_count += 1
-
-            final_pitch_count = final_ball_count + final_strike_count
 
             # ランナー状況のコード生成 (0, 1, 2, 3, 12, 13, 23, 123)
             runners_on = []
@@ -1068,36 +1095,10 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                 "ストライク": final_strike_count,
                 "ファールボール": foul_count_val,
                 "ボール": final_ball_count,
-                "ランナー状況": runner_status,  # ★ 追加
+                "ランナー状況": runner_status,
                 "スコアラー": scorer,
                 "グラウンド": final_ground
             })
-
-            dp_runner_outs = sum(
-                1 for base in ["1b", "2b", "3b"]
-                if st.session_state.get(f"runner_{base}_res_{curr_counter}") in ["併殺死", "走塁死"]
-            )
-
-            add_outs = 0
-            if quick_res == "併殺打":
-                if dp_runner_outs >= 2:
-                    add_outs = 0
-                else:
-                    add_outs = 1
-            elif quick_res == "三重殺":
-                add_outs = 1
-            elif quick_res in ["凡退(ゴロ)", "凡退(フライ)", "三振", "犠打(ゴロ)", "犠打(フライ)", "犠飛", "牽制死", "盗塁死", "走塁死"]:
-                add_outs = 1
-
-            for base in ["1b", "2b", "3b"]:
-                r_res = st.session_state.get(f"runner_{base}_res_{curr_counter}")
-                if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
-                    add_outs += 1
-
-            inn_df_check = today_batting_df[today_batting_df["イニング"] == inn_val] if not today_batting_df.empty else pd.DataFrame()
-            existing_outs = calculate_outs(inn_df_check)
-
-            is_change = (existing_outs + add_outs) >= 3
 
         # --------------------------------------------------
         # 走者の登録レコード生成ループ
@@ -1106,7 +1107,7 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
             r_name_raw = st.session_state.get(f"runner_{base}_{curr_counter}")
             r_res = st.session_state.get(f"runner_{base}_res_{curr_counter}")
             r_fielder = st.session_state.get(f"runner_{base}_fielder_{curr_counter}", "")
-            r_reason = st.session_state.get(f"runner_{base}_reason_{curr_counter}", "")  # 🌟 暴投/捕逸の選択値を取得
+            r_reason = st.session_state.get(f"runner_{base}_reason_{curr_counter}", "")
             
             clean_r_name = get_clean_runner(r_name_raw)
             if clean_r_name:
@@ -1137,14 +1138,13 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     if r_reason:
                         res_val = r_reason                        # 結果列：暴投 / 捕逸 / 悪送球 / 落球
                         proc_fielder = f_disp                     # 処理野手欄：選手名（またはポジション）
-                        pos_val = auto_f if auto_f else "－"      # 守備位置
+                        pos_val = "－"                            # 👈 相手守備を入れず "－" に固定
                         dir_val = "---"
-                        # 悪送球・落球の場合はエラー野手欄にも記録
                         err_fielder = f_disp if r_reason in ["悪送球", "落球"] else ""
                     else:
                         res_val = "得点" if is_score else r_res
                         proc_fielder = f_disp if r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"] else ""
-                        pos_val = "－"
+                        pos_val = "－"                            # 👈 "－" に固定
                         err_fielder = ""
                         if fielder_player_name and r_res in ["走塁死", "盗塁死", "牽制死", "併殺死"]:
                             dir_val = fielder_player_name
@@ -1153,6 +1153,9 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         else:
                             dir_val = "---"
                     
+                    # 走塁アウトで3アウト目（チェンジ）となった場合のみ球数・カウント情報を保持
+                    is_runner_out_change = is_change and (res_val in ["走塁死", "盗塁死", "牽制死", "併殺死"])
+
                     rows_to_add.append({
                         "日付": current_date_formatted,
                         "対戦相手": final_opp,
@@ -1167,6 +1170,11 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                         "処理野手": proc_fielder,
                         "エラー野手": err_fielder,
                         "打点": 0,
+                        "自責点": 0,
+                        "球数": final_pitch_count if is_runner_out_change else 0,
+                        "ストライク": final_strike_count if is_runner_out_change else 0,
+                        "ファールボール": foul_count_val if is_runner_out_change else 0,
+                        "ボール": final_ball_count if is_runner_out_change else 0,
                         "スコアラー": scorer,
                         "グラウンド": final_ground
                     })
@@ -1300,7 +1308,8 @@ def show_batting_page(df_batting, df_pitching, selected_date_str, match_type, gr
                     del st.session_state[k]
 
                 is_pa_completed = bool(quick_res and quick_res in PA_RESULTS)
-                if not is_pa_completed:
+                # 💡 打席未完了であっても、3アウト（チェンジ）になった場合はカウントを引き継がずにリセットする
+                if not is_pa_completed and not is_change:
                     st.session_state[f"b_count_{next_counter}"] = ball_count_val
                     st.session_state[f"s_count_{next_counter}"] = strike_count_val
                     st.session_state[f"f_count_{next_counter}"] = foul_count_val
