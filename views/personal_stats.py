@@ -468,7 +468,7 @@ def show_personal_stats(df_batting, df_pitching):
                 stats["Batting_Score"] = (
                     stats["OPS"] * 50.0 
                     + stats["RC"] * 3.0 
-                    + stats["盗塁"] * 1.0 
+                    + stats["盗塁"] * 3.0 
                     - stats["盗塁死"] * 1.0 
                     - stats["is_dp"] * 1.5
                 )
